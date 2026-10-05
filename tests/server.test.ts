@@ -1,9 +1,17 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { Redis } from '@upstash/redis';
+import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import adminApi from '../api/admin.js';
 import pagesApi from '../api/pages.js';
 import roomApi from '../api/room.js';
 import worldApi from '../api/world.js';
-import { MemoryStore, setStore } from '../server/store.js';
+import { MemoryStore, UpstashStore, setStore } from '../server/store.js';
+
+// KV_CHECK=1 runs the same suite against the real Upstash store (credentials
+// from the environment), each test under its own throwaway key prefix.
+const live = process.env.KV_CHECK === '1';
+const runId = `toyboxes:test-${Date.now().toString(36)}`;
+const redis = live ? new Redis({ url: process.env.KV_REST_API_URL!, token: process.env.KV_REST_API_TOKEN!, automaticDeserialization: false }) : null;
+let testIndex = 0;
 
 type Handler = (req: any, res: any) => Promise<void>;
 
@@ -65,11 +73,18 @@ async function claimRoom(slot = 3, browserId = browserA, pin = '0042', name = 'C
   return r.body as { room: { id: string; rev: number; layout: unknown[]; theme: unknown }; token: string };
 }
 
-let store: MemoryStore;
-
 beforeEach(() => {
-  store = new MemoryStore();
-  setStore(store);
+  setStore(redis ? new UpstashStore(redis, `${runId}-${testIndex++}:`) : new MemoryStore());
+});
+
+afterAll(async () => {
+  if (!redis) return;
+  let cursor = '0';
+  do {
+    const [next, keys] = await redis.scan(cursor, { match: `${runId}-*`, count: 500 });
+    if (keys.length) await redis.del(...keys);
+    cursor = String(next);
+  } while (cursor !== '0');
 });
 
 describe('claims', () => {
