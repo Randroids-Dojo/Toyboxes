@@ -7,7 +7,7 @@ The GDD's fifteen release checks, what passed, and what still needs a person wit
 | 1 | Name asked once, remembered on return; same name elsewhere gets no rights | Automated | `playtest.ts` steps 1 and 8 (reload asks nothing); `server.test.ts` "a token for one room cannot edit another", rename with two rooms both named Alex |
 | 2 | Explore, enter indoor spaces, ride both vehicles, readable day and night | Automated, plus judgment | `playtest.ts` steps 2, 3, 3b, 4; screenshots at night and day (the cycle is shared from the clock). Night readability judged from screenshots; confirm on the TV |
 | 3 | Claim only after entering and confirming a four-digit PIN; a race has one owner | Automated | `server.test.ts` claim race (also passes against live Upstash with `KV_CHECK=1`), PIN mismatch and leading zeroes; `playtest.ts` step 4, `padtest.ts` step 4 |
-| 4 | Anyone can enter every published room and inner area; entry never asks for a PIN | Automated | `admintest.ts` second browser enters the room and its inner area; asserts no PIN pad appeared |
+| 4 | Anyone can enter every published room and inner area; entry never asks for a PIN | Automated | `admintest.ts` second browser enters the room and its inner area and reads the sketchbook; asserts no PIN pad appeared until it chose "Write or edit" |
 | 5 | Wrong PIN cannot edit; correct PIN edits, including from another browser | Automated | `server.test.ts` (forged and missing tokens, wrong PIN, other-browser unlock); `playtest.ts` step 9 wrong PIN changes nothing |
 | 6 | New page is a separate request; editing an older page keeps its identity | Automated | `server.test.ts` sketchbook tests; `playtest.ts` step 5 writes two pages and revises page 1 |
 | 7 | Creator builds from pages, places results in the main room or inner areas, publishes | Automated | `admintest.ts`: cabinet linked to page 1 in the main room, an inner area with toys and its own cabinet, drafts hidden until published |
@@ -32,7 +32,7 @@ The GDD's fifteen release checks, what passed, and what still needs a person wit
 - **Admin auth:** a password from `ADMIN_PASSWORD` with a signed HttpOnly session cookie. Swapping in an identity provider later only touches `server/admin.ts`.
 - **Town:** 12 claimable houses around a ring road; vehicles are parked objects you can ride away and leave anywhere (the menu parks them again).
 - **Day and night:** a 24-minute cycle shared through the wall clock; settings can pin day, sunset or night.
-- **Sketchbook:** pages are private to PIN holders and the creator. Owners see a status stamp (Requested, Being built, Ready to play) that the creator sets. Drawing is a simple pen with six colours, three sizes, undo and clear.
+- **Sketchbook:** every visitor can read every page (the user's call, 2026-10-04); only writing needs the PIN. Pages the creator removes in `/admin` are hidden from everyone. A status stamp (Requested, Being built, Ready to play) shows on each page. Drawing is a simple pen with six colours, three sizes, undo and clear.
 - **Unlock lifetime:** 30-minute edit tokens; the game relocks after 5 quiet minutes or on leaving the room.
 - **Claim limits:** one active room per browser, a 10-minute cooldown, 6 claims per network per day, 5 wrong PINs per room per 15 minutes, 25 per network per hour.
 - **Domains:** toyboxes.games is canonical; toyboxes.app and both www hosts 308-redirect to it.

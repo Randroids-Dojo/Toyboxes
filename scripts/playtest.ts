@@ -310,6 +310,25 @@ if (!phone) {
   if (after.slots[free.slot].ownerName !== 'Crispin') throw new Error('Room was not renamed');
 }
 
+// 10. Back later and locked: the book opens for reading, and the PIN switches it to writing.
+if (!phone) {
+  const roomId = ((await (await fetch(new URL('/api/world', url))).json()) as { slots: { roomId: string | null }[] }).slots[free.slot].roomId!;
+  await page.goto(new URL(`/?room=${roomId}`, url).toString());
+  await page.waitForSelector('body.ready');
+  await page.waitForTimeout(1800);
+  const sp = (await page.evaluate(() => (window as unknown as Dbg).toyboxes.debug.spots()))!;
+  await teleport(sp.lectern.x + 0.3, sp.lectern.z, -Math.PI / 2);
+  await page.waitForTimeout(400);
+  await page.keyboard.press('KeyE');
+  await page.waitForSelector('.book.reading');
+  await tapButton(page, 'Write or edit');
+  await enterPin('0427');
+  await tapButton(page, 'Unlock');
+  await page.waitForSelector('.book:not(.reading)');
+  if (!(await page.getByRole('button', { name: 'Save page' }).isVisible())) throw new Error('Unlocking did not switch the book to writing');
+  await snap('owner-unlocked-book');
+}
+
 if (errors.length) {
   console.log('ERRORS', errors);
   process.exitCode = 1;

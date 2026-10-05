@@ -11,7 +11,7 @@ A 3D town in the browser. Visitors walk, ride a scooter or go-kart, kick a ball 
 1. **No em dashes or en dashes.** Not in code, comments, copy, commits or PRs. Use a period, comma, colon or parentheses.
 2. **Commit messages and PR descriptions read as written by a human.** No AI attribution, no generated-by footers.
 3. **Visits are solo.** Rooms, layouts, pages and published content are shared and persistent; players and loose-object physics are local. Never present anything as live multiplayer.
-4. **The PIN guards changes, never entry.** Anyone can enter any room or inner area. Every protected write calls `requireEdit` on the server (`server/rooms.ts`); never trust a client-side unlock. PIN hashes and owner keys never leave the server (`publicRoom` is the only public shape).
+4. **The PIN guards changes, never entry or reading.** Anyone can enter any room or inner area and read its sketchbook. Every protected write calls `requireEdit` on the server (`server/rooms.ts`); never trust a client-side unlock. PIN hashes and owner keys never leave the server (`publicRoom` is the only public shape).
 5. **Names are labels, not identity.** Never look records up by name. Renaming a room needs a fresh PIN check and touches only that room.
 6. **Layout rules live in `src/shared/model.ts`** and run in both the browser and the API. Change them there, keep the starter layout valid (`tests/model.test.ts`), and remember saved layouts must still pass.
 7. **Every input path.** A feature is not done until it works with touch, keyboard and mouse, a controller (d-pad focus, A, B), and a TV remote (arrows, OK, Back). Dialogs go through `UI.open` so focus and Back work; text fields get the on-screen keyboard on controllers and TVs.

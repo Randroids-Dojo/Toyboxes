@@ -1,8 +1,8 @@
-// Sketchbook pages. Every call needs a room edit token in `x-room-token`.
+// Sketchbook pages. Reading is public; writing needs a room edit token in `x-room-token`.
 //
-// GET  /api/pages?roomId=<id>                         -> pages in book order
-// POST /api/pages {roomId, text, sketch}              -> new page
-// PUT  /api/pages {roomId, pageId, text, sketch, rev} -> revise a page (409 on conflict)
+// GET  /api/pages?roomId=<id>                         -> pages in book order (anyone)
+// POST /api/pages {roomId, text, sketch}              -> new page (token)
+// PUT  /api/pages {roomId, pageId, text, sketch, rev} -> revise a page, 409 on conflict (token)
 
 import { z } from 'zod';
 import { clientIp, header, parseBody, parseQuery, route } from '../server/http.js';
@@ -12,7 +12,7 @@ import * as s from '../server/schemas.js';
 export default route({
   GET: async (req) => {
     const q = parseQuery(req, z.object({ roomId: s.roomId }));
-    return { pages: await listPages(q.roomId, header(req, 'x-room-token')) };
+    return { pages: await listPages(q.roomId) };
   },
   POST: async (req) => {
     const b = parseBody(req, z.object({ roomId: s.roomId, text: s.pageText, sketch: s.sketch }));

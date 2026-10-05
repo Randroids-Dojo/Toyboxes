@@ -14,7 +14,8 @@ Representative starting state: fresh browser at the plaza, name entered, day or 
 | Score | Ball crosses the goal line inside the mouth | GOAL banner, net ripple, ball resets to its saved spot | Crossbar and posts bounce the ball back | Banner, chime, vibration on phones | `playtest.ts` step 7 |
 | Bowl, knock cones, hit targets | Kick or drive into them | Pins topple and take neighbours with them; rack resets; targets light up | Rack resets after it settles | STRIKE banner, pin count toast, ding, bullseye banner | Manual in the plaza |
 | Claim a room | Interact at an Available door, choose a PIN, confirm it | Server claims the entrance atomically; you enter unlocked | One active room per browser, cooldown, per-network limit; a race has one winner | Confirmation dialog, PIN pad, banner, sign updates to your name | `tests/server.test.ts`, `playtest.ts` step 4, `padtest.ts` step 4 |
-| Write an idea | Interact with the sketchbook, PIN if locked | New page or revision saved with stable identity | Text required; drafts kept locally; conflicts ask which version to keep | Save state line, page-turn sound, status stamp | `playtest.ts` step 5, `tests/server.test.ts` |
+| Read a sketchbook | Interact with the sketchbook; Back and Next turn pages | Anyone sees every page's drawing, text and status | Read only; pages the creator removed stay hidden | Page-turn sound, status stamp, "Written" date | `admintest.ts` visitor reads both pages, `tests/server.test.ts` |
+| Write an idea | "Write or edit" in the book, then the PIN if locked | New page or revision saved with stable identity | Text required; drafts kept locally; conflicts ask which version to keep | Save state line, page-turn sound, status stamp | `playtest.ts` steps 5 and 10, `tests/server.test.ts` |
 | Arrange toys | Interact with the toy chest, PIN if locked | Add, drag, turn, remove toys and paint the room; saved for every visitor | Doorway, back doors, sketchbook, chest and games stay clear; per-toy limits | Green or red ring, reason text, snap back on invalid drops | `playtest.ts` step 6, `tests/model.test.ts` |
 | Visit an arcade or play a game | Interact at the arcade door or cabinet, confirm | Same-tab navigation; return spot saved | External sites keep their own controls | Confirmation names the site; Back returns you to the door | `scripts/arcadetest.ts` |
 | Rename | Menu, Change my name | Browser only, or the room too after a PIN check | Wrong PIN changes nothing | Choice dialog, PIN pad, toast listing what changed | `playtest.ts` step 9, `tests/server.test.ts` |
@@ -25,7 +26,7 @@ The largest risk is the device spread: touch, controller and TV focus on top of 
 
 ## First action and recovery
 
-On arrival the controls hint shows the device's own glyphs (none on touch, where the buttons are labelled) and fades once you have moved. Context prompts always name the action ("Claim room 4", "Open the sketchbook"). Failed saves keep drafts and say so; a wrong PIN shakes the pad and says how many tries are left; a lost controller opens the menu with a note.
+On arrival the controls hint shows the device's own glyphs (none on touch, where the buttons are labelled) and fades once you have moved. Context prompts always name the action ("Claim room 4", "Read the sketchbook"). Failed saves keep drafts and say so; a wrong PIN shakes the pad and says how many tries are left; a lost controller opens the menu with a note.
 
 ## Supporting interfaces
 

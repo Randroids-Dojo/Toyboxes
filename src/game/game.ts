@@ -457,7 +457,10 @@ export class Game {
     const it = sp.interior;
     if (sp.kind === 'room') {
       out.push({ x: it.door.x, z: it.door.z, range: 1.7, label: 'Back to town', short: 'Exit', run: () => void this.exitToHub() });
-      if (it.lectern) out.push({ x: it.lectern.x, z: it.lectern.z, range: 1.6, label: 'Open the sketchbook', short: 'Sketch', run: () => void this.openBook() });
+      if (it.lectern) {
+        const writing = !!this.session && this.session.roomId === sp.room.id;
+        out.push({ x: it.lectern.x, z: it.lectern.z, range: 1.6, label: writing ? 'Open the sketchbook' : 'Read the sketchbook', short: writing ? 'Sketch' : 'Read', run: () => void this.openBook() });
+      }
       if (it.chest) out.push({ x: it.chest.x, z: it.chest.z, range: 1.6, label: 'Arrange toys', short: 'Arrange', run: () => void this.openArrange() });
       for (const d of it.areaDoors) out.push({ x: d.x, z: d.z, range: 1.6, label: `Enter ${d.area.name}`, short: 'Enter', run: () => void this.enterArea(d.area) });
     } else {
@@ -740,20 +743,10 @@ export class Game {
     });
   }
 
+  /** Anyone can read the book; the PIN is only asked for when they choose to write. */
   private async openBook(): Promise<void> {
     if (this.space.kind !== 'room') return;
     const room = this.space.room;
-    if (!this.token()) {
-      const pick = await choose(this.ui, {
-        title: `${room.ownerName}'s sketchbook`,
-        body: 'The owner writes game ideas here. It opens with the room PIN.',
-        options: [{ label: 'Enter the PIN', value: 'pin', primary: true }],
-        cancel: 'Close',
-      });
-      if (pick !== 'pin') return;
-      const t = await this.unlock();
-      if (!t) return;
-    }
     sfx.page();
     await openSketchbook(this.ui, this.input, { roomId: room.id, ownerName: room.ownerName, session: this.editSession() });
   }

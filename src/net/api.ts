@@ -44,7 +44,7 @@ export const api = {
   saveLayout: (roomId: string, token: string, layout: PropPlacement[], theme: RoomTheme, rev: number) =>
     call<{ room: RoomPublic }>('POST', '/api/room', { action: 'layout', roomId, layout, theme, rev }, { 'x-room-token': token }),
   rename: (roomId: string, pin: string, name: string) => call<{ room: RoomPublic; changed: string[] }>('POST', '/api/room', { action: 'rename', roomId, pin, name }),
-  pages: (roomId: string, token: string) => call<{ pages: Page[] }>('GET', `/api/pages?roomId=${encodeURIComponent(roomId)}`, undefined, { 'x-room-token': token }),
+  pages: (roomId: string) => call<{ pages: Page[] }>('GET', `/api/pages?roomId=${encodeURIComponent(roomId)}`),
   createPage: (roomId: string, token: string, text: string, sketch: Stroke[]) => call<{ page: Page }>('POST', '/api/pages', { roomId, text, sketch }, { 'x-room-token': token }),
   updatePage: (roomId: string, token: string, pageId: string, text: string, sketch: Stroke[], rev: number) =>
     call<{ page: Page }>('PUT', '/api/pages', { roomId, pageId, text, sketch, rev }, { 'x-room-token': token }),

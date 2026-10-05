@@ -210,7 +210,7 @@ export class UI {
       case 'confirm':
         if (active && top.el.contains(active)) {
           if (isTextInput(active)) {
-            if (this.device === 'pad' || IS_TV) this.openKeyboard?.(active);
+            if (!active.readOnly && (this.device === 'pad' || IS_TV)) this.openKeyboard?.(active);
             return;
           }
           if (active instanceof HTMLInputElement && active.type === 'checkbox') {

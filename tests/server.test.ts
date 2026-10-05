@@ -235,10 +235,28 @@ describe('sketchbook', () => {
     expect(r.status).toBe(400);
   });
 
-  it('pages are private to PIN holders', async () => {
-    const { room } = await claimRoom();
-    const r = await call(pagesApi, { query: { roomId: room.id } });
-    expect(r.status).toBe(401);
+  it('anyone can read the pages; only the PIN holder can write', async () => {
+    const { room, token } = await claimRoom();
+    await call(pagesApi, { method: 'POST', body: { roomId: room.id, text: 'A soccer game', sketch: [{ c: 0, w: 1, p: [1, 2, 3, 4] }] }, headers: { 'x-room-token': token } });
+    const read = await call(pagesApi, { query: { roomId: room.id }, ip: '4.4.4.4' });
+    expect(read.status).toBe(200);
+    expect(read.body.pages.map((p: any) => p.text)).toEqual(['A soccer game']);
+    expect(read.body.pages[0].sketch).toHaveLength(1);
+    const write = await call(pagesApi, { method: 'POST', body: { roomId: room.id, text: 'Sneaky page', sketch: [] }, ip: '4.4.4.4' });
+    expect(write.status).toBe(401);
+    const edit = await call(pagesApi, { method: 'PUT', body: { roomId: room.id, pageId: read.body.pages[0].id, text: 'Changed', sketch: [], rev: 1 }, ip: '4.4.4.4' });
+    expect(edit.status).toBe(401);
+  });
+
+  it('pages the creator removed stay hidden from visitors', async () => {
+    const { room, token } = await claimRoom();
+    const p = await call(pagesApi, { method: 'POST', body: { roomId: room.id, text: 'Something rude', sketch: [] }, headers: { 'x-room-token': token } });
+    const h = { 'x-toyboxes-admin': '1' };
+    const login = await call(adminApi, { method: 'POST', body: { action: 'login', password: 'toyboxes-dev' }, headers: h });
+    const cookie = String(login.headers['set-cookie']).split(';')[0];
+    await call(adminApi, { method: 'POST', body: { action: 'removePage', roomId: room.id, pageId: p.body.page.id, removed: true }, headers: { ...h, cookie } });
+    const read = await call(pagesApi, { query: { roomId: room.id } });
+    expect(read.body.pages).toEqual([]);
   });
 });
 

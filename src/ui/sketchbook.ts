@@ -1,5 +1,6 @@
 // The room's sketchbook: one page per idea, turn to a fresh page for a new
 // request, and edit an older page to revise it. Pages keep their identity.
+// Every visitor can read the book; writing needs the room PIN.
 
 import { sfx } from '../audio/sfx';
 import * as local from '../core/local';
@@ -49,6 +50,8 @@ export async function openSketchbook(ui: UI, input: Input, opts: { roomId: strin
   /** The A press that starts pen mode must be released before it draws. */
   let waitRelease = false;
   const cursor = { x: 500, y: 500, down: false };
+  /** False while reading; the PIN switches the open book to editing. */
+  let editable = !!session.token();
 
   // ---- DOM
   const pageLabel = h('span', { class: 'book-page' });
@@ -63,7 +66,9 @@ export async function openSketchbook(ui: UI, input: Input, opts: { roomId: strin
   const nextBtn = button('Next ›', () => void flip(index + 1), 'ghost');
   const newBtn = button('New page', () => void flip(pages.length), '');
   const saveBtn = button('Save page', () => void save(), 'primary');
+  const editBtn = button('Write or edit', () => void startEditing(), 'primary');
   const closeBtn = button('Close', () => void close(), 'ghost');
+  const emptyNote = h('p', { class: 'book-empty hidden' });
 
   const swatches = SKETCH_COLORS.map((c, i) => {
     const b = button('', () => {
@@ -98,6 +103,7 @@ export async function openSketchbook(ui: UI, input: Input, opts: { roomId: strin
     }
   }, 'ghost tiny');
 
+  const pageHeading = h('label', { class: 'page-label' }, 'Describe your idea');
   const el = h(
     'div',
     { class: 'book' },
@@ -114,12 +120,13 @@ export async function openSketchbook(ui: UI, input: Input, opts: { roomId: strin
       h(
         'div',
         { class: 'page page-right' },
-        h('div', { class: 'page-top' }, h('label', { class: 'page-label' }, 'Describe your idea'), stamp),
+        h('div', { class: 'page-top' }, pageHeading, stamp),
+        emptyNote,
         textarea,
         h('div', { class: 'page-meta' }, statusEl, retryBtn, kbBtn),
       ),
     ),
-    h('div', { class: 'book-foot' }, prevBtn, newBtn, saveBtn, nextBtn),
+    h('div', { class: 'book-foot' }, prevBtn, newBtn, saveBtn, editBtn, nextBtn),
   );
 
   // ---- state helpers
@@ -155,6 +162,9 @@ export async function openSketchbook(ui: UI, input: Input, opts: { roomId: strin
     if (override) {
       text = override.text;
       kind = override.kind;
+    } else if (!editable) {
+      text = sheet.page ? `Written ${new Date(sheet.page.updatedAt).toLocaleDateString()}` : '';
+      kind = '';
     } else if (saving) {
       text = 'Saving...';
       kind = 'busy';
@@ -173,12 +183,22 @@ export async function openSketchbook(ui: UI, input: Input, opts: { roomId: strin
     retryBtn.classList.toggle('hidden', kind !== 'bad');
     saveBtn.disabled = saving || !isDirty;
     const total = pages.length;
-    pageLabel.textContent = sheet.page ? `Page ${sheet.page.n} · ${index + 1} of ${total}` : `New page`;
+    const last = editable ? total : total - 1;
+    pageLabel.textContent = sheet.page ? `Page ${sheet.page.n} · ${index + 1} of ${total}` : editable ? 'New page' : 'No pages yet';
     prevBtn.disabled = index === 0 || saving;
-    nextBtn.disabled = index >= total || saving;
-    nextBtn.textContent = index === total - 1 ? 'New page ›' : 'Next ›';
+    nextBtn.disabled = index >= last || saving;
+    nextBtn.textContent = editable && index === total - 1 ? 'New page ›' : 'Next ›';
     // On the last page, Next already turns to a fresh page.
-    newBtn.classList.toggle('hidden', index >= total - 1);
+    newBtn.classList.toggle('hidden', !editable || index >= total - 1);
+    saveBtn.classList.toggle('hidden', !editable);
+    editBtn.classList.toggle('hidden', editable);
+    el.classList.toggle('reading', !editable);
+    textarea.readOnly = !editable;
+    pageHeading.textContent = editable ? 'Describe your idea' : 'The idea';
+    const empty = !editable && total === 0;
+    emptyNote.classList.toggle('hidden', !empty);
+    emptyNote.textContent = empty ? `${opts.ownerName} hasn't written any ideas yet.` : '';
+    textarea.classList.toggle('hidden', empty);
     const st = sheet.page?.status;
     stamp.classList.toggle('hidden', !st);
     if (st) {
@@ -188,13 +208,13 @@ export async function openSketchbook(ui: UI, input: Input, opts: { roomId: strin
   };
 
   const load = (i: number) => {
-    index = Math.max(0, Math.min(pages.length, i));
+    index = Math.max(0, Math.min(editable ? pages.length : Math.max(0, pages.length - 1), i));
     const page = pages[index] ?? null;
-    const d = local.draft(roomId, page?.id ?? 'new');
+    const d = editable ? local.draft(roomId, page?.id ?? 'new') : null;
     if (d && (!page || d.at > page.updatedAt || d.baseRev === page.rev) && (d.text !== (page?.text ?? '') || !sameSketch(d.sketch, page?.sketch ?? []))) {
       sheet = { page, text: d.text, sketch: d.sketch, baseRev: page ? d.baseRev || page.rev : 0, recovered: true };
     } else {
-      if (d) local.clearDraft(roomId, page?.id ?? 'new');
+      if (d && editable) local.clearDraft(roomId, page?.id ?? 'new');
       sheet = { page, text: page?.text ?? '', sketch: page ? structuredClone(page.sketch) : [], baseRev: page?.rev ?? 0, recovered: false };
     }
     textarea.value = sheet.text;
@@ -206,7 +226,7 @@ export async function openSketchbook(ui: UI, input: Input, opts: { roomId: strin
   };
 
   const flip = async (to: number) => {
-    if (saving || to === index || to < 0 || to > pages.length) return;
+    if (saving || to === index || to < 0 || to > (editable ? pages.length : pages.length - 1)) return;
     if (dirty()) {
       const ok = await save();
       if (!ok) return;
@@ -214,6 +234,16 @@ export async function openSketchbook(ui: UI, input: Input, opts: { roomId: strin
     sfx.page();
     load(to);
     session.touch();
+  };
+
+  /** Switches the open book from reading to writing after a PIN check. */
+  const startEditing = async () => {
+    const t = session.token() ?? (await session.unlock('Enter the room PIN to write in this book.'));
+    if (!t) return;
+    editable = true;
+    // An empty book opens on a fresh page; otherwise stay on the page being read.
+    load(pages.length ? index : 0);
+    textarea.focus({ preventScroll: true });
   };
 
   const tokenOrUnlock = async (): Promise<string | null> => {
@@ -382,6 +412,7 @@ export async function openSketchbook(ui: UI, input: Input, opts: { roomId: strin
     render();
   };
   canvas.addEventListener('pointerdown', (e) => {
+    if (!editable) return;
     e.preventDefault();
     canvas.setPointerCapture(e.pointerId);
     const p = toPage(e);
@@ -414,10 +445,10 @@ export async function openSketchbook(ui: UI, input: Input, opts: { roomId: strin
     render();
   };
   canvas.addEventListener('click', () => {
-    if (ui.device !== 'touch' && ui.device !== 'kbm') setPadMode(true);
+    if (editable && ui.device !== 'touch' && ui.device !== 'kbm') setPadMode(true);
   });
   canvas.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !padMode) {
+    if (editable && e.key === 'Enter' && !padMode) {
       e.preventDefault();
       setPadMode(true);
     }
@@ -486,7 +517,7 @@ export async function openSketchbook(ui: UI, input: Input, opts: { roomId: strin
     onBack: () => void close(),
     onPrev: () => void flip(index - 1),
     onNext: () => void flip(index + 1),
-    initial: () => textarea,
+    initial: () => (editable ? textarea : !nextBtn.disabled ? nextBtn : editBtn),
     capture,
   };
   ui.open(panel);
@@ -496,21 +527,9 @@ export async function openSketchbook(ui: UI, input: Input, opts: { roomId: strin
 
   // ---- fetch pages
   statusEl.textContent = 'Opening...';
-  const token = await tokenOrUnlock();
-  if (!token) {
-    stopLoop();
-    ui.close(panel);
-    return;
-  }
-  const r = await api.pages(roomId, token);
+  paintStatus({ text: 'Opening...', kind: 'busy' });
+  const r = await api.pages(roomId);
   if (!r.ok) {
-    if (r.status === 401) {
-      stopLoop();
-      ui.close(panel);
-      const t = await session.unlock('Enter the PIN to open the sketchbook');
-      if (t) await openSketchbook(ui, input, opts);
-      return;
-    }
     paintStatus({ text: `Couldn't open the book. ${r.error}`, kind: 'bad' });
     retryBtn.onclick = () => {
       stopLoop();
@@ -521,6 +540,7 @@ export async function openSketchbook(ui: UI, input: Input, opts: { roomId: strin
     return;
   }
   pages = r.data.pages;
-  // Open on a fresh page if the book is empty, otherwise on the newest page.
-  load(pages.length ? pages.length - 1 : 0);
+  // Writers open on the newest page (or a fresh one); readers start at page one.
+  load(editable ? (pages.length ? pages.length - 1 : 0) : 0);
+  if (!editable) (!nextBtn.disabled ? nextBtn : editBtn).focus({ preventScroll: true });
 }

@@ -322,8 +322,8 @@ export async function loadPages(roomIdValue: string): Promise<(Page & { removed?
   return out.sort((a, b) => a.n - b.n);
 }
 
-export async function listPages(roomIdValue: string, token: string | undefined): Promise<Page[]> {
-  await requireEdit(token, roomIdValue);
+/** Anyone visiting a room may read its sketchbook. Pages the creator removed stay hidden. */
+export async function listPages(roomIdValue: string): Promise<Page[]> {
   await loadRoom(roomIdValue);
   return (await loadPages(roomIdValue)).filter((p) => !p.removed).map(stripRemoved);
 }
