@@ -49,7 +49,7 @@ const snap = async (name: string) => {
   await page.screenshot({ path: join(out, `${String(shot).padStart(2, '0')}-${name}.png`) });
   console.log('shot', name);
 };
-const press = async (b: number, hold = 90) => {
+const press = async (b: number, hold = 160) => {
   await page.evaluate((i) => ((window as unknown as { __pad: { buttons: number[] } }).__pad.buttons[i] = 1), b);
   await page.waitForTimeout(hold);
   await page.evaluate((i) => ((window as unknown as { __pad: { buttons: number[] } }).__pad.buttons[i] = 0), b);

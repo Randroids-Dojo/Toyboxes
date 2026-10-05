@@ -153,6 +153,20 @@ if (phone) await page.locator('.tbtn-action').tap();
 else await page.keyboard.press('KeyE');
 await expectState((s) => s.riding === null, 'got off');
 
+// 3b. Ride the scooter too.
+const scooter = vehicles.find((v) => v.kind === 'scooter')!;
+await teleport(scooter.x - 1.2, scooter.z, Math.PI / 2);
+await page.waitForTimeout(400);
+await expectState((s) => String(s.prompt).includes('scooter'), 'scooter prompt');
+if (phone) await page.locator('.tbtn-action').tap();
+else await page.keyboard.press('KeyE');
+await expectState((s) => s.riding === 'scooter', 'riding the scooter');
+if (!phone) await hold('KeyW', 900);
+await snap('scooter');
+if (phone) await page.locator('.tbtn-action').tap();
+else await page.keyboard.press('KeyE');
+await expectState((s) => s.riding === null, 'off the scooter');
+
 // 4. Claim the first free room.
 const world = (await (await fetch(new URL('/api/world', url))).json()) as { slots: { slot: number; roomId: string | null }[] };
 const free = world.slots.find((s) => !s.roomId);
@@ -216,6 +230,17 @@ await page.locator('textarea.page-text').fill('A soccer game in my room with thr
 await tapButton(page, 'Save page');
 await page.waitForFunction(() => document.querySelector('.save-state')?.textContent === 'Saved', null, { timeout: 8000 });
 await snap('sketchbook-revised');
+// A save while the connection is down fails honestly, keeps the draft, and retries.
+await page.locator('textarea.page-text').fill('A soccer game in my room with three goals and a scoreboard.');
+await ctx.setOffline(true);
+await tapButton(page, 'Save page');
+await page.waitForFunction(() => document.querySelector('.save-state')?.textContent?.startsWith("Couldn't save"), null, { timeout: 15000 });
+await snap('save-offline');
+const draftKept = await page.evaluate(() => Object.keys(localStorage).some((k) => k.startsWith('toyboxes.draft.')));
+if (!draftKept) throw new Error('Draft was not kept locally after a failed save');
+await ctx.setOffline(false);
+await tapButton(page, 'Retry');
+await page.waitForFunction(() => document.querySelector('.save-state')?.textContent === 'Saved', null, { timeout: 8000 });
 const pageLabel = await page.locator('.book-page').textContent();
 if (!pageLabel?.startsWith('Page 1')) throw new Error(`Expected to be on page 1, got ${pageLabel}`);
 await tapButton(page, 'Close');

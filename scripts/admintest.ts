@@ -49,7 +49,8 @@ await page.waitForSelector('.signin');
 await page.locator('input[type=password]').fill('wrong-password');
 await page.getByRole('button', { name: 'Sign in' }).click();
 await page.waitForSelector('.err:has-text("not right")');
-await page.locator('input[type=password]').fill('toyboxes-dev');
+// Production runs pass the real password through ADMIN_PASSWORD.
+await page.locator('input[type=password]').fill(process.env.ADMIN_PASSWORD ?? 'toyboxes-dev');
 await page.getByRole('button', { name: 'Sign in' }).click();
 await page.waitForSelector('.row');
 await snap('feed');
