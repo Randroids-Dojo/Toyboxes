@@ -30,9 +30,20 @@ if (mode === 'save') {
 } else if (mode === 'clean') {
   const before = new Set(JSON.parse(readFileSync(file, 'utf8')) as string[]);
   const added = now.filter((k) => !before.has(k));
-  // Shared sorted sets existed before only if someone else used them; drop test members by removing the whole key when it is new.
   if (added.length) await r.del(...added);
-  console.log(`removed ${added.length} keys added during the run`);
+  // Index sets shared with real rooms keep their keys; drop only members whose room is gone.
+  let members = 0;
+  for (const z of ['rooms', 'released', 'feed']) {
+    const key = `toyboxes:v1:${z}`;
+    if (!before.has(key)) continue;
+    for (const m of await r.zrange<string[]>(key, 0, -1)) {
+      if (!(await r.exists(`toyboxes:v1:room:${m.split('/')[0]}`))) {
+        await r.zrem(key, m);
+        members++;
+      }
+    }
+  }
+  console.log(`removed ${added.length} keys and ${members} index entries added during the run`);
 } else {
   console.log('usage: save|clean <file>');
 }
