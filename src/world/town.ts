@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { ARCADES, SLOT_COUNT, TRIM_COLORS, type ArcadeId, type PropPlacement, type SlotSummary } from '../shared/model';
 import { DISPLAY_FONT, cached, lightPoolTexture, mesh, plastic, roundBox, sign, signTexture } from './kit';
+import { placeColliders, spaceChakra, vibeCoded } from './arcades';
 import { box, circle, type Collider } from './physics';
 
 export const PLAZA_R = 15;
@@ -182,60 +183,18 @@ class House {
   }
 }
 
-function arcade(id: ArcadeId): { group: THREE.Group; entrance: Entrance; collider: Collider; neon: THREE.MeshStandardMaterial[] } {
+function arcade(id: ArcadeId): { group: THREE.Group; entrance: Entrance; colliders: Collider[]; animate: (t: number, night: number) => void } {
   const a = ARCADE_ANGLES[id];
   const p = polar(a, HOUSE_R + 1.5);
-  const group = new THREE.Group();
-  group.position.set(p.x, 0, p.z);
-  group.rotation.y = -a;
-  const neon: THREE.MeshStandardMaterial[] = [];
-  const glow = (color: string) => {
-    const m = new THREE.MeshStandardMaterial({ color, emissive: new THREE.Color(color), emissiveIntensity: 0.8, roughness: 0.3 });
-    neon.push(m);
-    return m;
-  };
-  if (id === 'spacechakra') {
-    group.add(mesh(roundBox(12, 5, 9, 0.3), plastic('#3a2a6e', { rough: 0.7 }), 0, 2.5, 0));
-    group.add(mesh(roundBox(12.6, 0.5, 9.6, 0.2), plastic('#f2c14e', { rough: 0.4 }), 0, 5.1, 0));
-    const dome = mesh(cached('dome', () => new THREE.SphereGeometry(3.6, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2)), new THREE.MeshStandardMaterial({ color: '#7b5fd6', roughness: 0.25, emissive: new THREE.Color('#4a2fa8'), emissiveIntensity: 0.3 }), 0, 5.3, -0.5);
-    group.add(dome);
-    const ring = mesh(cached('dring', () => new THREE.TorusGeometry(4.6, 0.12, 8, 48)), glow('#ff6bd6'), 0, 6.9, -0.5, { cast: false });
-    ring.rotation.x = Math.PI / 2 - 0.35;
-    group.add(ring);
-    for (const [x, y, r, c] of [
-      [-4.6, 7.2, 0.55, '#f2c14e'],
-      [4.8, 6.6, 0.4, '#5ad1ff'],
-    ] as const) {
-      group.add(mesh(new THREE.SphereGeometry(r, 16, 12), glow(c), x, y, -0.5, { cast: false }));
-    }
-    const s = sign('SPACECHAKRA', 8.4, 1.5, { bg: '#1c1440', fg: '#ffe7fb', glow: '#ff6bd6', sub: 'ARCADE  ·  spacechakra.com', subColor: '#9fe8ff', border: '#ff6bd6', radius: 0.3 }, 0.6);
-    s.position.set(0, 3.9, 4.62);
-    group.add(s);
-    group.add(mesh(roundBox(3.4, 2.9, 0.3, 0.1), glow('#5ad1ff'), 0, 1.45, 4.52, { cast: false }));
-    group.add(mesh(roundBox(3.0, 2.6, 0.2, 0.08), plastic('#120c2c', { rough: 0.2 }), 0, 1.3, 4.64, { cast: false }));
-  } else {
-    group.add(mesh(roundBox(12, 5.4, 9, 0.3), plastic('#1f2a4d', { rough: 0.7 }), 0, 2.7, 0));
-    for (let i = 0; i < 12; i++) {
-      group.add(mesh(roundBox(0.98, 0.5, 0.2, 0.05), plastic(i % 2 ? '#fffaf0' : '#ff3d8b', { rough: 0.5 }), -5.5 + i, 0.25, 4.56, { cast: false }));
-    }
-    const marquee = mesh(roundBox(10.5, 1.9, 0.6, 0.25), plastic('#ff3d8b', { rough: 0.4 }), 0, 6.1, 3.8);
-    group.add(marquee);
-    const s = sign('VIBECODED GAMES', 9.8, 1.6, { bg: '#12183a', fg: '#fffaf0', glow: '#2ee6d6', sub: 'vibecoded.games', subColor: '#ffd24a', border: '#2ee6d6', radius: 0.25 }, 0.6);
-    s.position.set(0, 6.1, 4.16);
-    group.add(s);
-    for (const sx of [-1, 1]) {
-      group.add(mesh(roundBox(2.6, 2.2, 0.16, 0.08), glow(sx < 0 ? '#2ee6d6' : '#ffd24a'), sx * 3.6, 2.4, 4.55, { cast: false }));
-      group.add(mesh(roundBox(2.3, 1.9, 0.12, 0.06), plastic('#0d1230', { rough: 0.2 }), sx * 3.6, 2.4, 4.66, { cast: false }));
-    }
-    group.add(mesh(roundBox(3.2, 3.0, 0.3, 0.1), glow('#2ee6d6'), 0, 1.5, 4.52, { cast: false }));
-    group.add(mesh(roundBox(2.8, 2.7, 0.2, 0.08), plastic('#0d1230', { rough: 0.2 }), 0, 1.35, 4.64, { cast: false }));
-  }
+  const build = id === 'spacechakra' ? spaceChakra() : vibeCoded();
+  build.group.position.set(p.x, 0, p.z);
+  build.group.rotation.y = -a;
   const door = polar(a, HOUSE_R + 1.5 - 5.8);
   return {
-    group,
+    group: build.group,
     entrance: { kind: 'arcade', slot: -1, arcade: id, x: door.x, z: door.z, outYaw: Math.atan2(-door.x, -door.z) },
-    collider: box(p.x, p.z, 6.1, 4.6, -a, 8, 0.5, true),
-    neon,
+    colliders: placeColliders(build.colliders, p.x, p.z, -a),
+    animate: build.animate,
   };
 }
 
@@ -311,7 +270,7 @@ export class Town {
   private lampMats: THREE.MeshStandardMaterial[] = [];
   private pools: THREE.Mesh[] = [];
   private lights: THREE.PointLight[] = [];
-  private neon: THREE.MeshStandardMaterial[] = [];
+  private arcadeAnims: ((t: number, night: number) => void)[] = [];
   private clockHands: { hour: THREE.Object3D; minute: THREE.Object3D }[] = [];
   private water: THREE.Mesh;
 
@@ -379,9 +338,9 @@ export class Town {
     for (const a of ARCADES) {
       const ar = arcade(a.id);
       g.add(ar.group);
-      this.colliders.push(ar.collider);
+      this.colliders.push(...ar.colliders);
+      this.arcadeAnims.push(ar.animate);
       this.entrances.push(ar.entrance);
-      this.neon.push(...ar.neon);
     }
     this.buildBillboard();
     this.buildTrees();
@@ -574,7 +533,7 @@ export class Town {
     for (const m of this.lampMats) m.emissiveIntensity = 0.08 + night * 1.6;
     for (const p of this.pools) (p.material as THREE.MeshBasicMaterial).opacity = Math.max(0, night - 0.15) * 0.8;
     for (const l of this.lights) l.intensity = Math.max(0, night - 0.2) * 40;
-    for (const m of this.neon) m.emissiveIntensity = 0.6 + night * 1.4;
+    for (const f of this.arcadeAnims) f(t, night);
     const hours = phase * 24;
     for (const c of this.clockHands) {
       c.hour.rotation.z = -((hours % 12) / 12) * Math.PI * 2;
