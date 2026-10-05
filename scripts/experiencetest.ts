@@ -189,6 +189,49 @@ c = await dbg<CExp>('experience');
 console.log('casino stats', JSON.stringify(c.stats), 'reels', c.reels);
 if (!c.stats || c.stats.spins !== 3) throw new Error('Spins were not recorded');
 if (c.stats.balance !== 1000 - c.stats.spent + c.stats.earned) throw new Error('Credits do not add up');
+// Roulette: bet on red and spin.
+await dbg('teleport', (c as any).roulette.x, (c as any).roulette.z, Math.PI);
+await page.waitForTimeout(300);
+await until((s) => s.prompt === 'Play roulette', 'roulette prompt');
+await act('interact');
+await page.waitForSelector('.table-panel');
+const tap = async (name: string | RegExp) => {
+  const b = page.locator('.table-panel').getByRole('button', { name }).first();
+  if (phone) await b.tap();
+  else await b.click();
+};
+await tap('Red');
+await tap('Spin the wheel');
+await page.waitForTimeout(1500);
+await snap('roulette-spinning');
+await page.waitForFunction(() => /\d+ (red|black|green)/.test(document.querySelector('.table-status')?.textContent ?? ''), null, { timeout: 15000 });
+console.log('roulette:', await page.locator('.table-status').textContent());
+await snap('roulette-result');
+await tap('Done');
+await page.waitForTimeout(300);
+// Blackjack: deal, then stand (or play on until the hand ends).
+await dbg('teleport', (c as any).blackjack.x, (c as any).blackjack.z, Math.PI);
+await page.waitForTimeout(300);
+await until((s) => String(s.prompt).includes('blackjack'), 'blackjack prompt');
+await act('interact');
+await page.waitForSelector('.table-panel');
+await tap('Deal');
+await page.waitForTimeout(800);
+for (let i = 0; i < 3; i++) {
+  const stand = page.locator('.table-panel').getByRole('button', { name: 'Stand' });
+  if (!(await stand.isVisible())) break;
+  await snap('blackjack-hand');
+  await tap('Stand');
+  await page.waitForTimeout(800);
+}
+const bjStatus = await page.locator('.table-status').textContent();
+console.log('blackjack:', bjStatus);
+if (!/win|Push|dealer wins|Bust|Blackjack/i.test(bjStatus ?? '')) throw new Error(`Hand did not settle: ${bjStatus}`);
+await snap('blackjack-result');
+await tap('Done');
+await page.waitForTimeout(300);
+c = await dbg<CExp>('experience');
+if (!c.stats || c.stats.balance !== 1000 - c.stats.spent + c.stats.earned) throw new Error('Credits do not add up after table games');
 await dbg('teleport', c.kiosk.x, c.kiosk.z, Math.PI);
 await page.waitForTimeout(300);
 await until((s) => s.prompt === 'Check my credits', 'kiosk prompt');

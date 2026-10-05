@@ -2,6 +2,7 @@
 // honest saving, retry and conflict states.
 
 import type { Page, PropPlacement, RoomPublic, RoomTheme, SlotSummary, Stroke } from '../shared/model';
+import type { BjView, RouletteBet } from '../shared/casino-games';
 import type { CasinoStats, SlotSymbol } from '../shared/slots';
 
 export interface BoardRow {
@@ -10,7 +11,7 @@ export interface BoardRow {
   you: boolean;
 }
 
-export type ScoreBoard = { kind: 'kart'; board: BoardRow[]; best: number | null } | { kind: 'casino'; board: BoardRow[]; stats: CasinoStats } | { kind: 'galaxy'; board: BoardRow[]; best: number | null };
+export type ScoreBoard = { kind: 'kart'; board: BoardRow[]; best: number | null } | { kind: 'casino'; board: BoardRow[]; stats: CasinoStats; blackjack: BjView | null } | { kind: 'galaxy'; board: BoardRow[]; best: number | null };
 
 export type Result<T> =
   | { ok: true; data: T }
@@ -66,6 +67,10 @@ export const api = {
   refill: (roomId: string, areaId: string, browserId: string, name: string) => call<{ stats: CasinoStats }>('POST', '/api/scores', { action: 'refill', roomId, areaId, browserId, name }),
   frenzy: (roomId: string, areaId: string, browserId: string, name: string, score: number) =>
     call<{ best: number; improved: boolean }>('POST', '/api/scores', { action: 'frenzy', roomId, areaId, browserId, name, score }),
+  roulette: (roomId: string, areaId: string, browserId: string, name: string, bet: number, pick: RouletteBet) =>
+    call<{ pocket: number; win: number; stats: CasinoStats }>('POST', '/api/scores', { action: 'roulette', roomId, areaId, browserId, name, bet, pick }),
+  blackjack: (roomId: string, areaId: string, browserId: string, name: string, move: 'deal' | 'hit' | 'stand' | 'double', bet?: number) =>
+    call<{ hand: BjView; stats: CasinoStats }>('POST', '/api/scores', { action: 'blackjack', roomId, areaId, browserId, name, move, bet }),
   scoreName: (browserId: string, name: string) => call<{ ok: true }>('POST', '/api/scores', { action: 'name', browserId, name }),
 };
 

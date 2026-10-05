@@ -10,8 +10,9 @@ import { BETS, PAYTABLE, REEL_STRIP, START_CREDITS, type CasinoStats, type SlotS
 import { card } from '../ui/dialogs';
 import { button, h, type Panel } from '../ui/ui';
 import { DISPLAY_FONT, cached, disposeTree, mesh, plastic, roundBox, sign, signTexture } from '../world/kit';
-import { box, circle, type Collider } from '../world/physics';
+import { box, type Collider } from '../world/physics';
 import type { PlayerState, SpaceAction, SpaceView, Spot } from '../world/space';
+import { BlackjackTable, RouletteTable, openBlackjack, openRoulette, type TableHost } from './casino-tables';
 import { boardTexture, formatCredits, patternTexture, type ExperienceCtx } from './common';
 
 const W = 9;
@@ -174,8 +175,29 @@ export class Casino implements SpaceView {
   private disposed = false;
   private lastBoardAt = 0;
   private statsPanel: { panel: Panel; refresh: () => void } | null = null;
+  private roulette: RouletteTable;
+  private blackjack: BlackjackTable;
+  private tablePanel: Panel | null = null;
+  private host: TableHost;
 
   constructor(private readonly ctx: ExperienceCtx) {
+    this.host = {
+      ctx: this.ctx,
+      stats: () => this.stats,
+      setStats: (s) => {
+        this.stats = s;
+        this.paintHud();
+        this.statsPanel?.refresh();
+        if (this.clock - this.lastBoardAt > 4) void this.loadBoard(false);
+      },
+      bet: () => this.bet,
+      setBet: (b) => {
+        this.bet = b;
+        localStorage.setItem('toyboxes.bet', String(b));
+        this.paintHud();
+      },
+      refill: () => this.refill(),
+    };
     const s = this.scene;
     s.background = new THREE.Color('#1a1024');
     const saved = Number(localStorage.getItem('toyboxes.bet'));
@@ -332,18 +354,9 @@ export class Casino implements SpaceView {
     right.add(pay);
     this.paintBoard();
 
-    // Two tables with chip stacks.
-    for (const x of [-5, 5]) {
-      const tbl = new THREE.Group();
-      tbl.position.set(x, 0, 3);
-      tbl.add(mesh(cached('tbltop', () => new THREE.CylinderGeometry(1.0, 1.0, 0.12, 28)), plastic('#1f7a4d', { rough: 0.8 }), 0, 1.0, 0));
-      tbl.add(mesh(cached('tblleg', () => new THREE.CylinderGeometry(0.12, 0.3, 1.0, 12)), gold, 0, 0.5, 0));
-      ['#e8574a', '#4aa3df', '#fbf8f0'].forEach((c, i) => {
-        for (let k = 0; k < 4 + i; k++) tbl.add(mesh(cached('chip', () => new THREE.CylinderGeometry(0.11, 0.11, 0.04, 14)), plastic(c), -0.3 + i * 0.3, 1.08 + k * 0.045, 0.1, { cast: false }));
-      });
-      s.add(tbl);
-      this.colliders.push(circle(x, 3, 1.05, 1.2, 0.5, false));
-    }
+    // Table games: roulette on the left, blackjack on the right.
+    this.roulette = new RouletteTable(s, this.colliders, -5.2, 2.2);
+    this.blackjack = new BlackjackTable(s, this.colliders, 5.2, 2.6);
 
     const hemi = new THREE.HemisphereLight('#ffe6f2', '#3a1630', 1.1);
     const lamp = new THREE.PointLight('#ffd0a0', 40, 30, 1.4);
@@ -382,6 +395,7 @@ export class Casino implements SpaceView {
     }
     this.boardRows = r.data.board;
     if (withStats || !this.stats) this.stats = r.data.stats;
+    if (withStats && r.data.blackjack && !this.blackjack.hand) this.blackjack.show(r.data.blackjack);
     this.paintBoard();
     this.paintHud();
     this.statsPanel?.refresh();
@@ -503,6 +517,10 @@ export class Casino implements SpaceView {
         else out.push({ ...this.machineSpot, range: 2.4, label: `Pull the lever (bet ${this.bet})`, short: 'Spin', run: () => void this.spin() });
       }
       out.push({ ...this.kioskSpot, range: 1.6, label: 'Check my credits', short: 'Credits', run: () => this.openStats() });
+      if (st) {
+        out.push({ ...this.roulette.spot, range: 1.9, label: 'Play roulette', short: 'Roulette', run: () => (this.tablePanel = openRoulette(this.host, this.roulette)) });
+        out.push({ ...this.blackjack.spot, range: 1.9, label: this.blackjack.hand?.phase === 'player' ? 'Finish your blackjack hand' : 'Play blackjack', short: 'Blackjack', run: () => (this.tablePanel = openBlackjack(this.host, this.blackjack)) });
+      }
     }
     return out;
   }
@@ -575,6 +593,8 @@ export class Casino implements SpaceView {
     const dt = Math.min(0.1, t - (this.lastT || t));
     this.lastT = t;
     this.clock += dt;
+    this.roulette.update(dt);
+    this.blackjack.update(dt);
     // Reels.
     for (const r of this.reels) {
       if (r.stop && this.clock >= r.stop.t0) {
@@ -633,12 +653,13 @@ export class Casino implements SpaceView {
     this.disposed = true;
     this.hud.remove();
     if (this.statsPanel) this.ctx.ui.close(this.statsPanel.panel);
+    if (this.tablePanel) this.ctx.ui.close(this.tablePanel);
     disposeTree(this.scene);
   }
 
   /** For scripted playtests. */
   debugInfo() {
-    return { machine: this.machineSpot, kiosk: this.kioskSpot, stats: this.stats, spinning: this.spinning, bet: this.bet, reels: this.reels.map((r) => Math.round(((r.angle / STEP - 0.5) % STOPS + STOPS) % STOPS)) };
+    return { machine: this.machineSpot, kiosk: this.kioskSpot, roulette: this.roulette.spot, blackjack: this.blackjack.spot, hand: this.blackjack.hand, rouletteSpinning: this.roulette.spinning, stats: this.stats, spinning: this.spinning, bet: this.bet, reels: this.reels.map((r) => Math.round(((r.angle / STEP - 0.5) % STOPS + STOPS) % STOPS)) };
   }
 }
 
