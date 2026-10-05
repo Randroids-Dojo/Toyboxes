@@ -5,10 +5,16 @@
 import type { Stroke } from './model.js';
 
 export const TRACK_WIDTH = 9;
+/** Rumble strip on each side of the road. */
+export const TRACK_CURB = 0.9;
+/** Tightest corner allowed: the inner curb must never fold over itself. */
+export const TRACK_MIN_RADIUS = TRACK_WIDTH / 2 + TRACK_CURB + 2;
 export const TRACK_TARGET_LENGTH = 420;
 export const TRACK_POINTS = 160;
-/** Fastest any kart can lap, as a fraction of the track length per second. */
+/** Kart top speed in m/s before boosts. */
 export const KART_TOP_SPEED = 14;
+/** Boost pads, drift boosts and slipstream raise the top speed by this much. */
+export const KART_BOOST = 1.35;
 
 type P = [number, number];
 
@@ -103,11 +109,15 @@ export function trackFromSketch(sketch: Stroke[]): number[] | null {
   if (!best || bestLen < 500) return null;
   best = closeLoop(best);
   // Close the loop (a gap between the pen's start and end becomes a straight) and tidy the hand wobble.
-  let pts = resampleClosed(best, TRACK_POINTS * 2);
-  pts = smoothClosed(pts, 10);
-  pts = resampleClosed(pts, TRACK_POINTS);
-  const perimeter = arcLengths(pts, true).pop()!;
-  const f = TRACK_TARGET_LENGTH / perimeter;
+  const dense = resampleClosed(best, TRACK_POINTS * 2);
+  // Smooth harder until the tightest corner is wide enough at full size.
+  let pts: P[] = [];
+  let f = 1;
+  for (let passes = 10; passes <= 160; passes += 10) {
+    pts = resampleClosed(smoothClosed(dense, passes), TRACK_POINTS);
+    f = TRACK_TARGET_LENGTH / arcLengths(pts, true).pop()!;
+    if (minRadius(pts) * f >= TRACK_MIN_RADIUS) break;
+  }
   let minX = Infinity;
   let maxX = -Infinity;
   let minY = Infinity;
@@ -134,6 +144,48 @@ function segmentsCross(a: P, b: P, c: P, d: P): boolean {
   return d1 * d2 < 0 && d3 * d4 < 0;
 }
 
+/**
+ * Radius of the tightest corner, measured over about five metres either
+ * side of each point so drawing wobble and rounding do not count.
+ */
+export function minRadius(pts: P[]): number {
+  const n = pts.length;
+  const total = arcLengths(pts, true).pop()!;
+  const k = Math.max(1, Math.round(5 / (total / n)));
+  let min = Infinity;
+  for (let i = 0; i < n; i++) {
+    const a = pts[(i - k + n) % n];
+    const b = pts[i];
+    const c = pts[(i + k) % n];
+    const ab = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const bc = Math.hypot(c[0] - b[0], c[1] - b[1]);
+    const ca = Math.hypot(a[0] - c[0], a[1] - c[1]);
+    const area2 = Math.abs((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]));
+    if (area2 > 1e-9) min = Math.min(min, (ab * bc * ca) / (2 * area2));
+  }
+  return min;
+}
+
+/** How many road-edge segments at this sideways offset run backwards (fold over). */
+export function edgeFolds(flat: number[], offset: number): number {
+  const pts: P[] = [];
+  for (let i = 0; i < flat.length; i += 2) pts.push([flat[i], flat[i + 1]]);
+  const n = pts.length;
+  const edge = pts.map((p, i) => {
+    const a = pts[(i - 1 + n) % n];
+    const b = pts[(i + 1) % n];
+    const l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+    return [p[0] + ((b[1] - a[1]) / l) * offset, p[1] - ((b[0] - a[0]) / l) * offset];
+  });
+  let folds = 0;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const along = (pts[j][0] - pts[i][0]) * (edge[j][0] - edge[i][0]) + (pts[j][1] - pts[i][1]) * (edge[j][1] - edge[i][1]);
+    if (along <= 0) folds++;
+  }
+  return folds;
+}
+
 /** Why a centre line cannot be raced, or null. */
 export function trackProblem(flat: number[]): string | null {
   if (!Array.isArray(flat) || flat.length < 40 || flat.length > 2000 || flat.length % 2) return 'The track needs a longer loop';
@@ -144,6 +196,7 @@ export function trackProblem(flat: number[]): string | null {
   const s = arcLengths(pts, true);
   const total = s[n];
   if (total < 150 || total > 1200) return 'The track should be between 150 and 1200 metres long';
+  if (minRadius(pts) < TRACK_MIN_RADIUS) return 'A corner is too tight';
   for (let i = 0; i < n; i++) {
     for (let j = i + 2; j < n; j++) {
       if (i === 0 && j === n - 1) continue;
@@ -164,7 +217,17 @@ export function trackLength(flat: number[]): number {
 
 /** The quickest lap the server will accept. */
 export function minLapMs(flat: number[]): number {
-  return Math.floor((trackLength(flat) / (KART_TOP_SPEED * 1.08)) * 1000);
+  return Math.floor((trackLength(flat) / (KART_TOP_SPEED * 1.2)) * 1000);
+}
+
+/** A short fingerprint of a track, so personal bests reset when the course changes. */
+export function trackId(flat: number[]): string {
+  let h = 2166136261;
+  for (const v of flat) {
+    h ^= Math.round(v * 10);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h.toString(36);
 }
 
 /** Runtime queries along a closed centre line. */

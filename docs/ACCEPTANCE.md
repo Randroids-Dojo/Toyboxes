@@ -26,8 +26,14 @@ Randroid's room 1 asked for two things on its sketchbook pages:
 
 | Page | Idea | Built | Evidence |
 | --- | --- | --- | --- |
-| 1 | A go-kart track to race CPU players and set personal best lap times | The **Kart track** inner area. The course is the page's own drawing, three computer drivers, 3-lap races, timed laps, personal bests and a best-laps board | `scripts/experiencetest.ts` (desktop and `PHONE=1`), `tests/scores.test.ts` |
+| 1 | A go-kart track to race CPU players and set personal best lap times | The **Kart track** inner area: timed laps, personal bests, a best-laps board and 3-lap races. Rebuilt after the page was edited (below) | `scripts/experiencetest.ts` (desktop and `PHONE=1`), `tests/track.test.ts`, `tests/scores.test.ts` |
 | 2 | A casino with a giant slot machine you walk up to and spin; credits earned and spent tracked over time | The **Casino** inner area, with a giant slot machine with a lever, server-decided spins, totals and a balance-over-time chart per player, and a top balances board | same |
+
+Page 1 was edited: "make it an actually fun race", check for z-fighting and overlapping track pieces, and put characters in the computer karts. Built automatically on 2026-10-05:
+- **The course:** the drawing's tightest corner had a 4.9 m radius, less than the 5.4 m from the centre line to the outside of the curb, so the inner curb folded over itself. It is replaced by the designed **Toybox Grand Prix** circuit (`src/shared/circuits.ts`, about 560 m): a long main straight, a tight first corner, a fast kink, esses, a hairpin and a long sweeper. Drawings can still be used; they are smoothed until no corner is tighter than 7.4 m.
+- **No z-fighting:** the road sits at ground level with the grass below it, the curbs are raised strips, and paint (start line, grid, boost pads, lamp light) is pulled forward in depth. `tests/track.test.ts` checks the corner radius, curb folds and the gap between separate parts of the road, and `trackProblem` now rejects courses with corners too tight for the curbs.
+- **A real race:** drifting with mini-turbos, boost pads, slipstreams, rocket starts, start lights, corner grip, a six-kart grid, a minimap, a final lap call and a results list.
+- **Characters:** Bolt the robot, Hopper the frog guy, Mittens the cat, Puddles the duck and Rex the dino, each with their own driving style. They steer, look into corners, blink, and cheer or sulk at the finish.
 
 Page 2 was edited to ask for other casino games as well. Built automatically on 2026-10-05: a **roulette wheel** and a **blackjack table** with a robot dealer in the Casino, sharing its credits. The server decides every spin and every card. Evidence: `scripts/experiencetest.ts` (desktop and `PHONE=1`), `tests/casino-games.test.ts`.
 
@@ -42,7 +48,8 @@ Room 12 (estevan) asked for a "black hole galaxy" (page 1, with a drawing of a r
 - Load https://toyboxes.games on the Samsung S90H browser: check that focus is visible, the remote's arrows, OK and Back work, the on-screen keyboard and PIN pad work from the couch, and whether the TV browser exposes a paired controller.
 - Play on a real phone: stick feel, drag-to-look, the system keyboard over the sketchbook, and frame rate.
 - Judge vehicle handling, camera comfort and night readability; the numbers are in `src/world/vehicles.ts`, `src/game/camera.ts` and `src/world/sky.ts`.
-- Race the computer drivers and tune their pace (`skill` in `src/experiences/kart.ts`); try the casino's pace of wins over a longer session.
+- Race the computer drivers and tune their pace (`skill` and `nerve` in `src/experiences/kart-drivers.ts`); try the casino's pace of wins over a longer session.
+- Drift on a real phone with two thumbs (stick and Brake together). Headless touch emulation only tracks one finger, so the phone playtest checks the stick and the Brake button separately.
 
 ## Choices made where the GDD left them open
 

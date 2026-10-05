@@ -5,6 +5,7 @@
 //   npx tsx scripts/autobuild/admin-cli.ts seen <roomId> <pageId>
 //   npx tsx scripts/autobuild/admin-cli.ts content-get <roomId> [file]
 //   npx tsx scripts/autobuild/admin-cli.ts content-put <roomId> <file>   (content JSON with the current rev)
+//   npx tsx scripts/autobuild/admin-cli.ts clear-scores <roomId> <areaId>   (when a course changes, its old lap times go)
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { admin } from './client';
@@ -36,7 +37,11 @@ switch (cmd) {
     console.log(`published content rev ${r.content.rev}: ${r.content.areas.map((x: { name: string; published: boolean }) => `${x.name}${x.published ? '' : ' (draft)'}`).join(', ')}`);
     break;
   }
+  case 'clear-scores':
+    await admin('POST', '', { action: 'clearScores', roomId, areaId: a });
+    console.log(`scores cleared for ${a}`);
+    break;
   default:
-    console.log('usage: status|note|seen|content-get|content-put');
+    console.log('usage: status|note|seen|content-get|content-put|clear-scores');
     process.exit(1);
 }

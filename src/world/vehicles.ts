@@ -1,9 +1,11 @@
 // Rideable scooter and go-kart. Arcade handling: easy to steer, quick to
-// stop, forgiving against walls. No racing rules are implied.
+// stop, forgiving against walls. On a race track karts also get a grip
+// limit in corners, drifting with a mini-turbo, and boosts.
 
 import * as THREE from 'three';
 import { blob, cached, mesh, plastic, roundBox } from './kit';
 import { clamp, damp, resolveCircle, type Collider } from './physics';
+import { KART_BOOST } from '../shared/track';
 
 export type VehicleKind = 'scooter' | 'kart';
 
@@ -17,6 +19,12 @@ interface Tuning {
   radius: number;
   seatY: number;
 }
+
+/** Sideways grip on a race track, m/s squared: higher while drifting. */
+const RACE_GRIP = 11;
+const DRIFT_GRIP = 19;
+/** Seconds of drifting for the first and second mini-turbo. */
+export const DRIFT_STAGES = [0.6, 1.4];
 
 const TUNING: Record<VehicleKind, Tuning> = {
   kart: { maxSpeed: 14, reverse: 4.5, accel: 9, brake: 22, drag: 2.2, turn: 2.3, radius: 0.85, seatY: 0.42 },
@@ -42,6 +50,20 @@ export class Vehicle {
   private frontPivots: THREE.Object3D[] = [];
   private lean = 0;
   bumped = 0;
+  /** Race track rules: corner grip, drifting and boosts. */
+  racing = false;
+  /** Seconds of boost left. */
+  boost = 0;
+  /** Drift direction (1 left, -1 right) or 0. */
+  drift = 0;
+  /** Seconds spent in the current drift. */
+  driftTime = 0;
+  /** Set when a drift ends with a mini-turbo: 1 or 2. Read and cleared by the track. */
+  turbo = 0;
+  /** The last throttle input, for rocket starts. */
+  throttleIn = 0;
+  /** Visual slide angle while drifting. */
+  private slide = 0;
 
   constructor(
     readonly kind: VehicleKind,
@@ -132,14 +154,20 @@ export class Vehicle {
    */
   drive(dt: number, throttle: number, steer: number, brake: number, colliders: Collider[]): void {
     const t = this.t;
+    this.throttleIn = throttle;
     if (this.frozen) {
       this.speed = 0;
+      this.drift = 0;
       this.steer += (steer - this.steer) * damp(10, dt);
       for (const p of this.frontPivots) p.rotation.y = this.steer * 0.45;
       this.sync();
       return;
     }
-    const top = t.maxSpeed * this.grip;
+    if (this.racing) brake = this.driftInput(dt, steer, brake);
+    const boosting = this.boost > 0;
+    this.boost = Math.max(0, this.boost - dt);
+    const top = t.maxSpeed * this.grip * (boosting ? KART_BOOST : 1);
+    if (boosting && this.speed < top) this.speed = Math.min(top, this.speed + 26 * dt);
     if (brake > 0.05) {
       const s = Math.sign(this.speed);
       this.speed -= s * t.brake * brake * dt;
@@ -156,14 +184,26 @@ export class Vehicle {
       this.speed -= s * t.drag * dt;
       if (Math.sign(this.speed) !== s) this.speed = 0;
     }
-    // Running wide onto grass scrubs speed down to what the grass allows.
-    if (this.speed > top) this.speed = Math.max(top, this.speed - 14 * dt);
-    this.speed = clamp(this.speed, -t.reverse, t.maxSpeed);
+    // Running wide onto grass scrubs speed down to what the grass allows; a boost fades gently.
+    if (this.speed > top) this.speed = Math.max(top, this.speed - (this.grip < 1 ? 14 : 5) * dt);
+    this.speed = clamp(this.speed, -t.reverse, t.maxSpeed * (this.racing ? KART_BOOST : 1));
     this.steer += (steer - this.steer) * damp(10, dt);
     // Turn rate builds with speed, then eases off near top speed for stability.
     const v = Math.abs(this.speed);
     const grip = Math.min(1, v / 3) * (1 - 0.35 * Math.min(1, v / t.maxSpeed));
-    this.yaw += this.steer * t.turn * grip * Math.sign(this.speed || 1) * dt;
+    let rate = this.steer * t.turn * grip;
+    if (this.drift) {
+      // Steering into the drift tightens it, steering out widens it, but it always turns.
+      const into = this.steer * this.drift;
+      rate = this.drift * t.turn * 1.1 * (into >= 0 ? 0.45 + 0.55 * into : 0.45 + 0.3 * into);
+    }
+    // Tyres only hold so much in a corner: too fast and the kart runs wide.
+    if (this.racing && v > 1) {
+      const cap = (this.drift ? DRIFT_GRIP : RACE_GRIP) / v;
+      rate = clamp(rate, -cap, cap);
+    }
+    this.yaw += rate * Math.sign(this.speed || 1) * dt;
+    this.slide += ((this.drift ? this.drift * 0.38 : 0) - this.slide) * damp(8, dt);
 
     this.pos.x += Math.sin(this.yaw) * this.speed * dt;
     this.pos.z += Math.cos(this.yaw) * this.speed * dt;
@@ -188,9 +228,43 @@ export class Vehicle {
     if (Math.abs(this.speed) > 0.01) this.drive(dt, 0, 0, 0.4, colliders);
   }
 
+  /**
+   * Holding brake while turning at speed starts a drift instead of braking.
+   * Letting go after long enough gives a mini-turbo. Returns the brake to apply.
+   */
+  private driftInput(dt: number, steer: number, brake: number): number {
+    if (!this.drift) {
+      if (brake > 0.5 && Math.abs(steer) > 0.3 && this.speed > 8 && this.grip >= 1) {
+        this.drift = Math.sign(steer);
+        this.driftTime = 0;
+      }
+      return this.drift ? 0 : brake;
+    }
+    if (brake > 0.5 && this.speed > 5.5 && this.grip >= 1) {
+      this.driftTime += dt;
+      // A drift bleeds a little speed.
+      this.speed -= 1.2 * dt;
+      return 0;
+    }
+    const stage = this.grip >= 1 ? DRIFT_STAGES.filter((s) => this.driftTime >= s).length : 0;
+    if (stage) {
+      this.boost = Math.max(this.boost, stage === 2 ? 1.0 : 0.5);
+      this.turbo = stage;
+    }
+    this.drift = 0;
+    this.driftTime = 0;
+    return 0;
+  }
+
+  /** 0 none, 1 or 2 when a mini-turbo is charged. */
+  get driftStage(): number {
+    return this.drift ? DRIFT_STAGES.filter((s) => this.driftTime >= s).length : 0;
+  }
+
   sync(): void {
     this.root.position.copy(this.pos);
     this.root.rotation.y = this.yaw;
+    this.body.rotation.y = this.slide;
     this.body.rotation.z = this.lean;
   }
 
@@ -200,6 +274,9 @@ export class Vehicle {
     this.speed = 0;
     this.steer = 0;
     this.lean = 0;
+    this.drift = 0;
+    this.boost = 0;
+    this.slide = 0;
     this.sync();
   }
 

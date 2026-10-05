@@ -781,6 +781,85 @@ html.reduce-motion .modal > .card {
   color: #ffd24a;
 }
 
+.kh-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.kh-pos {
+  font-family: var(--display);
+  font-size: 1.7rem;
+  line-height: 1;
+  color: #ffd24a;
+}
+
+.kart-map {
+  position: absolute;
+  top: calc(62px + var(--safe-t));
+  right: calc(12px + var(--safe-r));
+  width: 128px;
+  height: 128px;
+  border-radius: 18px;
+  background: rgba(127, 194, 90, 0.55);
+  border: 2.5px solid var(--ink);
+  box-shadow: 0 4px 0 var(--ink);
+  pointer-events: none;
+}
+
+.race-panel {
+  width: min(460px, calc(100vw - 24px));
+  display: grid;
+  gap: 10px;
+}
+
+.race-panel h2 {
+  margin: 0;
+}
+
+.race-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.race-results li {
+  display: grid;
+  grid-template-columns: 2.6em 18px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  font-weight: 700;
+}
+
+.race-results li.you {
+  background: #ffe9a8;
+}
+
+.rr-pos {
+  font-family: var(--display);
+}
+
+.rr-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--ink);
+}
+
+.rr-time {
+  font-variant-numeric: tabular-nums;
+}
+
+.rr-best {
+  margin: 0 !important;
+  color: #5a5270;
+  font-weight: 650;
+}
+
 .kh-sub {
   font-size: 0.85rem;
   font-weight: 650;
@@ -1058,6 +1137,15 @@ html.reduce-motion .modal > .card {
   }
   .kh-time {
     font-size: 1.8rem;
+  }
+  .kh-pos {
+    font-size: 1.4rem;
+  }
+  .kart-map {
+    top: calc(226px + var(--safe-t));
+    width: 92px;
+    height: 92px;
+    border-radius: 14px;
   }
 }
 

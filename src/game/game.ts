@@ -346,6 +346,8 @@ export class Game {
       this.riding.pos.set(x, 0, z);
       this.riding.yaw = yaw;
       this.riding.speed = 0;
+      this.riding.boost = 0;
+      this.riding.drift = 0;
       this.riding.sync();
     }
     this.pos.set(x, 0, z);
