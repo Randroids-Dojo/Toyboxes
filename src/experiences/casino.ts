@@ -659,7 +659,7 @@ export class Casino implements SpaceView {
 
   /** For scripted playtests. */
   debugInfo() {
-    return { machine: this.machineSpot, kiosk: this.kioskSpot, roulette: this.roulette.spot, blackjack: this.blackjack.spot, hand: this.blackjack.hand, rouletteSpinning: this.roulette.spinning, stats: this.stats, spinning: this.spinning, bet: this.bet, reels: this.reels.map((r) => Math.round(((r.angle / STEP - 0.5) % STOPS + STOPS) % STOPS)) };
+    return { machine: this.machineSpot, kiosk: this.kioskSpot, roulette: this.roulette.spot, blackjack: this.blackjack.spot, blackjackTable: this.blackjack.centre, hand: this.blackjack.hand, rouletteSpinning: this.roulette.spinning, stats: this.stats, spinning: this.spinning, bet: this.bet, reels: this.reels.map((r) => Math.round(((r.angle / STEP - 0.5) % STOPS + STOPS) % STOPS)) };
   }
 }
 

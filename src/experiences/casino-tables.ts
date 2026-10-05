@@ -381,6 +381,8 @@ function cardTexture(card: Card): THREE.CanvasTexture {
 
 export class BlackjackTable {
   readonly spot: { x: number; z: number };
+  /** The table top as a circle, for collisions and playtests. */
+  readonly centre: { x: number; z: number; r: number };
   private group = new THREE.Group();
   private cards = new THREE.Group();
   private dealerArm: THREE.Group;
@@ -427,8 +429,11 @@ export class BlackjackTable {
     g.add(dealer);
     g.add(this.cards);
     scene.add(g);
-    colliders.push(box(x, z - 0.4, 1.8, 0.9, 0, 1.0, 0.5, false), circle(x, z - 1.25, 0.5, 2.2, 0.5, false));
-    this.spot = { x, z: z + 1.55 };
+    // The half-moon top is a half disc centred on the flat edge; one circle covers it and the dealer's side.
+    this.centre = { x, z: z - 0.6, r: 1.8 };
+    colliders.push(circle(x, z - 0.6, 1.8, 1.0, 0.5, false), circle(x, z - 1.25, 0.5, 2.2, 0.5, false));
+    // Where you stand against the rim to play.
+    this.spot = { x, z: z + 1.8 };
   }
 
   show(hand: BjView | null): void {

@@ -295,6 +295,21 @@ console.log('roulette:', await page.locator('.table-status').textContent());
 await snap('roulette-result');
 await tap('Done');
 await page.waitForTimeout(300);
+// Walk straight at the blackjack table: you stop at its rim instead of sinking into it.
+const bjTable = (c as any).blackjackTable as { x: number; z: number; r: number };
+await dbg('teleport', bjTable.x, bjTable.z + bjTable.r + 1.4, Math.PI);
+await page.waitForTimeout(300);
+let gap = Infinity;
+const walking = forward(1400);
+for (let i = 0; i < 24; i++) {
+  const st = await state();
+  gap = Math.min(gap, Math.hypot(st.x - bjTable.x, st.z - bjTable.z) - bjTable.r);
+  await page.waitForTimeout(50);
+}
+await walking;
+console.log('closest to the blackjack table rim', gap.toFixed(2), 'm');
+if (gap < 0.3) throw new Error(`Walked into the blackjack table: ${gap.toFixed(2)} m from its rim`);
+if (gap > 0.6) throw new Error(`Never reached the blackjack table: ${gap.toFixed(2)} m from its rim`);
 // Blackjack: deal, then stand (or play on until the hand ends).
 await dbg('teleport', (c as any).blackjack.x, (c as any).blackjack.z, Math.PI);
 await page.waitForTimeout(300);
