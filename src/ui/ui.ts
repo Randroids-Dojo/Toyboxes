@@ -292,15 +292,18 @@ export class UI {
   }
 
   /** Context prompt, e.g. "E  Enter Cris's room". Hidden on touch, where the button carries it. */
-  prompt(label: string | null, g: Glyph = 'interact'): void {
-    if (!label || this.device === 'touch') {
+  prompt(label: string | null, g: Glyph = 'interact', extra?: [Glyph, string]): void {
+    if ((!label && !extra) || this.device === 'touch') {
       this.promptEl.classList.add('hidden');
       return;
     }
-    const key = `${this.device}|${g}|${label}`;
+    const key = `${this.device}|${g}|${label}|${extra?.join(':') ?? ''}`;
     if (this.promptEl.dataset.key !== key) {
       this.promptEl.dataset.key = key;
-      this.promptEl.replaceChildren(this.key(g), h('span', {}, label));
+      const parts: Node[] = [];
+      if (label) parts.push(this.key(g), h('span', {}, label));
+      if (extra) parts.push(h('span', { class: 'prompt-gap' }), this.key(extra[0]), h('span', {}, extra[1]));
+      this.promptEl.replaceChildren(...parts);
     }
     this.promptEl.classList.remove('hidden');
   }

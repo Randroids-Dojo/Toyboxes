@@ -29,6 +29,7 @@ export interface Store {
   /** Members by ascending score. */
   zrange(key: string, start: number, stop: number): Promise<string[]>;
   zcard(key: string): Promise<number>;
+  zscore(key: string, member: string): Promise<number | null>;
   /** Push to the head of a list and trim it to `max` entries. */
   lpush(key: string, value: unknown, max: number): Promise<void>;
   lrange<T>(key: string, start: number, stop: number): Promise<T[]>;
@@ -133,6 +134,11 @@ export class UpstashStore implements Store {
 
   async zcard(key: string): Promise<number> {
     return this.r.zcard(this.k(key));
+  }
+
+  async zscore(key: string, member: string): Promise<number | null> {
+    const v = await this.r.zscore(this.k(key), member);
+    return v === null || v === undefined ? null : Number(v);
   }
 
   async lpush(key: string, value: unknown, max: number): Promise<void> {
@@ -269,6 +275,12 @@ export class MemoryStore implements Store {
   async zcard(key: string): Promise<number> {
     await this.tick();
     return this.zset(key).size;
+  }
+
+  async zscore(key: string, member: string): Promise<number | null> {
+    await this.tick();
+    const v = this.zset(key).get(member);
+    return v === undefined ? null : v;
   }
 
   async lpush(key: string, value: unknown, max: number): Promise<void> {

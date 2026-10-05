@@ -1,9 +1,17 @@
 {
   "name": "Toyboxes",
   "short_name": "Toyboxes",
+  "description": "A playful town of connected arcades and personal rooms.",
+  "id": "/",
   "start_url": "/",
   "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
   "background_color": "#2b2340",
   "theme_color": "#2b2340",
-  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
 }

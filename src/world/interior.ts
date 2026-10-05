@@ -3,9 +3,10 @@
 // readable from any angle.
 
 import * as THREE from 'three';
-import { FLOOR_COLORS, ROOM, TRIM_COLORS, WALL_COLORS, type Area, type Exhibit, type RoomTheme } from '../shared/model';
+import { FLOOR_COLORS, ROOM, TRIM_COLORS, WALL_COLORS, areaDoorX, type Area, type Exhibit, type RoomTheme } from '../shared/model';
 import { cached, disposeTree, mesh, plastic, roundBox, sign, signTexture } from './kit';
 import { box, circle, type Collider } from './physics';
+import type { SpaceView } from './space';
 
 export interface InteriorSpec {
   kind: 'main' | 'area';
@@ -59,7 +60,8 @@ function plankTexture(): THREE.CanvasTexture {
   return t;
 }
 
-export class Interior {
+export class Interior implements SpaceView {
+  readonly indoor = true;
   readonly scene = new THREE.Scene();
   readonly colliders: Collider[] = [];
   readonly door: Spot = { x: 0, z: D - 1.1 };
@@ -109,7 +111,7 @@ export class Interior {
       this.chest = { x: ROOM.chest.x - 1.25, z: ROOM.chest.z };
       this.buildLectern();
       this.buildChest();
-      spec.areas.slice(0, ROOM.areaDoors.length).forEach((a, i) => this.buildAreaDoor(a, ROOM.areaDoors[i]));
+      spec.areas.slice(0, ROOM.areaDoors.length).forEach((a, i) => this.buildAreaDoor(a, areaDoorX(i)!));
     } else {
       this.lectern = null;
       this.chest = null;
@@ -131,6 +133,10 @@ export class Interior {
     this.sun.shadow.bias = -0.0006;
     this.sun.shadow.normalBias = 0.03;
     s.add(this.hemi, this.lamp, this.sun, this.sun.target);
+  }
+
+  get arrival(): { x: number; z: number; yaw: number } {
+    return { x: this.door.x, z: this.door.z - 0.4, yaw: Math.PI };
   }
 
   setTheme(t: RoomTheme): void {

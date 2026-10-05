@@ -152,7 +152,10 @@ describe('PIN-protected edits', () => {
     const body = { action: 'layout', roomId: room.id, layout, theme: room.theme, rev: room.rev };
     const none = await call(roomApi, { method: 'POST', body });
     expect(none.status).toBe(401);
-    const forged = await call(roomApi, { method: 'POST', body, headers: { 'x-room-token': token.replace(/.$/, 'x') } });
+    // Change a character inside the signature (the last one may only carry padding bits).
+    const i = token.indexOf('.') + 6;
+    const tampered = token.slice(0, i) + (token[i] === 'A' ? 'B' : 'A') + token.slice(i + 1);
+    const forged = await call(roomApi, { method: 'POST', body, headers: { 'x-room-token': tampered } });
     expect(forged.status).toBe(401);
     const ok = await call(roomApi, { method: 'POST', body, headers: { 'x-room-token': token } });
     expect(ok.status).toBe(200);

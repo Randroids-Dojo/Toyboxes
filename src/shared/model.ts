@@ -3,6 +3,8 @@
 // Everything here is plain TypeScript with no DOM or Node imports, because the
 // Vercel functions import it too. Relative imports keep their `.js` extension.
 
+import { trackProblem } from './track.js';
+
 /** Claimable house entrances around the town square. */
 export const SLOT_COUNT = 12;
 
@@ -21,6 +23,11 @@ export const ROOM = {
 } as const;
 
 export const MAX_AREAS = ROOM.areaDoors.length;
+
+/** Inner areas fill the side doors first, so a goal in the middle of the room stays clear. */
+export function areaDoorX(index: number): number | undefined {
+  return [ROOM.areaDoors[0], ROOM.areaDoors[2], ROOM.areaDoors[1]][index];
+}
 export const MAX_PROPS = 24;
 export const MAX_PAGES = 60;
 export const MAX_PAGE_TEXT = 2000;
@@ -117,12 +124,21 @@ export interface Exhibit {
   published: boolean;
 }
 
+/** A built game an inner area can hold instead of a plain toy room. */
+export type Experience = { kind: 'kart'; track: number[]; laps: number } | { kind: 'casino' };
+
+export const EXPERIENCE_KINDS = ['kart', 'casino'] as const;
+
 export interface Area {
   id: string;
   name: string;
   theme: RoomTheme;
   props: PropPlacement[];
   published: boolean;
+  /** A kart track or casino; absent for a plain room with toys. */
+  experience?: Experience | null;
+  /** Sketchbook page ids this area was built from. */
+  pages?: string[];
 }
 
 export interface RoomContent {
@@ -341,6 +357,16 @@ export function contentProblem(content: RoomContent): string | null {
   for (const a of content.areas) {
     if (areaIds.has(a.id) || a.id === 'main') return `Duplicate area id ${a.id}`;
     areaIds.add(a.id);
+    if (a.experience) {
+      if (a.props.length) return `${a.name}: a ${a.experience.kind === 'kart' ? 'kart track' : 'casino'} has no toys`;
+      if (exhibitsIn(content, a.id).length) return `${a.name}: move its game cabinets to another space`;
+      if (a.experience.kind === 'kart') {
+        const t = trackProblem(a.experience.track);
+        if (t) return `${a.name}: ${t}`;
+        if (!Number.isInteger(a.experience.laps) || a.experience.laps < 1 || a.experience.laps > 9) return `${a.name}: races need 1 to 9 laps`;
+      }
+      continue;
+    }
     const problem = layoutProblem(a.props, { kind: 'area', exhibits: exhibitsIn(content, a.id) });
     if (problem) return `${a.name}: ${problem}`;
   }

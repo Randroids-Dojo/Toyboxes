@@ -1,6 +1,28 @@
+import { execSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { defineConfig, type Plugin, type ViteDevServer } from 'vite';
+
+/** The deployed commit, so open copies of the game can tell a newer one went live. */
+function buildVersion(): string {
+  if (process.env.VERCEL_GIT_COMMIT_SHA) return process.env.VERCEL_GIT_COMMIT_SHA;
+  try {
+    return execSync('git rev-parse HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+  } catch {
+    return `build-${Date.now()}`;
+  }
+}
+
+/** Writes /version.json next to the app. */
+function versionFile(version: string): Plugin {
+  return {
+    name: 'toyboxes-version-file',
+    apply: 'build',
+    generateBundle() {
+      this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ version }) });
+    },
+  };
+}
 
 /**
  * Serves /api/* from the same handlers Vercel runs, with an in-memory store,
@@ -56,8 +78,11 @@ function devApi(): Plugin {
   };
 }
 
-export default defineConfig({
-  plugins: [devApi()],
+export default defineConfig(({ command }) => {
+  const version = command === 'build' ? buildVersion() : 'dev';
+  return {
+  define: { __APP_VERSION__: JSON.stringify(version) },
+  plugins: [devApi(), versionFile(version)],
   server: { port: 5207 },
   build: {
     target: 'es2020',
@@ -76,4 +101,5 @@ export default defineConfig({
       },
     },
   },
+};
 });

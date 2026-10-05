@@ -2,6 +2,15 @@
 // honest saving, retry and conflict states.
 
 import type { Page, PropPlacement, RoomPublic, RoomTheme, SlotSummary, Stroke } from '../shared/model';
+import type { CasinoStats, SlotSymbol } from '../shared/slots';
+
+export interface BoardRow {
+  name: string;
+  value: number;
+  you: boolean;
+}
+
+export type ScoreBoard = { kind: 'kart'; board: BoardRow[]; best: number | null } | { kind: 'casino'; board: BoardRow[]; stats: CasinoStats };
 
 export type Result<T> =
   | { ok: true; data: T }
@@ -48,6 +57,14 @@ export const api = {
   createPage: (roomId: string, token: string, text: string, sketch: Stroke[]) => call<{ page: Page }>('POST', '/api/pages', { roomId, text, sketch }, { 'x-room-token': token }),
   updatePage: (roomId: string, token: string, pageId: string, text: string, sketch: Stroke[], rev: number) =>
     call<{ page: Page }>('PUT', '/api/pages', { roomId, pageId, text, sketch, rev }, { 'x-room-token': token }),
+  scores: (roomId: string, areaId: string, browserId: string) =>
+    call<ScoreBoard>('GET', `/api/scores?roomId=${encodeURIComponent(roomId)}&areaId=${encodeURIComponent(areaId)}`, undefined, { 'x-browser-id': browserId }),
+  lap: (roomId: string, areaId: string, browserId: string, name: string, ms: number) =>
+    call<{ best: number; improved: boolean }>('POST', '/api/scores', { action: 'lap', roomId, areaId, browserId, name, ms }),
+  spin: (roomId: string, areaId: string, browserId: string, name: string, bet: number) =>
+    call<{ stops: number[]; line: SlotSymbol[]; rule: string | null; win: number; stats: CasinoStats }>('POST', '/api/scores', { action: 'spin', roomId, areaId, browserId, name, bet }),
+  refill: (roomId: string, areaId: string, browserId: string, name: string) => call<{ stats: CasinoStats }>('POST', '/api/scores', { action: 'refill', roomId, areaId, browserId, name }),
+  scoreName: (browserId: string, name: string) => call<{ ok: true }>('POST', '/api/scores', { action: 'name', browserId, name }),
 };
 
 export function retryText(r: { extra: Record<string, unknown> }): string {

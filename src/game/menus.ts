@@ -2,6 +2,7 @@
 
 import { setVolume } from '../audio/sfx';
 import * as local from '../core/local';
+import { canPromptInstall, isInstalled, isIos, onInstallChange, promptInstall } from '../core/pwa';
 import { IS_TV } from '../input/input';
 import { card } from '../ui/dialogs';
 import { button, h, type Panel, type UI } from '../ui/ui';
@@ -91,11 +92,43 @@ export function settingsPanel(ui: UI, onChange: (s: local.Settings) => void): Pa
     toggle('Reduce motion', s.reduceMotion, (v) => set('reduceMotion', v)),
     toggle('Larger text', s.largeText, (v) => set('largeText', v)),
     segmented('Touch controls', [['auto', 'Auto'], ['show', 'Show'], ['hide', 'Hide']], s.touchControls, (v) => set('touchControls', v)),
+    installRow(),
   );
   const done = button('Done', () => ui.close(panel), 'primary');
   const panel: Panel = { el: card(h('h2', {}, 'Settings'), body, h('div', { class: 'actions' }, done)), onBack: () => ui.close(panel) };
   ui.open(panel);
   return panel;
+}
+
+/** Add to home screen: the browser's install prompt where there is one, otherwise how to do it. */
+function installRow(): HTMLElement {
+  const note = h('span', { class: 'setting-note' });
+  const btn = button('Install', () => void install(), 'primary');
+  const row = h('div', { class: 'setting' }, h('span', { class: 'setting-label' }, 'Add to home screen'), note, btn);
+  const render = () => {
+    btn.classList.add('hidden');
+    if (isInstalled()) note.textContent = "You're playing the home screen app.";
+    else if (canPromptInstall()) {
+      note.textContent = 'Opens full screen like an app, one tap from the town.';
+      btn.classList.remove('hidden');
+      btn.disabled = false;
+    } else if (isIos()) note.textContent = 'Tap Share, then Add to Home Screen.';
+    else note.textContent = "Use your browser's menu: Install app or Add to Home screen.";
+  };
+  const install = async () => {
+    btn.disabled = true;
+    const accepted = await promptInstall().catch(() => false);
+    if (accepted) {
+      btn.classList.add('hidden');
+      note.textContent = 'Installing. Open Toyboxes from your home screen.';
+    } else render();
+  };
+  const off = onInstallChange(() => {
+    if (row.isConnected) render();
+    else off();
+  });
+  render();
+  return row;
 }
 
 export function controlsPanel(ui: UI): Panel {

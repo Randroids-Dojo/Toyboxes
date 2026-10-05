@@ -20,11 +20,21 @@ The GDD's fifteen release checks, what passed, and what still needs a person wit
 | 14 | Second browser sees shared saved content; nothing pretends to be live multiplayer | Automated | `admintest.ts` second browser; no other players or synced physics exist |
 | 15 | Save failures, interrupted connections, reloads and controller disconnects recover honestly | Automated | `playtest.ts` offline save shows "Couldn't save", keeps the draft and recovers with Retry; `padtest.ts` disconnect opens the menu with a note; reloads restore the name and the arcade return spot |
 
+## Built from sketchbook pages (2026-10-04)
+
+Randroid's room 1 asked for two things on its sketchbook pages:
+
+| Page | Idea | Built | Evidence |
+| --- | --- | --- | --- |
+| 1 | A go-kart track to race CPU players and set personal best lap times | The **Kart track** inner area. The course is the page's own drawing, three computer drivers, 3-lap races, timed laps, personal bests and a best-laps board | `scripts/experiencetest.ts` (desktop and `PHONE=1`), `tests/scores.test.ts` |
+| 2 | A casino with a giant slot machine you walk up to and spin; credits earned and spent tracked over time | The **Casino** inner area, with a giant slot machine with a lever, server-decided spins, totals and a balance-over-time chart per player, and a top balances board | same |
+
 ## Needs a person
 
 - Load https://toyboxes.games on the Samsung S90H browser: check that focus is visible, the remote's arrows, OK and Back work, the on-screen keyboard and PIN pad work from the couch, and whether the TV browser exposes a paired controller.
 - Play on a real phone: stick feel, drag-to-look, the system keyboard over the sketchbook, and frame rate.
 - Judge vehicle handling, camera comfort and night readability; the numbers are in `src/world/vehicles.ts`, `src/game/camera.ts` and `src/world/sky.ts`.
+- Race the computer drivers and tune their pace (`skill` in `src/experiences/kart.ts`); try the casino's pace of wins over a longer session.
 
 ## Choices made where the GDD left them open
 

@@ -16,8 +16,10 @@ import {
   SLOT_COUNT,
   TRIM_COLORS,
   WALL_COLORS,
+  areaDoorX,
   contentProblem,
   exhibitProblem,
+  type Experience,
   placementProblem,
   type Area,
   type Exhibit,
@@ -29,6 +31,7 @@ import {
   type RoomTheme,
   type Stroke,
 } from '../shared/model';
+import { trackFromSketch, trackProblem } from '../shared/track';
 
 // ---------------------------------------------------------------------------
 // Plumbing
@@ -517,8 +520,8 @@ function renderContent(): HTMLElement {
     el('p', { class: 'row-sub' }, 'Place game cabinets in the main room or in inner areas. Only items marked published show to visitors. Owner toys in the main room are shown faded.'),
     spaces,
     areaFields,
-    el('div', { class: 'editor' }, renderMap(exhibits, area), renderInspector()),
-    el('div', { class: 'line wrap' }, addGame, addProps),
+    area?.experience ? el('div', { class: 'editor' }, renderExperiencePreview(area)) : el('div', { class: 'editor' }, renderMap(exhibits, area), renderInspector()),
+    area?.experience ? null : el('div', { class: 'line wrap' }, addGame, addProps),
     problem ? el('p', { class: 'err' }, problem) : null,
     el('div', { class: 'line' }, el('span', { class: 'grow' }), revert, save),
   );
@@ -563,7 +566,167 @@ function renderAreaFields(a: Area): HTMLElement {
         markDirty();
       }, label),
     );
-  return el('div', { class: 'area-fields' }, el('div', { class: 'line' }, name, el('label', { class: 'check' }, pub, ' Published'), del), theme('wall', WALL_COLORS, 'Walls'), theme('floor', FLOOR_COLORS, 'Floor'), theme('trim', TRIM_COLORS, 'Trim'));
+  return el(
+    'div',
+    { class: 'area-fields' },
+    el('div', { class: 'line' }, name, el('label', { class: 'check' }, pub, ' Published'), del),
+    renderExperienceFields(a),
+    a.experience ? null : theme('wall', WALL_COLORS, 'Walls'),
+    a.experience ? null : theme('floor', FLOOR_COLORS, 'Floor'),
+    theme('trim', TRIM_COLORS, 'Door colour'),
+    renderAreaPages(a),
+  );
+}
+
+/** What the area is: a room with toys, a kart track drawn on a page, or a casino. */
+function renderExperienceFields(a: Area): HTMLElement {
+  const kind = el('select', { class: 'in short', 'aria-label': 'Area kind' }) as HTMLSelectElement;
+  for (const [v, label] of [
+    ['room', 'Room with toys'],
+    ['kart', 'Kart track'],
+    ['casino', 'Casino'],
+  ]) kind.append(el('option', { value: v, selected: (a.experience?.kind ?? 'room') === v }, label));
+  const sketched = detail!.pages.filter((p) => p.sketch.length);
+  const pickTrack = (pageId: string): number[] | null => {
+    const page = detail!.pages.find((p) => p.id === pageId);
+    const track = page ? trackFromSketch(page.sketch) : null;
+    if (!track) {
+      flash('That drawing has no loop long enough to race on', true);
+      return null;
+    }
+    const why = trackProblem(track);
+    if (why) {
+      flash(`${why}. Pick another drawing.`, true);
+      return null;
+    }
+    return track;
+  };
+  kind.addEventListener('change', () => {
+    const v = kind.value as 'room' | Experience['kind'];
+    if (v !== 'room' && (a.props.length || content!.exhibits.some((e) => e.area === a.id))) {
+      if (!confirm(`Turning ${a.name} into a ${v === 'kart' ? 'kart track' : 'casino'} puts its toys away and moves its cabinets to the main room as drafts.`)) {
+        kind.value = a.experience?.kind ?? 'room';
+        return;
+      }
+      a.props = [];
+      for (const e of content!.exhibits) if (e.area === a.id) Object.assign(e, { area: 'main', published: false });
+    }
+    if (v === 'room') a.experience = null;
+    else if (v === 'casino') a.experience = { kind: 'casino' };
+    else {
+      const first = sketched.map((p) => pickTrackQuiet(p.sketch)).find((t) => t);
+      if (!first) {
+        flash('Draw a loop on a sketchbook page first, then pick it here', true);
+        kind.value = a.experience?.kind ?? 'room';
+        return;
+      }
+      a.experience = { kind: 'kart', track: first, laps: 3 };
+    }
+    selected = null;
+    markDirty();
+  });
+  const row = el('div', { class: 'line wrap' }, el('span', { class: 'row-sub' }, 'This area is a'), kind);
+  if (a.experience?.kind === 'kart') {
+    const exp = a.experience;
+    const from = el('select', { class: 'in short', 'aria-label': 'Track drawing' }) as HTMLSelectElement;
+    from.append(el('option', { value: '' }, 'Use the drawing on...'));
+    for (const p of sketched) from.append(el('option', { value: p.id }, `Page ${p.n}: ${p.text.slice(0, 40)}`));
+    from.addEventListener('change', () => {
+      if (!from.value) return;
+      const t = pickTrack(from.value);
+      if (!t) return;
+      exp.track = t;
+      if (!(a.pages ?? []).includes(from.value)) a.pages = [...(a.pages ?? []), from.value];
+      markDirty();
+    });
+    const laps = el('select', { class: 'in short', 'aria-label': 'Race laps' }) as HTMLSelectElement;
+    for (let n = 1; n <= 5; n++) laps.append(el('option', { value: String(n), selected: exp.laps === n }, `${n} lap race`));
+    laps.addEventListener('change', () => {
+      exp.laps = Number(laps.value);
+      markDirty();
+    });
+    row.append(from, laps, btn('Clear lap times', () => void clearScoresFor(a, 'Lap times cleared'), 'small'));
+  } else if (a.experience?.kind === 'casino') {
+    row.append(btn('Reset everyone\u2019s credits', () => void clearScoresFor(a, 'Credits reset'), 'small'));
+  }
+  return row;
+}
+
+function pickTrackQuiet(sketch: Page['sketch']): number[] | null {
+  const t = trackFromSketch(sketch);
+  return t && !trackProblem(t) ? t : null;
+}
+
+async function clearScoresFor(a: Area, done: string): Promise<void> {
+  if (!detail || !confirm(`${done.replace(' cleared', '').replace(' reset', '')} for ${a.name}: this cannot be undone. Continue?`)) return;
+  const r = await post('clearScores', { roomId: detail.room.id, areaId: a.id });
+  flash(r.ok ? done : (r.data.error ?? 'Failed'), !r.ok);
+}
+
+/** Which sketchbook pages an area was built from. */
+function renderAreaPages(a: Area): HTMLElement | null {
+  if (!detail!.pages.length) return null;
+  return el(
+    'details',
+    { class: 'area-pages', open: !!(a.pages && a.pages.length) },
+    el('summary', {}, `Built from (${(a.pages ?? []).length})`),
+    ...detail!.pages.map((p) => {
+      const cb = el('input', { type: 'checkbox', checked: (a.pages ?? []).includes(p.id) }) as HTMLInputElement;
+      cb.addEventListener('change', () => {
+        a.pages = cb.checked ? [...(a.pages ?? []), p.id] : (a.pages ?? []).filter((x) => x !== p.id);
+        markDirty();
+      });
+      return el('label', { class: 'check' }, cb, ` Page ${p.n}: ${p.text.slice(0, 60)}`);
+    }),
+  );
+}
+
+/** A kart track's shape, or a note for a casino. */
+function renderExperiencePreview(a: Area): HTMLElement {
+  const exp = a.experience!;
+  if (exp.kind === 'casino') {
+    return el('div', { class: 'inspector' }, el('h4', {}, 'Casino'), el('p', { class: 'row-sub' }, 'A giant slot machine with a lever, a credits kiosk with each player\u2019s balance over time, and a top balances board. Players start with 1,000 play credits and get a free refill when they run out.'));
+  }
+  const cv = el('canvas', { class: 'map', width: '1120', height: '760' }) as HTMLCanvasElement;
+  const g = cv.getContext('2d')!;
+  const xs: number[] = [];
+  const zs: number[] = [];
+  for (let i = 0; i < exp.track.length; i += 2) {
+    xs.push(exp.track[i]);
+    zs.push(exp.track[i + 1]);
+  }
+  const minX = Math.min(...xs) - 10;
+  const maxX = Math.max(...xs) + 10;
+  const minZ = Math.min(...zs) - 10;
+  const maxZ = Math.max(...zs) + 10;
+  const sc = Math.min(cv.width / (maxX - minX), cv.height / (maxZ - minZ));
+  const ox = (cv.width - (maxX - minX) * sc) / 2;
+  const oz = (cv.height - (maxZ - minZ) * sc) / 2;
+  const X = (x: number) => ox + (x - minX) * sc;
+  const Z = (z: number) => oz + (z - minZ) * sc;
+  g.fillStyle = '#7fc25a';
+  g.fillRect(0, 0, cv.width, cv.height);
+  g.lineJoin = 'round';
+  g.lineCap = 'round';
+  for (const [w, c] of [
+    [10.8, '#e8574a'],
+    [9, '#4b4e5e'],
+  ] as const) {
+    g.strokeStyle = c;
+    g.lineWidth = w * sc;
+    g.beginPath();
+    xs.forEach((x, i) => (i ? g.lineTo(X(x), Z(zs[i])) : g.moveTo(X(x), Z(zs[i]))));
+    g.closePath();
+    g.stroke();
+  }
+  g.fillStyle = '#fffaf0';
+  g.beginPath();
+  g.arc(X(xs[0]), Z(zs[0]), 9, 0, Math.PI * 2);
+  g.fill();
+  g.font = '600 26px Atkinson Hyperlegible Next Variable, sans-serif';
+  g.fillText('Start', X(xs[0]) + 14, Z(zs[0]) + 8);
+  const len = xs.reduce((sum, x, i) => sum + Math.hypot(x - xs[(i + 1) % xs.length], zs[i] - zs[(i + 1) % zs.length]), 0);
+  return el('div', { class: 'inspector' }, cv, el('p', { class: 'row-sub' }, `${Math.round(len)} m lap, ${exp.laps} lap race against three computer drivers. Laps are timed and the best go on the board.`));
 }
 
 function renderMap(exhibits: Exhibit[], area: Area | undefined): HTMLCanvasElement {
@@ -606,7 +769,7 @@ function renderMap(exhibits: Exhibit[], area: Area | undefined): HTMLCanvasEleme
         g.fillText(label, X(f.x), Z(f.z) + 0.15 * s);
       }
       content!.areas.forEach((a, i) => {
-        const dx = ROOM.areaDoors[i];
+        const dx = areaDoorX(i);
         if (dx === undefined) return;
         g.fillStyle = a.published ? TRIM_COLORS[a.theme.trim] : 'rgba(43,35,64,0.3)';
         g.fillRect(X(dx - 0.75), Z(-ROOM.halfD) - 0.15 * s, 1.5 * s, 0.4 * s);

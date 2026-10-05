@@ -33,6 +33,10 @@ export class Vehicle {
   speed = 0;
   steer = 0;
   ridden = false;
+  /** 1 on tarmac; lower on grass, which caps speed and acceleration. */
+  grip = 1;
+  /** Held still, e.g. on the grid before a race starts. */
+  frozen = false;
   readonly home: { x: number; z: number; yaw: number };
   private wheels: THREE.Object3D[] = [];
   private frontPivots: THREE.Object3D[] = [];
@@ -128,6 +132,14 @@ export class Vehicle {
    */
   drive(dt: number, throttle: number, steer: number, brake: number, colliders: Collider[]): void {
     const t = this.t;
+    if (this.frozen) {
+      this.speed = 0;
+      this.steer += (steer - this.steer) * damp(10, dt);
+      for (const p of this.frontPivots) p.rotation.y = this.steer * 0.45;
+      this.sync();
+      return;
+    }
+    const top = t.maxSpeed * this.grip;
     if (brake > 0.05) {
       const s = Math.sign(this.speed);
       this.speed -= s * t.brake * brake * dt;
@@ -135,7 +147,7 @@ export class Vehicle {
     }
     if (throttle > 0.02) {
       if (this.speed < 0) this.speed += t.brake * throttle * dt;
-      else this.speed += t.accel * throttle * (1 - (this.speed / t.maxSpeed) ** 2) * dt;
+      else if (this.speed < top) this.speed += t.accel * (0.55 + 0.45 * this.grip) * throttle * (1 - (this.speed / top) ** 2) * dt;
     } else if (throttle < -0.02) {
       if (this.speed > 0.3) this.speed -= t.brake * -throttle * dt;
       else this.speed = Math.max(-t.reverse, this.speed - t.accel * 0.7 * -throttle * dt);
@@ -144,6 +156,8 @@ export class Vehicle {
       this.speed -= s * t.drag * dt;
       if (Math.sign(this.speed) !== s) this.speed = 0;
     }
+    // Running wide onto grass scrubs speed down to what the grass allows.
+    if (this.speed > top) this.speed = Math.max(top, this.speed - 14 * dt);
     this.speed = clamp(this.speed, -t.reverse, t.maxSpeed);
     this.steer += (steer - this.steer) * damp(10, dt);
     // Turn rate builds with speed, then eases off near top speed for stability.

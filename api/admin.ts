@@ -6,6 +6,7 @@
 import { z } from 'zod';
 import * as admin from '../server/admin.js';
 import { clientIp, parseBody, parseQuery, route } from '../server/http.js';
+import { clearScores } from '../server/scores.js';
 import * as s from '../server/schemas.js';
 
 const actions = z.discriminatedUnion('action', [
@@ -23,6 +24,7 @@ const actions = z.discriminatedUnion('action', [
   z.object({ action: z.literal('removePage'), roomId: s.roomId, pageId: s.pageId, removed: z.boolean() }),
   z.object({ action: z.literal('revertPage'), roomId: s.roomId, pageId: s.pageId, index: z.number().int().min(0).max(30) }),
   z.object({ action: z.literal('saveContent'), roomId: s.roomId, content: s.content }),
+  z.object({ action: z.literal('clearScores'), roomId: s.roomId, areaId: z.string().regex(/^[a-zA-Z0-9_-]{1,24}$/) }),
 ]);
 
 export default route({
@@ -72,6 +74,8 @@ export default route({
         return admin.revertPage(b.roomId, b.pageId, b.index);
       case 'saveContent':
         return admin.saveContent(b.roomId, b.content);
+      case 'clearScores':
+        return clearScores(b.roomId, b.areaId);
     }
   },
 });

@@ -639,6 +639,302 @@ html.reduce-motion .modal > .card {
   transition: opacity 0.12s ease;
 }
 
+.update-banner {
+  pointer-events: auto;
+  position: absolute;
+  top: calc(10px + var(--safe-t));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: min(480px, calc(100% - 130px));
+  padding: 6px 6px 6px 16px;
+  border-radius: 16px;
+  background: var(--ink);
+  color: var(--paper);
+  border: 2.5px solid var(--ink);
+  font-weight: 700;
+  font-size: 0.92rem;
+  box-shadow: 0 6px 0 rgba(0, 0, 0, 0.25);
+  animation: banner-down 0.32s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.update-banner span {
+  flex: 1;
+  line-height: 1.25;
+}
+
+.update-go {
+  font: inherit;
+  font-weight: 800;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 2.5px solid var(--paper);
+  background: var(--sun);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.update-close {
+  font: inherit;
+  font-size: 1.4rem;
+  line-height: 1;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--paper);
+  cursor: pointer;
+}
+
+@keyframes banner-down {
+  from {
+    transform: translate(-50%, -140%);
+  }
+}
+
+@media (max-width: 640px) {
+  .update-banner {
+    top: calc(64px + var(--safe-t));
+    width: calc(100% - 24px);
+  }
+}
+
+.setting-note {
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+}
+
+.setting > .btn.primary {
+  justify-self: start;
+}
+
+.prompt-gap {
+  width: 6px;
+}
+
+/* ---- kart track and casino HUD */
+
+.casino-hud {
+  position: absolute;
+  top: calc(56px + var(--safe-t));
+  left: calc(12px + var(--safe-l));
+  display: grid;
+  justify-items: start;
+  gap: 2px;
+  padding: 8px 16px 10px;
+  border-radius: 16px;
+  background: rgba(29, 24, 48, 0.82);
+  border: 2.5px solid var(--ink);
+  color: var(--paper);
+  box-shadow: 0 4px 0 var(--ink);
+}
+
+.kart-hud {
+  position: absolute;
+  top: calc(62px + var(--safe-t));
+  left: 50%;
+  transform: translateX(-50%);
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 8px 18px 10px;
+  border-radius: 18px;
+  background: rgba(29, 24, 48, 0.82);
+  border: 2.5px solid var(--ink);
+  color: var(--paper);
+  text-align: center;
+  min-width: 220px;
+  box-shadow: 0 4px 0 var(--ink);
+}
+
+.kh-top {
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #ffd24a;
+  letter-spacing: 0.02em;
+}
+
+.kh-time {
+  font-family: var(--display);
+  font-size: 2.2rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.kh-time.flash {
+  color: #ffd24a;
+}
+
+.kh-sub {
+  font-size: 0.85rem;
+  font-weight: 650;
+  color: #d8d0ec;
+}
+
+.kh-sub[data-kind='good'] {
+  color: #6ee7a8;
+}
+
+.kh-sub[data-kind='bad'] {
+  color: #ff8f80;
+}
+
+.kh-warn {
+  margin-top: 4px;
+  background: var(--tomato);
+  color: var(--paper);
+  border-radius: 999px;
+  padding: 2px 12px;
+  font-weight: 800;
+  animation: pulse 0.6s ease-in-out infinite alternate;
+}
+
+@keyframes pulse {
+  to {
+    transform: scale(1.06);
+  }
+}
+
+.ch-main {
+  font-family: var(--display);
+  font-size: 1.35rem;
+  color: #ffd24a;
+  font-variant-numeric: tabular-nums;
+}
+
+.ch-sub {
+  font-size: 0.82rem;
+  font-weight: 650;
+  color: #d8d0ec;
+}
+
+@media (max-width: 640px) {
+  .kart-hud {
+    top: calc(104px + var(--safe-t));
+    min-width: 0;
+    padding: 6px 14px 8px;
+  }
+  .casino-hud {
+    top: calc(62px + var(--safe-t));
+    padding: 5px 12px 6px;
+  }
+  .ch-main {
+    font-size: 1.05rem;
+  }
+  .ch-sub {
+    display: none;
+  }
+  .kh-time {
+    font-size: 1.8rem;
+  }
+}
+
+.credits {
+  display: grid;
+  gap: 12px;
+}
+
+.cbalance {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  background: #1d1830;
+  color: var(--paper);
+  border-radius: 14px;
+  padding: 10px 16px;
+}
+
+.cbalance strong {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 2rem;
+  color: #ffd24a;
+}
+
+.cstats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.cstat {
+  display: grid;
+  background: var(--paper);
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  padding: 6px 10px;
+}
+
+.cstat span {
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  font-weight: 700;
+}
+
+.cstat strong {
+  font-size: 1.1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.cstat.up strong {
+  color: #258a5e;
+}
+
+.cstat.down strong {
+  color: #b8322a;
+}
+
+.cchart-label {
+  margin: 4px 0 -4px !important;
+  font-weight: 700;
+}
+
+.cchart {
+  width: 100%;
+  height: auto;
+  background: var(--paper);
+  border: 2px solid var(--line);
+  border-radius: 12px;
+}
+
+.cchart-line {
+  fill: none;
+  stroke: var(--plum);
+  stroke-width: 3;
+  stroke-linejoin: round;
+}
+
+.cchart-area {
+  fill: rgba(138, 107, 209, 0.15);
+}
+
+.cchart-base {
+  stroke: rgba(43, 35, 64, 0.35);
+  stroke-dasharray: 4 4;
+}
+
+.cboard {
+  margin: 0;
+  padding-left: 24px;
+  display: grid;
+  gap: 4px;
+}
+
+.cboard li span {
+  display: inline-block;
+  min-width: 60%;
+}
+
+.cboard li.you {
+  font-weight: 800;
+  color: #8a5a12;
+}
+
 .key {
   display: inline-grid;
   place-items: center;

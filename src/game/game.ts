@@ -19,6 +19,10 @@ import { Sky, dayPhase } from '../world/sky';
 import { Town, type Entrance } from '../world/town';
 import { Toys, type Mover, type ToyEvent } from '../world/toys';
 import { Vehicle } from '../world/vehicles';
+import type { ExperienceCtx } from '../experiences/common';
+import { Casino } from '../experiences/casino';
+import { KartTrack } from '../experiences/kart';
+import type { PlayerState, SpaceView } from '../world/space';
 import { Arranger } from './arrange';
 import { CameraRig } from './camera';
 import { controlsPanel, pauseMenu, settingsPanel } from './menus';
@@ -26,7 +30,7 @@ import { controlsPanel, pauseMenu, settingsPanel } from './menus';
 type Space =
   | { kind: 'hub' }
   | { kind: 'room'; room: RoomPublic; interior: Interior }
-  | { kind: 'area'; room: RoomPublic; area: Area; interior: Interior };
+  | { kind: 'area'; room: RoomPublic; area: Area; interior: SpaceView };
 
 interface Interactable {
   x: number;
@@ -75,6 +79,8 @@ export class Game {
   private frameTimes: number[] = [];
   private lastScaleChange = 0;
   private shadowSize = 1024;
+  /** Set by main when a newer deploy is live. */
+  private updateReady = false;
 
   constructor(
     readonly renderer: THREE.WebGLRenderer,
@@ -295,6 +301,12 @@ export class Game {
   }
 
   private placePlayer(x: number, z: number, yaw: number): void {
+    if (this.riding) {
+      this.riding.pos.set(x, 0, z);
+      this.riding.yaw = yaw;
+      this.riding.speed = 0;
+      this.riding.sync();
+    }
     this.pos.set(x, 0, z);
     this.vel.set(0, 0);
     this.yaw = yaw;
@@ -308,7 +320,30 @@ export class Game {
       const vs = this.vehicles.filter((v) => v !== this.riding).map((v) => circle(v.pos.x, v.pos.z, v.t.radius * 0.9, 1.2, 0.6, false));
       return this.town.colliders.concat(this.hubToys.colliders, vs);
     }
-    return this.space.interior.colliders.concat(this.toys.colliders);
+    const sv = this.view()!;
+    const parked = this.rideables()
+      .filter((v) => v !== this.riding)
+      .map((v) => circle(v.pos.x, v.pos.z, v.t.radius * 0.9, 1.2, 0.6, false));
+    return sv.colliders.concat(this.toys.colliders, sv.extraColliders?.() ?? [], parked);
+  }
+
+  /** Vehicles you can ride where you are. */
+  private rideables(): Vehicle[] {
+    if (this.space.kind === 'hub') return this.vehicles;
+    return this.view()?.rideables?.() ?? [];
+  }
+
+  /** The room, area or experience you are in, through its common interface. */
+  private view(): SpaceView | null {
+    return this.space.kind === 'hub' ? null : this.space.interior;
+  }
+
+  private currentScene(): THREE.Scene {
+    return this.space.kind === 'hub' ? this.scene : this.space.interior.scene;
+  }
+
+  private playerState(): PlayerState {
+    return { x: this.pos.x, z: this.pos.z, riding: this.riding };
   }
 
   private setScene(space: Space): void {
@@ -324,10 +359,10 @@ export class Game {
       this.scene.add(this.avatar.root);
       this.rig.indoor = false;
     } else {
-      const layout = space.kind === 'room' ? space.room.layout : space.area.props;
+      const layout = space.kind === 'room' ? space.room.layout : space.area.experience ? [] : space.area.props;
       this.toys = new Toys(layout);
       space.interior.scene.add(this.toys.group, this.avatar.root);
-      this.rig.indoor = true;
+      this.rig.indoor = space.interior.indoor;
       space.interior.sun.castShadow = this.shadowSize > 0;
     }
   }
@@ -359,9 +394,9 @@ export class Game {
     const area = opts.areaId ? room.content.areas.find((a) => a.id === opts.areaId) : undefined;
     if (area) this.buildArea(room, area);
     else this.buildRoom(room);
-    const sp = this.space.kind === 'hub' ? null : this.space.interior.door;
+    const arrival = this.space.kind === 'hub' ? null : this.space.interior.arrival;
     if (opts.at) this.placePlayer(opts.at.x, opts.at.z, opts.at.yaw);
-    else if (sp) this.placePlayer(sp.x, sp.z - 0.4, Math.PI);
+    else if (arrival) this.placePlayer(arrival.x, arrival.z, arrival.yaw);
     this.busy = false;
     await this.fade(false);
   }
@@ -379,7 +414,27 @@ export class Game {
     this.setScene({ kind: 'room', room, interior });
   }
 
+  private experienceCtx(room: RoomPublic, area: Area): ExperienceCtx {
+    return {
+      ui: this.ui,
+      roomId: room.id,
+      ownerName: room.ownerName,
+      area,
+      browserId: local.identity().browserId,
+      name: () => local.identity().name ?? 'Player',
+      snapCamera: (yaw) => this.rig.snap(this.follow(), yaw),
+    };
+  }
+
   private buildArea(room: RoomPublic, area: Area): void {
+    if (area.experience?.kind === 'kart') {
+      this.setScene({ kind: 'area', room, area, interior: new KartTrack(this.experienceCtx(room, area)) });
+      return;
+    }
+    if (area.experience?.kind === 'casino') {
+      this.setScene({ kind: 'area', room, area, interior: new Casino(this.experienceCtx(room, area)) });
+      return;
+    }
     const interior = new Interior({
       kind: 'area',
       title: area.name,
@@ -398,20 +453,21 @@ export class Game {
     sfx.door();
     await this.fade(true);
     this.buildArea(room, area);
-    const sp = (this.space as { interior: Interior }).interior.door;
-    this.placePlayer(sp.x, sp.z - 0.4, Math.PI);
+    const arrival = (this.space as { interior: SpaceView }).interior.arrival;
+    this.placePlayer(arrival.x, arrival.z, arrival.yaw);
     this.busy = false;
     await this.fade(false);
   }
 
   private async leaveArea(): Promise<void> {
     if (this.space.kind !== 'area' || this.busy) return;
+    if (this.riding) this.dismount();
     this.busy = true;
     const { room, area } = this.space;
     sfx.door();
     await this.fade(true);
     this.buildRoom(room);
-    const door = (this.space as { interior: Interior }).interior.areaDoors.find((d) => d.area.id === area.id);
+    const door = this.view()!.areaDoors.find((d) => d.area.id === area.id);
     if (door) this.placePlayer(door.x, door.z + 0.6, 0);
     this.busy = false;
     await this.fade(false);
@@ -419,6 +475,7 @@ export class Game {
 
   private async exitToHub(): Promise<void> {
     if (this.space.kind === 'hub' || this.busy) return;
+    if (this.riding) this.dismount();
     this.busy = true;
     const slot = this.space.room.slot;
     sfx.door();
@@ -465,6 +522,11 @@ export class Game {
       for (const d of it.areaDoors) out.push({ x: d.x, z: d.z, range: 1.6, label: `Enter ${d.area.name}`, short: 'Enter', run: () => void this.enterArea(d.area) });
     } else {
       out.push({ x: it.door.x, z: it.door.z, range: 1.7, label: `Back to ${sp.room.ownerName}'s room`, short: 'Exit', run: () => void this.leaveArea() });
+      const view = it as SpaceView;
+      for (const v of view.rideables?.() ?? []) {
+        out.push({ x: v.pos.x, z: v.pos.z, range: v.kind === 'kart' ? 2.0 : 1.6, label: v.kind === 'kart' ? 'Drive the go-kart' : 'Ride the scooter', short: v.kind === 'kart' ? 'Drive' : 'Ride', run: () => this.mount(v) });
+      }
+      out.push(...(view.actions?.(this.playerState()) ?? []));
     }
     for (const e of it.exhibitSpots) out.push({ x: e.x, z: e.z, range: 1.5, label: `Play ${e.exhibit.title}`, short: 'Play', run: () => void this.playExhibit(e.exhibit) });
     return out;
@@ -510,7 +572,7 @@ export class Game {
     this.riding = v;
     v.ridden = true;
     this.vel.set(0, 0);
-    this.scene.remove(this.avatar.root);
+    this.currentScene().remove(this.avatar.root);
     v.seat.add(this.avatar.root);
     this.avatar.root.position.set(0, 0, 0);
     this.avatar.root.rotation.set(0, 0, 0);
@@ -529,7 +591,7 @@ export class Game {
     v.ridden = false;
     this.engine.stop();
     v.seat.remove(this.avatar.root);
-    this.scene.add(this.avatar.root);
+    this.currentScene().add(this.avatar.root);
     // Step off to the side that has room.
     const rx = -Math.cos(v.yaw);
     const rz = Math.sin(v.yaw);
@@ -695,14 +757,17 @@ export class Game {
         title: `Use ${name} where?`,
         body: 'Your name on this device can change on its own, or your room can change with it.',
         options: [
-          { label: 'Only on this device', value: 'browser', note: `Room ${owned.slot + 1} still says ${owned.ownerName}` },
+          { label: 'Only on this device', value: 'browser', note: `Room ${owned.slot + 1} still says ${owned.ownerName}. Your lap and casino scores use the new name.` },
           { label: `Also on room ${owned.slot + 1}`, value: 'room', note: 'Needs the room PIN', primary: true },
         ],
       });
     }
     if (!scope) return;
+    // Scores belong to this device, so they always follow its name.
+    const renameScores = () => void api.scoreName(id.browserId, name);
     if (scope === 'browser' || !owned) {
       local.setName(name);
+      renameScores();
       this.avatar.setShirt(shirtFor(name));
       this.ui.toast(`You're ${name} on this device now`, 'good');
       return;
@@ -719,6 +784,7 @@ export class Game {
             this.ui.close(pad);
             this.ui.toast('That room is not yours any more. Only this device changed.', 'bad', 4200);
             local.setName(name);
+            renameScores();
             return null;
           }
           if (r.code === 'wrong_pin') {
@@ -729,6 +795,7 @@ export class Game {
         }
         this.ui.close(pad);
         local.setName(name);
+        renameScores();
         this.avatar.setShirt(shirtFor(name));
         if (this.slots) {
           const s = this.slots.find((x) => x.roomId === owned.roomId);
@@ -737,7 +804,7 @@ export class Game {
         }
         if (this.space.kind !== 'hub' && this.space.room.id === owned.roomId) this.space.room = r.data.room;
         sfx.confirm();
-        this.ui.toast(r.data.changed.length ? `Updated: ${r.data.changed.join(', ')}` : 'Name saved', 'good');
+        this.ui.toast(`Updated: ${[...r.data.changed, 'your scores'].join(', ')}`, 'good');
         return null;
       },
     });
@@ -809,12 +876,31 @@ export class Game {
   // -------------------------------------------------------------------------
   // Menus
 
+  /** Nothing in progress that a refresh would cost: no dialog, editor, transition or race. */
+  isCalm(): boolean {
+    return !this.ui.isOpen && !this.busy && !this.arranger && !this.paused && !(this.view()?.holdsTime?.() ?? false);
+  }
+
+  setUpdateReady(): void {
+    this.updateReady = true;
+  }
+
+  /** Reload into the newer version and come back to the same spot. */
+  refreshForUpdate(): void {
+    if (this.riding) this.dismount();
+    if (this.space.kind === 'hub') local.setReturnSpot({ space: 'hub', x: this.pos.x, z: this.pos.z, yaw: this.yaw, at: Date.now() });
+    else local.setReturnSpot({ space: this.space.kind, roomId: this.space.room.id, areaId: this.space.kind === 'area' ? this.space.area.id : undefined, x: this.pos.x, z: this.pos.z, yaw: this.yaw, at: Date.now() });
+    this.fadeEl.classList.add('on');
+    setTimeout(() => location.reload(), 150);
+  }
+
   openPause(note?: string): void {
     if (this.ui.isOpen && !note) return;
     if (this.arranger) return;
     this.paused = true;
     const items = [
-      { label: 'Resume', action: () => close(), primary: true },
+      ...(this.updateReady ? [{ label: 'Get the new version', action: () => this.refreshForUpdate(), primary: true }] : []),
+      { label: 'Resume', action: () => close(), primary: !this.updateReady },
       { label: 'Settings', action: () => settingsPanel(this.ui, (s) => this.applySettings(s)) },
       { label: 'Change my name', action: () => void this.rename() },
       { label: 'Reset the toys', action: () => {
@@ -830,6 +916,13 @@ export class Game {
         close();
       } });
     } else {
+      if (this.space.kind === 'area') {
+        const owner = this.space.room.ownerName;
+        items.push({ label: `Back to ${owner}'s room`, action: () => {
+          close();
+          void this.leaveArea();
+        } });
+      }
       items.push({ label: 'Back to town', action: () => {
         close();
         void this.exitToHub();
@@ -920,8 +1013,11 @@ export class Game {
     const h = dt / steps;
     const cols = this.colliders();
     const events: ToyEvent[] = [];
+    const sv = this.view();
+    // A race (or a timed lap) stops the clock while a menu is open.
+    const frozen = (menu || this.paused) && !!sv?.holdsTime?.();
     for (let i = 0; i < steps; i++) {
-      if (this.arranger) break;
+      if (this.arranger || frozen) break;
       if (this.riding) {
         const v = this.riding;
         const mx = control ? this.input.move.x : 0;
@@ -975,7 +1071,8 @@ export class Game {
         }
         if (sp > 1) this.movedFor += h;
       }
-      for (const v of this.vehicles) if (v !== this.riding) v.idle(h, this.town.colliders);
+      for (const v of this.rideables()) if (v !== this.riding) v.idle(h, this.space.kind === 'hub' ? this.town.colliders : cols);
+      sv?.step?.(h, this.playerState());
       const movers: Mover[] = [];
       if (this.riding) {
         const vv = this.riding.velocity;
@@ -990,7 +1087,9 @@ export class Game {
           movers.push({ x: v.pos.x, z: v.pos.z, vx: vv.x, vz: vv.z, r: v.t.radius, h: 0.9, kind: 'vehicle' });
         }
       }
-      if (i === 0 && control && !this.riding && this.input.take('kick')) {
+      const spaceKick = !this.riding ? sv?.kickAction?.(this.playerState()) : null;
+      if (i === 0 && control && spaceKick && this.input.take('kick')) spaceKick.run();
+      else if (i === 0 && control && !this.riding && this.input.take('kick')) {
         this.avatar.kick();
         const hitBall = this.toys.kick(this.pos.x, this.pos.z, this.yaw);
         sfx.kick(hitBall);
@@ -1003,8 +1102,11 @@ export class Game {
     // ---- interactions
     this.current = control && !this.arranger ? this.pickInteractable() : null;
     if (control && this.input.take('interact')) {
-      if (this.riding) this.dismount();
-      else if (this.current) {
+      if (this.riding) {
+        const act = sv?.rideAction?.(this.playerState());
+        if (act) act.run();
+        else this.dismount();
+      } else if (this.current) {
         unlockAudio();
         this.current.run();
       }
@@ -1032,7 +1134,7 @@ export class Game {
     if (this.space.kind === 'hub') {
       this.town.update(this.sky.night, t, phase);
     } else {
-      this.space.interior.update(this.sky.night, t);
+      this.space.interior.update(this.sky.night, t, phase, this.riding ? this.riding.pos : this.pos);
     }
 
     this.updateHud(dt, control);
@@ -1051,17 +1153,21 @@ export class Game {
       ui.hint(null);
       return;
     }
+    const sv = this.view();
     if (this.riding) {
-      ui.prompt('Get off');
-      this.touch.setAction('Get off');
+      const act = sv?.rideAction?.(this.playerState());
+      const label = act ? act.label : 'Get off';
+      ui.prompt(label || null);
+      this.touch.setAction(act ? act.short || null : 'Get off');
       this.touch.setKick('Brake');
     } else {
       const it = this.current;
-      ui.prompt(it ? it.label : null);
+      const kick = sv?.kickAction?.(this.playerState()) ?? null;
+      ui.prompt(it ? it.label : null, 'interact', kick ? ['kick', kick.label] : undefined);
       this.touch.setAction(it ? it.short : null);
       const ball = this.toys.nearestBall(this.pos.x, this.pos.z);
-      this.touch.setKick('Kick');
-      if (!it && ball && ball.dist < 1.8) ui.prompt('Kick', 'kick');
+      this.touch.setKick(kick ? kick.label : 'Kick');
+      if (!it && !kick && ball && ball.dist < 1.8) ui.prompt('Kick', 'kick');
     }
     if (this.hintTimer > 0) {
       this.hintTimer -= dt;
@@ -1092,7 +1198,7 @@ export class Game {
       yaw: this.yaw,
       riding: this.riding?.kind ?? null,
       speed: this.riding ? this.riding.speed : this.vel.length(),
-      prompt: this.current?.label ?? null,
+      prompt: this.riding ? (this.view()?.rideAction?.(this.playerState())?.label ?? 'Get off') : (this.current?.label ?? null),
       room: this.currentRoom()?.id ?? null,
       unlocked: !!this.token(),
       night: this.sky.night,
@@ -1107,6 +1213,11 @@ export class Game {
       return { door: it.door, lectern: it.lectern, chest: it.chest, areaDoors: it.areaDoors.map((d) => ({ x: d.x, z: d.z, name: d.area.name })), exhibits: it.exhibitSpots.map((e) => ({ x: e.x, z: e.z, title: e.exhibit.title })) };
     },
     toys: () => this.toys.nearestBall(this.pos.x, this.pos.z),
+    experience: () => {
+      if (this.space.kind !== 'area') return null;
+      const sv = this.space.interior as SpaceView & { debugInfo?: () => unknown };
+      return sv.debugInfo?.() ?? null;
+    },
   };
 
   onHidden(hidden: boolean): void {

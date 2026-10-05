@@ -80,12 +80,19 @@ export const exhibit = z.object({
   published: z.boolean(),
 });
 
+export const experience = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('kart'), track: z.array(z.number().finite()).min(40).max(2000), laps: z.number().int().min(1).max(9) }),
+  z.object({ kind: z.literal('casino') }),
+]);
+
 export const area = z.object({
   id: z.string().regex(/^[a-zA-Z0-9_-]{1,24}$/),
   name: z.string().trim().min(1).max(30),
   theme,
   props: layout,
   published: z.boolean(),
+  experience: experience.nullable().optional(),
+  pages: z.array(pageId).max(60).optional(),
 });
 
 export const content = z.object({

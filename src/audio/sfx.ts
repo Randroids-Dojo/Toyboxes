@@ -154,6 +154,32 @@ export const sfx = {
   place(): void {
     tone(300, 0.08, { type: 'sine', gain: 0.18, slide: 0.7 });
   },
+  beep(go: boolean): void {
+    tone(go ? 1046 : 523, go ? 0.45 : 0.18, { type: 'square', gain: 0.08 });
+  },
+  lap(best: boolean): void {
+    tone(880, 0.12, { type: 'triangle', gain: 0.14 });
+    tone(best ? 1318 : 1046, best ? 0.4 : 0.2, { type: 'triangle', gain: 0.14, at: 0.1 });
+  },
+  lever(): void {
+    noise(0.18, { gain: 0.1, freq: 600, sweep: 200, q: 1.2 });
+    tone(140, 0.2, { type: 'triangle', gain: 0.12, slide: 0.6, at: 0.05 });
+  },
+  reelTick(): void {
+    if (!gate('reel', 55)) return;
+    noise(0.025, { gain: 0.035, freq: 3200, q: 4 });
+  },
+  reelStop(): void {
+    tone(200, 0.08, { type: 'square', gain: 0.07, slide: 0.7 });
+  },
+  coins(amount: number): void {
+    const n = Math.min(12, 2 + Math.floor(Math.log2(Math.max(1, amount))));
+    for (let i = 0; i < n; i++) tone(1400 + ((i * 337) % 600), 0.07, { type: 'triangle', gain: 0.06, at: i * 0.06 });
+  },
+  jackpot(): void {
+    [523, 659, 784, 1046, 784, 1046, 1318].forEach((f, i) => tone(f, 0.22, { type: 'square', gain: 0.08, at: i * 0.11 }));
+    noise(1.6, { gain: 0.06, freq: 1200, sweep: 600, q: 0.4, at: 0.1 });
+  },
 };
 
 /** A soft motor that follows vehicle speed. */

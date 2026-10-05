@@ -11,6 +11,10 @@ Play at **https://toyboxes.games**. Works with touch, keyboard and mouse, contro
 - **Toys:** soccer balls, positionable goals that detect goals, bowling pins that topple each other, cones, toy blocks, and targets with a bullseye. Kicks and collisions are simulated locally, so nobody's kick changes the shared layout.
 - **Rooms:** claim an available house with a remembered nickname and a four-digit PIN (entered twice). Anyone can visit any room; the PIN only guards changes. Inside are a sketchbook, a toy chest for arranging toys and painting the room, and whatever the creator has published.
 - **The sketchbook:** one page per idea with a typed description and an optional drawing. Every visitor can read it; writing needs the room PIN. Turn to a new page for a new request, or edit an older page to revise it. Pages keep their identity, drafts survive failed saves, and edits from two devices ask which version to keep.
+- **Built experiences:** an inner area can be a kart track or a casino instead of a toy room.
+  - *Kart track:* the course is drawn on a sketchbook page and smoothed into a road with curbs, a start gantry, tyre stacks and lamps. Three computer drivers lap it all the time; stop on the race pad in your kart for a 3-lap race from the grid with a countdown and live positions. Laps are timed with shortcut and wrong-way checks, personal bests are kept, and a board at the start shows everyone's best laps.
+  - *Casino:* a giant three-reel slot machine with a pull lever. The server decides every spin. Players start with 1,000 play credits and get a free refill when they run out; the credits kiosk shows each player's totals and balance over time, and a wall board shows the top balances. Credits only exist inside that casino.
+- **Updates and installing:** open copies notice a new deploy within a minute and offer a refresh that brings you back to the same spot (also in the pause menu for controllers and remotes). Settings has an Add to home screen option.
 - **Creator tools** at `/admin`: a feed of new and changed pages, page status (requested, being built, ready to play), page history and revert, PIN reset, release, restore, move or relabel claims, and an editor that places game cabinets and up to three inner areas on a room map, linked to the pages they came from.
 - **Arcades:** normal same-tab navigation with a confirmation; the town remembers where you were, so Back puts you outside the same door.
 
@@ -54,6 +58,8 @@ npm run build
 | `KV_REST_API_URL`, `KV_REST_API_TOKEN` | Upstash Redis, injected by the Vercel integration |
 | `TOYBOXES_SECRET` | Signs edit tokens, admin sessions and browser keys |
 | `ADMIN_PASSWORD` | Password for `/admin` |
+
+Scores live under the same prefix: `lap:<room>:<area>` and `casinoboard:<room>:<area>` sorted sets, `casino:<room>:<area>:<browser>` credit records, and `scorename:<browser>` for the name boards show.
 
 ## Deployment
 

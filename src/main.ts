@@ -4,11 +4,14 @@ import './styles.css';
 
 import * as THREE from 'three';
 import { unlockAudio } from './audio/sfx';
+import { initPwa } from './core/pwa';
+import { watchForUpdates } from './core/update';
 import { Game } from './game/game';
 import { Input } from './input/input';
 import { TouchControls } from './input/touch';
 import { openKeyboard } from './ui/osk';
 import { UI } from './ui/ui';
+import { UpdateBanner } from './ui/update-banner';
 
 const app = document.getElementById('app')!;
 
@@ -135,6 +138,14 @@ async function boot(): Promise<void> {
       game.restored();
     }
   });
+
+  initPwa();
+  const banner = new UpdateBanner(ui.hud, () => game.refreshForUpdate());
+  watchForUpdates(() => {
+    banner.show();
+    game.setUpdateReady();
+  });
+  setInterval(() => banner.sync(game.isCalm()), 500);
 
   document.body.classList.add('ready');
   (window as unknown as { toyboxes: Game }).toyboxes = game;

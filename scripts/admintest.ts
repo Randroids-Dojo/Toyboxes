@@ -77,7 +77,7 @@ await page.locator('.inspector > label.check', { hasText: 'Published' }).locator
 await page.getByRole('button', { name: '+ Inner area' }).click();
 await page.locator('.area-fields input.in').fill('Bowling alley');
 await page.locator('.area-fields input.in').dispatchEvent('change');
-await page.locator('.area-fields label.check input').check();
+await page.locator('.area-fields > .line label.check input').check();
 await page.getByRole('button', { name: 'Bowling pins' }).click();
 await page.getByRole('button', { name: '+ Game cabinet here' }).click();
 await page.locator('.inspector label:has-text("Title") input').fill('Strike Zone');
