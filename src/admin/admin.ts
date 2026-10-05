@@ -31,7 +31,6 @@ import {
   type RoomTheme,
   type Stroke,
 } from '../shared/model';
-import { grandPrixTrack } from '../shared/circuits';
 import { trackFromSketch, trackProblem } from '../shared/track';
 
 // ---------------------------------------------------------------------------
@@ -619,8 +618,13 @@ function renderExperienceFields(a: Area): HTMLElement {
     else if (v === 'casino') a.experience = { kind: 'casino' };
     else if (v === 'galaxy') a.experience = { kind: 'galaxy' };
     else {
-      // The designed circuit unless a drawing is picked below.
-      a.experience = { kind: 'kart', track: grandPrixTrack(), laps: 3 };
+      const first = sketched.map((p) => pickTrackQuiet(p.sketch)).find((t) => t);
+      if (!first) {
+        flash('Draw a loop on a sketchbook page first, then pick it here', true);
+        kind.value = a.experience?.kind ?? 'room';
+        return;
+      }
+      a.experience = { kind: 'kart', track: first, laps: 3 };
     }
     selected = null;
     markDirty();
@@ -629,16 +633,10 @@ function renderExperienceFields(a: Area): HTMLElement {
   if (a.experience?.kind === 'kart') {
     const exp = a.experience;
     const from = el('select', { class: 'in short', 'aria-label': 'Track drawing' }) as HTMLSelectElement;
-    from.append(el('option', { value: '' }, 'Change the course...'));
-    from.append(el('option', { value: '@grand-prix' }, 'Toybox Grand Prix circuit'));
-    for (const p of sketched) from.append(el('option', { value: p.id }, `The drawing on page ${p.n}: ${p.text.slice(0, 40)}`));
+    from.append(el('option', { value: '' }, 'Use the drawing on...'));
+    for (const p of sketched) from.append(el('option', { value: p.id }, `Page ${p.n}: ${p.text.slice(0, 40)}`));
     from.addEventListener('change', () => {
       if (!from.value) return;
-      if (from.value === '@grand-prix') {
-        exp.track = grandPrixTrack();
-        markDirty();
-        return;
-      }
       const t = pickTrack(from.value);
       if (!t) return;
       exp.track = t;
@@ -656,6 +654,11 @@ function renderExperienceFields(a: Area): HTMLElement {
     row.append(btn('Reset everyone\u2019s credits', () => void clearScoresFor(a, 'Credits reset'), 'small'));
   }
   return row;
+}
+
+function pickTrackQuiet(sketch: Page['sketch']): number[] | null {
+  const t = trackFromSketch(sketch);
+  return t && !trackProblem(t) ? t : null;
 }
 
 async function clearScoresFor(a: Area, done: string): Promise<void> {

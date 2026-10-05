@@ -161,14 +161,6 @@ export const sfx = {
     tone(880, 0.12, { type: 'triangle', gain: 0.14 });
     tone(best ? 1318 : 1046, best ? 0.4 : 0.2, { type: 'triangle', gain: 0.14, at: 0.1 });
   },
-  boost(): void {
-    if (!gate('boost', 250)) return;
-    noise(0.55, { gain: 0.13, freq: 500, sweep: 2600, q: 0.7 });
-    tone(196, 0.45, { type: 'sawtooth', gain: 0.045, slide: 2.4 });
-  },
-  driftSpark(stage: number): void {
-    tone(stage === 2 ? 1320 : 990, 0.09, { type: 'square', gain: 0.045 });
-  },
   lever(): void {
     noise(0.18, { gain: 0.1, freq: 600, sweep: 200, q: 1.2 });
     tone(140, 0.2, { type: 'triangle', gain: 0.12, slide: 0.6, at: 0.05 });
