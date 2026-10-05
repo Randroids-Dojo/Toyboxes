@@ -1,0 +1,9 @@
+{
+  "name": "Toyboxes",
+  "short_name": "Toyboxes",
+  "start_url": "/",
+  "display": "fullscreen",
+  "background_color": "#2b2340",
+  "theme_color": "#2b2340",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

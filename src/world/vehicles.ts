@@ -1,0 +1,195 @@
+// Rideable scooter and go-kart. Arcade handling: easy to steer, quick to
+// stop, forgiving against walls. No racing rules are implied.
+
+import * as THREE from 'three';
+import { blob, cached, mesh, plastic, roundBox } from './kit';
+import { clamp, damp, resolveCircle, type Collider } from './physics';
+
+export type VehicleKind = 'scooter' | 'kart';
+
+interface Tuning {
+  maxSpeed: number;
+  reverse: number;
+  accel: number;
+  brake: number;
+  drag: number;
+  turn: number;
+  radius: number;
+  seatY: number;
+}
+
+const TUNING: Record<VehicleKind, Tuning> = {
+  kart: { maxSpeed: 14, reverse: 4.5, accel: 9, brake: 22, drag: 2.2, turn: 2.3, radius: 0.85, seatY: 0.42 },
+  scooter: { maxSpeed: 8.5, reverse: 2.5, accel: 5.5, brake: 16, drag: 1.6, turn: 2.8, radius: 0.5, seatY: 0.16 },
+};
+
+export class Vehicle {
+  readonly root = new THREE.Group();
+  readonly body = new THREE.Group();
+  readonly seat = new THREE.Group();
+  readonly t: Tuning;
+  pos = new THREE.Vector3();
+  yaw = 0;
+  speed = 0;
+  steer = 0;
+  ridden = false;
+  readonly home: { x: number; z: number; yaw: number };
+  private wheels: THREE.Object3D[] = [];
+  private frontPivots: THREE.Object3D[] = [];
+  private lean = 0;
+  bumped = 0;
+
+  constructor(
+    readonly kind: VehicleKind,
+    readonly id: string,
+    x: number,
+    z: number,
+    yaw: number,
+    color: string,
+  ) {
+    this.t = TUNING[kind];
+    this.home = { x, z, yaw };
+    this.pos.set(x, 0, z);
+    this.yaw = yaw;
+    this.root.add(this.body);
+    if (kind === 'kart') this.buildKart(color);
+    else this.buildScooter(color);
+    const shadow = blob(kind === 'kart' ? 2.6 : 1.4);
+    shadow.scale.z *= kind === 'kart' ? 1.3 : 1.6;
+    this.root.add(shadow);
+    this.sync();
+  }
+
+  private wheel(r: number, w: number): THREE.Mesh {
+    const g = cached(`wheel${r}${w}`, () => new THREE.CylinderGeometry(r, r, w, 16).rotateZ(Math.PI / 2));
+    return mesh(g, plastic('#24212e', { rough: 0.85 }));
+  }
+
+  private buildKart(color: string): void {
+    const paint = plastic(color, { rough: 0.45 });
+    const dark = plastic('#2b2738', { rough: 0.7 });
+    this.body.add(mesh(roundBox(1.15, 0.22, 1.9, 0.08), dark, 0, 0.24, 0));
+    this.body.add(mesh(roundBox(1.0, 0.32, 0.7, 0.12), paint, 0, 0.42, 0.62));
+    this.body.add(mesh(roundBox(0.9, 0.5, 0.18, 0.08), paint, 0, 0.58, -0.38));
+    this.body.add(mesh(roundBox(1.3, 0.12, 0.28, 0.05), paint, 0, 0.3, 1.02));
+    this.body.add(mesh(roundBox(1.4, 0.1, 0.3, 0.05), dark, 0, 0.62, -0.92));
+    const wheelGeo: [number, number, boolean][] = [
+      [-0.62, 0.62, true],
+      [0.62, 0.62, true],
+      [-0.66, -0.62, false],
+      [0.66, -0.62, false],
+    ];
+    for (const [x, z, front] of wheelGeo) {
+      const pivot = new THREE.Group();
+      pivot.position.set(x, 0.24, z);
+      const w = this.wheel(front ? 0.22 : 0.26, front ? 0.2 : 0.28);
+      pivot.add(w);
+      this.body.add(pivot);
+      this.wheels.push(w);
+      if (front) this.frontPivots.push(pivot);
+    }
+    const column = mesh(cached('col', () => new THREE.CylinderGeometry(0.035, 0.035, 0.5, 8)), dark, 0, 0.62, 0.42);
+    column.rotation.x = -0.9;
+    this.body.add(column);
+    const wheel = mesh(cached('swheel', () => new THREE.TorusGeometry(0.16, 0.035, 8, 20)), dark, 0, 0.78, 0.28);
+    wheel.rotation.x = -0.6;
+    this.body.add(wheel);
+    this.seat.position.set(0, this.t.seatY, -0.18);
+    this.body.add(this.seat);
+  }
+
+  private buildScooter(color: string): void {
+    const paint = plastic(color, { rough: 0.4 });
+    const dark = plastic('#2b2738', { rough: 0.7 });
+    this.body.add(mesh(roundBox(0.32, 0.07, 0.95, 0.03), paint, 0, 0.14, -0.05));
+    const stem = mesh(cached('stem', () => new THREE.CylinderGeometry(0.035, 0.035, 0.95, 8)), dark, 0, 0.6, 0.43);
+    stem.rotation.x = -0.18;
+    this.body.add(stem);
+    const bar = mesh(cached('bar', () => new THREE.CylinderGeometry(0.03, 0.03, 0.55, 8).rotateZ(Math.PI / 2)), dark, 0, 1.06, 0.52);
+    this.body.add(bar);
+    for (const x of [-0.3, 0.3]) this.body.add(mesh(roundBox(0.1, 0.07, 0.07, 0.03), paint, x, 1.06, 0.52));
+    const front = new THREE.Group();
+    front.position.set(0, 0.1, 0.45);
+    const fw = this.wheel(0.1, 0.07);
+    front.add(fw);
+    this.body.add(front);
+    const rw = this.wheel(0.1, 0.07);
+    rw.position.set(0, 0.1, -0.5);
+    this.body.add(rw);
+    this.wheels.push(fw, rw);
+    this.frontPivots.push(front);
+    this.seat.position.set(0, this.t.seatY, -0.12);
+    this.body.add(this.seat);
+  }
+
+  /**
+   * One physics step. `throttle` -1..1 (negative brakes, then reverses),
+   * `steer` -1..1 (positive turns left), `brake` 0..1 extra braking.
+   */
+  drive(dt: number, throttle: number, steer: number, brake: number, colliders: Collider[]): void {
+    const t = this.t;
+    if (brake > 0.05) {
+      const s = Math.sign(this.speed);
+      this.speed -= s * t.brake * brake * dt;
+      if (Math.sign(this.speed) !== s) this.speed = 0;
+    }
+    if (throttle > 0.02) {
+      if (this.speed < 0) this.speed += t.brake * throttle * dt;
+      else this.speed += t.accel * throttle * (1 - (this.speed / t.maxSpeed) ** 2) * dt;
+    } else if (throttle < -0.02) {
+      if (this.speed > 0.3) this.speed -= t.brake * -throttle * dt;
+      else this.speed = Math.max(-t.reverse, this.speed - t.accel * 0.7 * -throttle * dt);
+    } else {
+      const s = Math.sign(this.speed);
+      this.speed -= s * t.drag * dt;
+      if (Math.sign(this.speed) !== s) this.speed = 0;
+    }
+    this.speed = clamp(this.speed, -t.reverse, t.maxSpeed);
+    this.steer += (steer - this.steer) * damp(10, dt);
+    // Turn rate builds with speed, then eases off near top speed for stability.
+    const v = Math.abs(this.speed);
+    const grip = Math.min(1, v / 3) * (1 - 0.35 * Math.min(1, v / t.maxSpeed));
+    this.yaw += this.steer * t.turn * grip * Math.sign(this.speed || 1) * dt;
+
+    this.pos.x += Math.sin(this.yaw) * this.speed * dt;
+    this.pos.z += Math.cos(this.yaw) * this.speed * dt;
+    const hit = resolveCircle(this.pos, t.radius, colliders);
+    if (hit) {
+      const fx = Math.sin(this.yaw);
+      const fz = Math.cos(this.yaw);
+      const into = -(fx * hit.nx + fz * hit.nz) * Math.sign(this.speed);
+      if (into > 0.25 && v > 2.5) this.bumped = v;
+      // Glancing hits keep most speed so walls guide rather than stop you.
+      this.speed *= 1 - 0.75 * Math.max(0, into);
+    }
+    const leanTarget = this.kind === 'scooter' ? -this.steer * Math.min(1, v / 5) * 0.32 : -this.steer * Math.min(1, v / 8) * 0.06;
+    this.lean += (leanTarget - this.lean) * damp(8, dt);
+    for (const w of this.wheels) w.rotation.x += (this.speed * dt) / (this.kind === 'kart' ? 0.24 : 0.1);
+    for (const p of this.frontPivots) p.rotation.y = this.steer * 0.45;
+    this.sync();
+  }
+
+  /** Coasting to a stop with nobody aboard. */
+  idle(dt: number, colliders: Collider[]): void {
+    if (Math.abs(this.speed) > 0.01) this.drive(dt, 0, 0, 0.4, colliders);
+  }
+
+  sync(): void {
+    this.root.position.copy(this.pos);
+    this.root.rotation.y = this.yaw;
+    this.body.rotation.z = this.lean;
+  }
+
+  park(): void {
+    this.pos.set(this.home.x, 0, this.home.z);
+    this.yaw = this.home.yaw;
+    this.speed = 0;
+    this.steer = 0;
+    this.lean = 0;
+    this.sync();
+  }
+
+  get velocity(): { x: number; z: number } {
+    return { x: Math.sin(this.yaw) * this.speed, z: Math.cos(this.yaw) * this.speed };
+  }
+}

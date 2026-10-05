@@ -1,0 +1,1126 @@
+// The running game: one town, the room or inner area you are standing in,
+// your toy figure, the vehicles, and the flows for claiming and editing rooms.
+
+import * as THREE from 'three';
+import { Engine, setVolume, sfx, suspendAudio, unlockAudio } from '../audio/sfx';
+import * as local from '../core/local';
+import { IS_TV, type Input } from '../input/input';
+import type { TouchControls } from '../input/touch';
+import { api, retryText } from '../net/api';
+import { ARCADES, EMPTY_CONTENT, exhibitsIn, type Area, type ArcadeId, type Exhibit, type RoomPublic, type SlotSummary } from '../shared/model';
+import { askName, choose, confirmBox, pinPad } from '../ui/dialogs';
+import { openSketchbook, type EditSession } from '../ui/sketchbook';
+import { h, type UI } from '../ui/ui';
+import { Avatar, shirtFor } from '../world/avatar';
+import { Interior } from '../world/interior';
+import { disposeTree } from '../world/kit';
+import { circle, clamp, damp, resolveCircle, wrapAngle, type Collider } from '../world/physics';
+import { Sky, dayPhase } from '../world/sky';
+import { Town, type Entrance } from '../world/town';
+import { Toys, type Mover, type ToyEvent } from '../world/toys';
+import { Vehicle } from '../world/vehicles';
+import { Arranger } from './arrange';
+import { CameraRig } from './camera';
+import { controlsPanel, pauseMenu, settingsPanel } from './menus';
+
+type Space =
+  | { kind: 'hub' }
+  | { kind: 'room'; room: RoomPublic; interior: Interior }
+  | { kind: 'area'; room: RoomPublic; area: Area; interior: Interior };
+
+interface Interactable {
+  x: number;
+  z: number;
+  range: number;
+  label: string;
+  /** Short label for the touch button. */
+  short: string;
+  run: () => void;
+}
+
+const PLAYER_R = 0.36;
+const WALK = 6.0;
+const IDLE_RELOCK_MS = 5 * 60 * 1000;
+
+export class Game {
+  readonly scene = new THREE.Scene();
+  readonly camera: THREE.PerspectiveCamera;
+  readonly rig: CameraRig;
+  private sky: Sky;
+  private town: Town;
+  private hubToys: Toys;
+  private vehicles: Vehicle[] = [];
+  private space: Space = { kind: 'hub' };
+  private toys: Toys;
+  private avatar: Avatar;
+  private pos = new THREE.Vector3();
+  private vel = new THREE.Vector2();
+  private yaw = Math.PI;
+  private riding: Vehicle | null = null;
+  private engine = new Engine();
+  private slots: SlotSummary[] | null = null;
+  private settings = local.settings();
+  private session: { roomId: string; slot: number; token: string; expiresAt: number; lastActive: number } | null = null;
+  private arranger: Arranger | null = null;
+  private busy = false;
+  private paused = false;
+  private stepDist = 0;
+  private movedFor = 0;
+  private hintTimer = 0;
+  private worldTimer = 0;
+  private worldFailures = 0;
+  private current: Interactable | null = null;
+  private fadeEl: HTMLElement;
+  private renderScale = 1;
+  private frameTimes: number[] = [];
+  private lastScaleChange = 0;
+  private shadowSize = 1024;
+
+  constructor(
+    readonly renderer: THREE.WebGLRenderer,
+    readonly input: Input,
+    readonly touch: TouchControls,
+    readonly ui: UI,
+  ) {
+    this.camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 400);
+    this.rig = new CameraRig(this.camera);
+    this.sky = new Sky(this.scene);
+    this.town = new Town();
+    this.scene.add(this.town.group);
+    this.hubToys = new Toys(this.town.toyLayout);
+    this.scene.add(this.hubToys.group);
+    this.toys = this.hubToys;
+    for (const v of this.town.vehicleSpots) {
+      const veh = new Vehicle(v.kind, `${v.kind}-${v.x}`, v.x, v.z, v.yaw, v.color);
+      this.vehicles.push(veh);
+      this.scene.add(veh.root);
+    }
+    const id = local.identity();
+    this.avatar = new Avatar(shirtFor(id.name ?? 'Toy'));
+    this.scene.add(this.avatar.root);
+    this.pos.set(this.town.spawn.x, 0, this.town.spawn.z);
+    this.yaw = this.town.spawn.yaw;
+    this.rig.snap(this.follow(), this.yaw);
+    this.fadeEl = h('div', { class: 'fade' });
+    document.body.appendChild(this.fadeEl);
+    this.applySettings(this.settings);
+
+    ui.onMenuButton = () => this.openPause();
+    ui.onLockButton = () => this.lock(true);
+    input.onPadLost = () => this.openPause('Controller disconnected. Reconnect it, or carry on with the keyboard or touch.');
+  }
+
+  // -------------------------------------------------------------------------
+  // Boot
+
+  async start(): Promise<void> {
+    const id = local.identity();
+    void this.loadWorld();
+    const ret = local.returnSpot();
+    // /?room=<id> opens a room directly (used by the admin page and for sharing).
+    const deep = new URLSearchParams(location.search).get('room');
+    if (deep && /^[a-zA-Z0-9_-]{6,32}$/.test(deep)) {
+      history.replaceState(null, '', location.pathname);
+      void this.enterRoom(deep);
+    } else if (ret) {
+      local.setReturnSpot(null);
+      if (ret.space === 'hub') {
+        this.placePlayer(ret.x, ret.z, ret.yaw);
+      } else if (ret.roomId) {
+        void this.enterRoom(ret.roomId, { areaId: ret.areaId, at: ret });
+      }
+    }
+    if (!id.name) {
+      const name = await askName(this.ui, { current: null, first: true });
+      if (name) {
+        local.setName(name);
+        this.avatar.setShirt(shirtFor(name));
+      }
+    }
+    this.hintTimer = 14;
+  }
+
+  private async loadWorld(): Promise<void> {
+    const r = await api.world();
+    if (r.ok) {
+      this.slots = r.data.slots;
+      this.worldFailures = 0;
+      this.town.setSlots(this.slots);
+      // Forget a remembered room that no longer exists.
+      const mine = local.myRoom();
+      if (mine && !this.slots.some((s) => s.roomId === mine.roomId)) local.setMyRoom(null);
+    } else {
+      this.worldFailures++;
+      if (this.worldFailures === 1) this.ui.toast("Couldn't load the rooms yet. Still trying.", 'bad');
+    }
+    this.worldTimer = r.ok ? 45 : Math.min(30, 3 * this.worldFailures);
+  }
+
+  // -------------------------------------------------------------------------
+  // Settings and quality
+
+  applySettings(s: local.Settings): void {
+    this.settings = s;
+    setVolume(s.volume);
+    document.documentElement.classList.toggle('large-text', s.largeText || IS_TV);
+    document.documentElement.classList.toggle('reduce-motion', s.reduceMotion);
+    const q = s.quality === 'auto' ? (IS_TV || matchMedia('(pointer: coarse)').matches ? 'medium' : 'high') : s.quality;
+    this.shadowSize = q === 'high' ? 2048 : q === 'medium' ? 1024 : 0;
+    this.renderer.shadowMap.enabled = this.shadowSize > 0;
+    this.sky.setShadowQuality(this.shadowSize);
+    this.renderScale = q === 'low' ? 0.6 : q === 'medium' ? 0.85 : 1;
+    this.applyPixelRatio();
+    this.updateTouchVisibility();
+  }
+
+  private applyPixelRatio(): void {
+    const dpr = Math.min(window.devicePixelRatio || 1, IS_TV ? 1 : 2);
+    this.renderer.setPixelRatio(dpr * this.renderScale);
+  }
+
+  /** Auto quality trims render resolution when frames run long. */
+  private adaptQuality(frameMs: number, now: number): void {
+    if (this.settings.quality !== 'auto') return;
+    this.frameTimes.push(frameMs);
+    if (this.frameTimes.length < 40) return;
+    const sorted = [...this.frameTimes].sort((a, b) => a - b);
+    this.frameTimes = [];
+    const p75 = sorted[Math.floor(sorted.length * 0.75)];
+    if (now - this.lastScaleChange < 1500) return;
+    if (p75 > 24 && this.renderScale > 0.55) {
+      this.renderScale = Math.max(0.55, this.renderScale - 0.1);
+      this.lastScaleChange = now;
+      this.applyPixelRatio();
+    } else if (p75 < 13 && this.renderScale < 1) {
+      this.renderScale = Math.min(1, this.renderScale + 0.05);
+      this.lastScaleChange = now;
+      this.applyPixelRatio();
+    }
+  }
+
+  updateTouchVisibility(): void {
+    const t = this.settings.touchControls;
+    const show = t === 'show' || (t === 'auto' && this.ui.device === 'touch');
+    this.touch.setVisible(show && !this.arranger);
+    this.ui.setMenuButton(!show);
+  }
+
+  resize(): void {
+    const w = innerWidth;
+    const hh = innerHeight;
+    this.renderer.setSize(w, hh, false);
+    this.camera.aspect = w / hh;
+    this.camera.fov = w < hh ? 68 : 55;
+    this.camera.updateProjectionMatrix();
+  }
+
+  // -------------------------------------------------------------------------
+  // Edit sessions (PIN unlock)
+
+  private editSession(): EditSession {
+    return {
+      token: () => this.token(),
+      touch: () => {
+        if (this.session) this.session.lastActive = Date.now();
+      },
+      unlock: (reason) => this.unlock(reason),
+    };
+  }
+
+  private token(): string | null {
+    const s = this.session;
+    const room = this.currentRoom();
+    if (!s || !room || s.roomId !== room.id) return null;
+    if (Date.now() > s.expiresAt - 5000) {
+      this.lock(false);
+      return null;
+    }
+    return s.token;
+  }
+
+  private currentRoom(): RoomPublic | null {
+    return this.space.kind === 'hub' ? null : this.space.room;
+  }
+
+  private lock(announce: boolean): void {
+    if (!this.session) return;
+    this.session = null;
+    this.ui.setLocked(false);
+    if (announce) this.ui.toast('Editing locked');
+  }
+
+  /** Opens the PIN pad for the room you are in. Resolves to a token or null. */
+  private unlock(reason?: string): Promise<string | null> {
+    const room = this.currentRoom();
+    if (!room) return Promise.resolve(null);
+    const existing = this.token();
+    if (existing) return Promise.resolve(existing);
+    return new Promise((resolve) => {
+      let settled = false;
+      const pad = pinPad(this.ui, {
+        title: `Room ${room.slot + 1} PIN`,
+        note: reason ?? `Enter the PIN for ${room.ownerName}'s room to make changes.`,
+        submitLabel: 'Unlock',
+        onSubmit: async (pin) => {
+          const r = await api.unlock(room.id, pin);
+          if (!r.ok) {
+            if (r.code === 'wrong_pin') {
+              const left = Number(r.extra.attemptsLeft);
+              return left > 0 ? `That PIN is not right. ${left} ${left === 1 ? 'try' : 'tries'} left for now.` : r.error;
+            }
+            return `${r.error}.${retryText(r)}`;
+          }
+          this.session = { roomId: room.id, slot: room.slot, token: r.data.token, expiresAt: r.data.expiresAt, lastActive: Date.now() };
+          local.setMyRoom({ roomId: room.id, slot: room.slot });
+          this.ui.setLocked(true);
+          sfx.confirm();
+          settled = true;
+          this.ui.close(pad);
+          resolve(r.data.token);
+          return null;
+        },
+        onCancel: () => {
+          if (!settled) resolve(null);
+        },
+      });
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Spaces
+
+  private fade(on: boolean): Promise<void> {
+    this.fadeEl.classList.toggle('on', on);
+    return new Promise((r) => setTimeout(r, on ? 200 : 10));
+  }
+
+  private placePlayer(x: number, z: number, yaw: number): void {
+    this.pos.set(x, 0, z);
+    this.vel.set(0, 0);
+    this.yaw = yaw;
+    this.avatar.root.position.copy(this.pos);
+    this.avatar.root.rotation.y = yaw;
+    this.rig.snap(this.follow(), yaw);
+  }
+
+  private colliders(): Collider[] {
+    if (this.space.kind === 'hub') {
+      const vs = this.vehicles.filter((v) => v !== this.riding).map((v) => circle(v.pos.x, v.pos.z, v.t.radius * 0.9, 1.2, 0.6, false));
+      return this.town.colliders.concat(this.hubToys.colliders, vs);
+    }
+    return this.space.interior.colliders.concat(this.toys.colliders);
+  }
+
+  private setScene(space: Space): void {
+    const old = this.space;
+    if (old.kind !== 'hub') {
+      old.interior.scene.remove(this.toys.group, this.avatar.root);
+      disposeTree(this.toys.group);
+      old.interior.dispose();
+    }
+    this.space = space;
+    if (space.kind === 'hub') {
+      this.toys = this.hubToys;
+      this.scene.add(this.avatar.root);
+      this.rig.indoor = false;
+    } else {
+      const layout = space.kind === 'room' ? space.room.layout : space.area.props;
+      this.toys = new Toys(layout);
+      space.interior.scene.add(this.toys.group, this.avatar.root);
+      this.rig.indoor = true;
+      space.interior.sun.castShadow = this.shadowSize > 0;
+    }
+  }
+
+  private roomTitle(room: RoomPublic): string {
+    return `${room.ownerName}'s room`;
+  }
+
+  async enterRoom(roomId: string, opts: { areaId?: string; at?: { x: number; z: number; yaw: number }; fresh?: RoomPublic } = {}): Promise<void> {
+    if (this.busy) return;
+    this.busy = true;
+    if (this.riding) this.dismount();
+    sfx.door();
+    await this.fade(true);
+    let room = opts.fresh ?? null;
+    if (!room) {
+      const r = await api.room(roomId);
+      if (!r.ok) {
+        this.busy = false;
+        await this.fade(false);
+        this.ui.toast(r.status === 404 ? 'That room is not claimed any more' : `Couldn't open the room. ${r.error}`, 'bad', 3600);
+        if (r.status === 404) void this.loadWorld();
+        return;
+      }
+      room = r.data.room;
+    }
+    const prevRoom = this.currentRoom();
+    if (this.session && (!prevRoom || prevRoom.id !== room.id) && this.session.roomId !== room.id) this.lock(false);
+    const area = opts.areaId ? room.content.areas.find((a) => a.id === opts.areaId) : undefined;
+    if (area) this.buildArea(room, area);
+    else this.buildRoom(room);
+    const sp = this.space.kind === 'hub' ? null : this.space.interior.door;
+    if (opts.at) this.placePlayer(opts.at.x, opts.at.z, opts.at.yaw);
+    else if (sp) this.placePlayer(sp.x, sp.z - 0.4, Math.PI);
+    this.busy = false;
+    await this.fade(false);
+  }
+
+  private buildRoom(room: RoomPublic): void {
+    const content = room.content ?? EMPTY_CONTENT;
+    const interior = new Interior({
+      kind: 'main',
+      title: this.roomTitle(room),
+      exitLabel: 'Back to town',
+      theme: room.theme,
+      exhibits: exhibitsIn(content, 'main'),
+      areas: content.areas,
+    });
+    this.setScene({ kind: 'room', room, interior });
+  }
+
+  private buildArea(room: RoomPublic, area: Area): void {
+    const interior = new Interior({
+      kind: 'area',
+      title: area.name,
+      exitLabel: `Back to ${room.ownerName}'s room`,
+      theme: area.theme,
+      exhibits: exhibitsIn(room.content, area.id),
+      areas: [],
+    });
+    this.setScene({ kind: 'area', room, area, interior });
+  }
+
+  private async enterArea(area: Area): Promise<void> {
+    if (this.space.kind !== 'room' || this.busy) return;
+    this.busy = true;
+    const room = this.space.room;
+    sfx.door();
+    await this.fade(true);
+    this.buildArea(room, area);
+    const sp = (this.space as { interior: Interior }).interior.door;
+    this.placePlayer(sp.x, sp.z - 0.4, Math.PI);
+    this.busy = false;
+    await this.fade(false);
+  }
+
+  private async leaveArea(): Promise<void> {
+    if (this.space.kind !== 'area' || this.busy) return;
+    this.busy = true;
+    const { room, area } = this.space;
+    sfx.door();
+    await this.fade(true);
+    this.buildRoom(room);
+    const door = (this.space as { interior: Interior }).interior.areaDoors.find((d) => d.area.id === area.id);
+    if (door) this.placePlayer(door.x, door.z + 0.6, 0);
+    this.busy = false;
+    await this.fade(false);
+  }
+
+  private async exitToHub(): Promise<void> {
+    if (this.space.kind === 'hub' || this.busy) return;
+    this.busy = true;
+    const slot = this.space.room.slot;
+    sfx.door();
+    await this.fade(true);
+    if (this.session) this.lock(true);
+    this.setScene({ kind: 'hub' });
+    const e = this.town.entrances.find((en) => en.kind === 'house' && en.slot === slot);
+    // Step out onto the path so the camera has room behind you.
+    if (e) this.placePlayer(e.x + Math.sin(e.outYaw) * 2.2, e.z + Math.cos(e.outYaw) * 2.2, e.outYaw);
+    this.busy = false;
+    void this.loadWorld();
+    await this.fade(false);
+  }
+
+  // -------------------------------------------------------------------------
+  // Interactions
+
+  private interactables(): Interactable[] {
+    const out: Interactable[] = [];
+    if (this.riding) return out;
+    if (this.space.kind === 'hub') {
+      for (const e of this.town.entrances) out.push(...this.entranceAction(e));
+      for (const v of this.vehicles) {
+        out.push({
+          x: v.pos.x,
+          z: v.pos.z,
+          range: v.kind === 'kart' ? 2.0 : 1.6,
+          label: v.kind === 'kart' ? 'Drive the go-kart' : 'Ride the scooter',
+          short: v.kind === 'kart' ? 'Drive' : 'Ride',
+          run: () => this.mount(v),
+        });
+      }
+      return out;
+    }
+    const sp = this.space;
+    const it = sp.interior;
+    if (sp.kind === 'room') {
+      out.push({ x: it.door.x, z: it.door.z, range: 1.7, label: 'Back to town', short: 'Exit', run: () => void this.exitToHub() });
+      if (it.lectern) out.push({ x: it.lectern.x, z: it.lectern.z, range: 1.6, label: 'Open the sketchbook', short: 'Sketch', run: () => void this.openBook() });
+      if (it.chest) out.push({ x: it.chest.x, z: it.chest.z, range: 1.6, label: 'Arrange toys', short: 'Arrange', run: () => void this.openArrange() });
+      for (const d of it.areaDoors) out.push({ x: d.x, z: d.z, range: 1.6, label: `Enter ${d.area.name}`, short: 'Enter', run: () => void this.enterArea(d.area) });
+    } else {
+      out.push({ x: it.door.x, z: it.door.z, range: 1.7, label: `Back to ${sp.room.ownerName}'s room`, short: 'Exit', run: () => void this.leaveArea() });
+    }
+    for (const e of it.exhibitSpots) out.push({ x: e.x, z: e.z, range: 1.5, label: `Play ${e.exhibit.title}`, short: 'Play', run: () => void this.playExhibit(e.exhibit) });
+    return out;
+  }
+
+  private entranceAction(e: Entrance): Interactable[] {
+    if (e.kind === 'arcade') {
+      const a = ARCADES.find((x) => x.id === e.arcade)!;
+      return [{ x: e.x, z: e.z, range: 2.2, label: `Visit ${a.name}`, short: 'Visit', run: () => void this.visitArcade(a.id) }];
+    }
+    if (!this.slots) return [];
+    const s = this.slots[e.slot];
+    if (s?.roomId && s.ownerName) {
+      const mine = local.myRoom()?.roomId === s.roomId;
+      return [{ x: e.x, z: e.z, range: 1.9, label: mine ? 'Enter your room' : `Enter ${s.ownerName}'s room`, short: 'Enter', run: () => void this.enterRoom(s.roomId!) }];
+    }
+    if (s?.roomId) return [];
+    return [{ x: e.x, z: e.z, range: 1.9, label: `Claim room ${e.slot + 1}`, short: 'Claim', run: () => void this.claim(e.slot) }];
+  }
+
+  private pickInteractable(): Interactable | null {
+    const fx = Math.sin(this.yaw);
+    const fz = Math.cos(this.yaw);
+    let best: Interactable | null = null;
+    let bestScore = Infinity;
+    for (const it of this.interactables()) {
+      const dx = it.x - this.pos.x;
+      const dz = it.z - this.pos.z;
+      const d = Math.hypot(dx, dz);
+      if (d > it.range) continue;
+      const facing = d > 0.01 ? (dx * fx + dz * fz) / d : 1;
+      const score = d - facing * 0.6;
+      if (score < bestScore) {
+        bestScore = score;
+        best = it;
+      }
+    }
+    return best;
+  }
+
+  private mount(v: Vehicle): void {
+    if (v.ridden) return;
+    this.riding = v;
+    v.ridden = true;
+    this.vel.set(0, 0);
+    this.scene.remove(this.avatar.root);
+    v.seat.add(this.avatar.root);
+    this.avatar.root.position.set(0, 0, 0);
+    this.avatar.root.rotation.set(0, 0, 0);
+    this.engine.start(v.kind);
+    sfx.mount();
+    if (!local.seenHint(`ride-${this.ui.device}`)) {
+      local.markHint(`ride-${this.ui.device}`);
+      this.ui.toast(this.ui.device === 'pad' ? 'RT to go, LT to brake, A to get off' : this.ui.device === 'touch' ? 'Push the stick up to go. Brake button stops.' : 'W to go, S to brake, E to get off');
+    }
+  }
+
+  private dismount(): void {
+    const v = this.riding;
+    if (!v) return;
+    this.riding = null;
+    v.ridden = false;
+    this.engine.stop();
+    v.seat.remove(this.avatar.root);
+    this.scene.add(this.avatar.root);
+    // Step off to the side that has room.
+    const rx = -Math.cos(v.yaw);
+    const rz = Math.sin(v.yaw);
+    const cols = this.colliders();
+    let placed = false;
+    for (const side of [1, -1]) {
+      const p = { x: v.pos.x + rx * side * (v.t.radius + 0.7), z: v.pos.z + rz * side * (v.t.radius + 0.7) };
+      const test = { ...p };
+      const hit = resolveCircle(test, PLAYER_R, cols);
+      if (!hit || hit.depth < 0.05) {
+        this.pos.set(test.x, 0, test.z);
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) this.pos.set(v.pos.x - Math.sin(v.yaw) * (v.t.radius + 0.8), 0, v.pos.z - Math.cos(v.yaw) * (v.t.radius + 0.8));
+    this.yaw = v.yaw;
+    this.vel.set(Math.sin(v.yaw) * v.speed * 0.3, Math.cos(v.yaw) * v.speed * 0.3);
+    v.speed *= 0.5;
+    this.avatar.root.position.copy(this.pos);
+    sfx.mount();
+  }
+
+  private async visitArcade(id: ArcadeId): Promise<void> {
+    const a = ARCADES.find((x) => x.id === id)!;
+    const go = await confirmBox(this.ui, {
+      title: `Visit ${a.name}?`,
+      body: `It opens ${a.host} in this tab. Use your browser's Back button to come back to Toyboxes.`,
+      ok: 'Go',
+      cancel: 'Stay here',
+    });
+    if (!go) return;
+    this.leaveFor(a.url, { space: 'hub', x: this.pos.x, z: this.pos.z, yaw: this.yaw });
+  }
+
+  private async playExhibit(e: Exhibit): Promise<void> {
+    const go = await confirmBox(this.ui, {
+      title: e.title,
+      body: h('div', {}, e.blurb ? h('p', {}, e.blurb) : '', h('p', { class: 'muted' }, 'It opens in this tab. Use Back to come back to this room.')),
+      ok: 'Play',
+      cancel: 'Not now',
+    });
+    if (!go || this.space.kind === 'hub') return;
+    this.leaveFor(e.url, {
+      space: this.space.kind,
+      roomId: this.space.room.id,
+      areaId: this.space.kind === 'area' ? this.space.area.id : undefined,
+      x: this.pos.x,
+      z: this.pos.z,
+      yaw: this.yaw + Math.PI,
+    });
+  }
+
+  private leaveFor(url: string, spot: Omit<local.ReturnSpot, 'at'>): void {
+    local.setReturnSpot({ ...spot, at: Date.now() });
+    this.lock(false);
+    this.fadeEl.classList.add('on');
+    setTimeout(() => {
+      location.href = url;
+    }, 180);
+  }
+
+  /** Back from an arcade through the bfcache: the page was never unloaded. */
+  restored(): void {
+    local.setReturnSpot(null);
+    this.fadeEl.classList.remove('on');
+    this.input.releaseAll();
+    this.busy = false;
+  }
+
+  // -------------------------------------------------------------------------
+  // Claim, rename, book, arrange
+
+  private async claim(slot: number): Promise<void> {
+    const id = local.identity();
+    const mine = local.myRoom();
+    if (mine && this.slots?.some((s) => s.roomId === mine.roomId)) {
+      const pick = await choose(this.ui, {
+        title: `Room ${slot + 1} is free`,
+        body: `You already have room ${mine.slot + 1}. Each visitor gets one room.`,
+        options: [{ label: 'Go to my room', value: 'go', primary: true }],
+        cancel: 'Close',
+      });
+      if (pick === 'go') {
+        const e = this.town.entrances.find((en) => en.kind === 'house' && en.slot === mine.slot);
+        if (e) this.ui.toast(`Your room is number ${mine.slot + 1}`, 'info');
+      }
+      return;
+    }
+    const step = await choose(this.ui, {
+      title: `Claim room ${slot + 1}?`,
+      body: `It will say ${id.name}'s room on the door. Anyone can visit. A four-digit PIN keeps the editing yours.`,
+      options: [
+        { label: 'Choose a PIN', value: 'pin', primary: true },
+        { label: 'Change my name first', value: 'name' },
+      ],
+      cancel: 'Not now',
+    });
+    if (step === 'name') {
+      await this.rename();
+      return this.claim(slot);
+    }
+    if (step !== 'pin') return;
+    let first = '';
+    const firstPad = pinPad(this.ui, {
+      title: 'Choose a PIN',
+      note: 'Four digits. You need it to change your room, from any device. Keep it to yourself.',
+      submitLabel: 'Next',
+      onSubmit: async (pin) => {
+        first = pin;
+        this.ui.close(firstPad);
+        confirmPad();
+        return null;
+      },
+    });
+    const confirmPad = () => {
+      const pad = pinPad(this.ui, {
+        title: 'Enter it again',
+        note: `Same four digits, to be sure.`,
+        submitLabel: 'Claim',
+        onSubmit: async (pin) => {
+          if (pin !== first) return "That doesn't match the first PIN. Try again.";
+          const name = local.identity().name ?? 'Visitor';
+          const r = await api.claim(slot, name, first, pin, id.browserId);
+          if (!r.ok) {
+            if (r.status === 0 || r.status >= 500) return `${r.error}. Nothing was claimed yet. Try again.`;
+            this.ui.close(pad);
+            if (r.code === 'has_room' && typeof r.extra.roomId === 'string') local.setMyRoom({ roomId: r.extra.roomId, slot: Number(r.extra.slot) });
+            await confirmBox(this.ui, { title: "Couldn't claim the room", body: `${r.error}.${retryText(r)}`, ok: 'OK', cancel: 'Close' });
+            void this.loadWorld();
+            return null;
+          }
+          this.ui.close(pad);
+          const room = r.data.room;
+          this.session = { roomId: room.id, slot: room.slot, token: r.data.token, expiresAt: r.data.expiresAt, lastActive: Date.now() };
+          local.setMyRoom({ roomId: room.id, slot: room.slot });
+          if (this.slots) {
+            this.slots[slot] = { slot, roomId: room.id, ownerName: room.ownerName, theme: room.theme, hasContent: false };
+            this.town.setSlots(this.slots);
+          }
+          sfx.goal();
+          this.ui.banner(`Room ${slot + 1} is yours`, '#ffd24a');
+          setTimeout(async () => {
+            await this.enterRoom(room.id, { fresh: room });
+            this.ui.setLocked(true);
+            this.ui.toast('Open the sketchbook to ask for a game. The toy chest has toys.', 'good', 5200);
+          }, 900);
+          return null;
+        },
+      });
+    };
+  }
+
+  private async rename(): Promise<void> {
+    const id = local.identity();
+    const name = await askName(this.ui, { current: id.name, first: false });
+    if (!name || name === id.name) return;
+    const mine = local.myRoom();
+    const owned = mine && this.slots?.find((s) => s.roomId === mine.roomId);
+    let scope: 'browser' | 'room' | null = 'browser';
+    if (owned) {
+      scope = await choose(this.ui, {
+        title: `Use ${name} where?`,
+        body: 'Your name on this device can change on its own, or your room can change with it.',
+        options: [
+          { label: 'Only on this device', value: 'browser', note: `Room ${owned.slot + 1} still says ${owned.ownerName}` },
+          { label: `Also on room ${owned.slot + 1}`, value: 'room', note: 'Needs the room PIN', primary: true },
+        ],
+      });
+    }
+    if (!scope) return;
+    if (scope === 'browser' || !owned) {
+      local.setName(name);
+      this.avatar.setShirt(shirtFor(name));
+      this.ui.toast(`You're ${name} on this device now`, 'good');
+      return;
+    }
+    const pad = pinPad(this.ui, {
+      title: `Room ${owned.slot + 1} PIN`,
+      note: `To change the name on room ${owned.slot + 1} to ${name}.`,
+      submitLabel: 'Rename',
+      onSubmit: async (pin) => {
+        const r = await api.rename(owned.roomId!, pin, name);
+        if (!r.ok) {
+          if (r.status === 404) {
+            local.setMyRoom(null);
+            this.ui.close(pad);
+            this.ui.toast('That room is not yours any more. Only this device changed.', 'bad', 4200);
+            local.setName(name);
+            return null;
+          }
+          if (r.code === 'wrong_pin') {
+            const left = Number(r.extra.attemptsLeft);
+            return left > 0 ? `That PIN is not right. ${left} ${left === 1 ? 'try' : 'tries'} left for now. Nothing changed.` : r.error;
+          }
+          return `${r.error}.${retryText(r)} Nothing changed.`;
+        }
+        this.ui.close(pad);
+        local.setName(name);
+        this.avatar.setShirt(shirtFor(name));
+        if (this.slots) {
+          const s = this.slots.find((x) => x.roomId === owned.roomId);
+          if (s) s.ownerName = r.data.room.ownerName;
+          this.town.setSlots(this.slots);
+        }
+        if (this.space.kind !== 'hub' && this.space.room.id === owned.roomId) this.space.room = r.data.room;
+        sfx.confirm();
+        this.ui.toast(r.data.changed.length ? `Updated: ${r.data.changed.join(', ')}` : 'Name saved', 'good');
+        return null;
+      },
+    });
+  }
+
+  private async openBook(): Promise<void> {
+    if (this.space.kind !== 'room') return;
+    const room = this.space.room;
+    if (!this.token()) {
+      const pick = await choose(this.ui, {
+        title: `${room.ownerName}'s sketchbook`,
+        body: 'The owner writes game ideas here. It opens with the room PIN.',
+        options: [{ label: 'Enter the PIN', value: 'pin', primary: true }],
+        cancel: 'Close',
+      });
+      if (pick !== 'pin') return;
+      const t = await this.unlock();
+      if (!t) return;
+    }
+    sfx.page();
+    await openSketchbook(this.ui, this.input, { roomId: room.id, ownerName: room.ownerName, session: this.editSession() });
+  }
+
+  private async openArrange(): Promise<void> {
+    if (this.space.kind !== 'room' || this.arranger) return;
+    const space = this.space;
+    if (!this.token()) {
+      const pick = await choose(this.ui, {
+        title: 'Toy chest',
+        body: `Arranging ${space.room.ownerName}'s room needs the room PIN. Anyone can play with the toys already out.`,
+        options: [{ label: 'Enter the PIN', value: 'pin', primary: true }],
+        cancel: 'Close',
+      });
+      if (pick !== 'pin') return;
+      const t = await this.unlock();
+      if (!t) return;
+    }
+    // Hide the live toys; the editor shows its own copy.
+    this.toys.group.visible = false;
+    this.avatar.root.visible = false;
+    this.touch.setVisible(false);
+    this.arranger = new Arranger({
+      ui: this.ui,
+      input: this.input,
+      interior: space.interior,
+      rig: this.rig,
+      camera: this.camera,
+      canvas: this.renderer.domElement,
+      room: space.room,
+      token: () => this.token(),
+      touch: () => {
+        if (this.session) this.session.lastActive = Date.now();
+      },
+      unlock: (reason) => this.unlock(reason),
+      onFinish: (room) => {
+        this.arranger = null;
+        this.avatar.root.visible = true;
+        if (room && this.space.kind === 'room') {
+          this.space.room = room;
+          this.space.interior.setTheme(room.theme);
+          this.space.interior.scene.remove(this.toys.group);
+          disposeTree(this.toys.group);
+          this.toys = new Toys(room.layout);
+          this.space.interior.scene.add(this.toys.group);
+          if (this.slots) {
+            const s = this.slots.find((x) => x.roomId === room.id);
+            if (s) s.theme = room.theme;
+          }
+          this.ui.toast('Room saved. Everyone who visits sees it this way.', 'good', 3600);
+        } else {
+          this.toys.group.visible = true;
+        }
+        this.rig.snap(this.follow(), this.yaw);
+        this.updateTouchVisibility();
+      },
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Menus
+
+  openPause(note?: string): void {
+    if (this.ui.isOpen && !note) return;
+    if (this.arranger) return;
+    this.paused = true;
+    const items = [
+      { label: 'Resume', action: () => close(), primary: true },
+      { label: 'Settings', action: () => settingsPanel(this.ui, (s) => this.applySettings(s)) },
+      { label: 'Change my name', action: () => void this.rename() },
+      { label: 'Reset the toys', action: () => {
+        this.toys.reset();
+        close();
+        this.ui.toast('Toys are back where they started');
+      } },
+    ];
+    if (this.space.kind === 'hub') {
+      items.push({ label: 'Park the vehicles', action: () => {
+        if (this.riding) this.dismount();
+        for (const v of this.vehicles) v.park();
+        close();
+      } });
+    } else {
+      items.push({ label: 'Back to town', action: () => {
+        close();
+        void this.exitToHub();
+      } });
+    }
+    if (this.session) items.push({ label: 'Lock editing', action: () => {
+      this.lock(true);
+      close();
+    } });
+    items.push({ label: 'Controls', action: () => controlsPanel(this.ui) });
+    const title = this.space.kind === 'hub' ? 'Toyboxes' : this.space.kind === 'room' ? this.roomTitle(this.space.room) : this.space.area.name;
+    const panel = pauseMenu(this.ui, { title, note, items, onResume: () => (this.paused = false) });
+    const close = () => {
+      this.ui.close(panel);
+      this.paused = false;
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // Frame
+
+  private follow() {
+    const v = this.riding;
+    return {
+      x: v ? v.pos.x : this.pos.x,
+      z: v ? v.pos.z : this.pos.z,
+      height: v ? 1.35 : 1.25,
+      heading: v ? v.yaw : this.yaw,
+      speed: v ? Math.abs(v.speed) : this.vel.length(),
+      riding: !!v,
+    };
+  }
+
+  private handleEvents(events: ToyEvent[]): void {
+    for (const e of events) {
+      switch (e.type) {
+        case 'goal':
+          sfx.goal();
+          this.ui.banner('GOAL!', '#ffd24a');
+          navigator.vibrate?.(40);
+          break;
+        case 'strike':
+          sfx.strike();
+          this.ui.banner('STRIKE!', '#4aa3df');
+          break;
+        case 'pins':
+          sfx.ding(false);
+          this.ui.toast(`${e.count} ${e.count === 1 ? 'pin' : 'pins'} down`);
+          break;
+        case 'target':
+          sfx.ding(e.bullseye);
+          if (e.bullseye) this.ui.banner('Bullseye!', '#e8574a');
+          break;
+        case 'bounce':
+          sfx.bounce(e.strength);
+          break;
+        case 'knock':
+          sfx.knock();
+          break;
+      }
+    }
+  }
+
+  frame(dt: number, now: number, frameMs: number): void {
+    this.adaptQuality(frameMs, now);
+    this.input.update(dt, now);
+    const menu = this.ui.isOpen;
+
+    if (this.session && Date.now() - this.session.lastActive > IDLE_RELOCK_MS && !this.arranger) {
+      this.lock(false);
+      this.ui.toast('Editing locked after a quiet spell');
+    }
+
+    if (!menu && !this.busy) {
+      if (this.input.take('pause')) this.openPause();
+      if (this.input.take('reset')) {
+        this.toys.reset();
+        this.ui.toast('Toys reset');
+      }
+    }
+    const control = !menu && !this.busy && !this.paused;
+
+    this.worldTimer -= dt;
+    if (this.worldTimer <= 0 && this.space.kind === 'hub') void this.loadWorld();
+
+    // ---- simulation, in steps of at most 1/60 s
+    const steps = Math.max(1, Math.ceil(dt / (1 / 60)));
+    const h = dt / steps;
+    const cols = this.colliders();
+    const events: ToyEvent[] = [];
+    for (let i = 0; i < steps; i++) {
+      if (this.arranger) break;
+      if (this.riding) {
+        const v = this.riding;
+        const mx = control ? this.input.move.x : 0;
+        const my = control ? this.input.move.y : 0;
+        const throttle = control ? clamp(my + this.input.throttle - this.input.brake, -1, 1) : 0;
+        const brake = control && this.input.isHeld('kick') ? 1 : 0;
+        v.drive(h, throttle, -mx, brake, cols);
+        if (v.bumped) {
+          sfx.bump(Math.min(1, v.bumped / 10));
+          this.rig.bump(Math.min(0.5, v.bumped / 20));
+          v.bumped = 0;
+        }
+        this.pos.copy(v.pos);
+        this.yaw = v.yaw;
+      } else {
+        // Camera-relative walking.
+        const mx = control ? this.input.move.x : 0;
+        const my = control ? this.input.move.y : 0;
+        const fx = Math.sin(this.rig.yaw);
+        const fz = Math.cos(this.rig.yaw);
+        const rx = -fz;
+        const rz = fx;
+        const mag = Math.min(1, Math.hypot(mx, my));
+        const speed = WALK * mag * (this.input.isHeld('run') ? 1.3 : 1);
+        let wx = fx * my + rx * mx;
+        let wz = fz * my + rz * mx;
+        const wl = Math.hypot(wx, wz);
+        if (wl > 0) {
+          wx = (wx / wl) * speed;
+          wz = (wz / wl) * speed;
+        }
+        const k = damp(mag > 0 ? 12 : 16, h);
+        this.vel.x += (wx - this.vel.x) * k;
+        this.vel.y += (wz - this.vel.y) * k;
+        this.pos.x += this.vel.x * h;
+        this.pos.z += this.vel.y * h;
+        const hit = resolveCircle(this.pos, PLAYER_R, cols);
+        if (hit) {
+          const vn = this.vel.x * hit.nx + this.vel.y * hit.nz;
+          if (vn < 0) {
+            this.vel.x -= vn * hit.nx;
+            this.vel.y -= vn * hit.nz;
+          }
+        }
+        const sp = this.vel.length();
+        if (sp > 0.4) this.yaw += wrapAngle(Math.atan2(this.vel.x, this.vel.y) - this.yaw) * damp(14, h);
+        this.stepDist += sp * h;
+        if (this.stepDist > 1.25) {
+          this.stepDist = 0;
+          sfx.step();
+        }
+        if (sp > 1) this.movedFor += h;
+      }
+      for (const v of this.vehicles) if (v !== this.riding) v.idle(h, this.town.colliders);
+      const movers: Mover[] = [];
+      if (this.riding) {
+        const vv = this.riding.velocity;
+        movers.push({ x: this.riding.pos.x, z: this.riding.pos.z, vx: vv.x, vz: vv.z, r: this.riding.t.radius, h: 0.9, kind: 'vehicle' });
+      } else {
+        movers.push({ x: this.pos.x, z: this.pos.z, vx: this.vel.x, vz: this.vel.y, r: PLAYER_R, h: 0.5, kind: 'player' });
+      }
+      if (this.space.kind === 'hub') {
+        for (const v of this.vehicles) {
+          if (v === this.riding || Math.abs(v.speed) < 0.3) continue;
+          const vv = v.velocity;
+          movers.push({ x: v.pos.x, z: v.pos.z, vx: vv.x, vz: vv.z, r: v.t.radius, h: 0.9, kind: 'vehicle' });
+        }
+      }
+      if (i === 0 && control && !this.riding && this.input.take('kick')) {
+        this.avatar.kick();
+        const hitBall = this.toys.kick(this.pos.x, this.pos.z, this.yaw);
+        sfx.kick(hitBall);
+        if (hitBall) navigator.vibrate?.(15);
+      }
+      events.push(...this.toys.step(h, movers, this.space.kind === 'hub' ? this.town.colliders : this.space.interior.colliders));
+    }
+    this.handleEvents(events);
+
+    // ---- interactions
+    this.current = control && !this.arranger ? this.pickInteractable() : null;
+    if (control && this.input.take('interact')) {
+      if (this.riding) this.dismount();
+      else if (this.current) {
+        unlockAudio();
+        this.current.run();
+      }
+    }
+    if (control && this.riding && this.input.take('back')) this.dismount();
+
+    // ---- avatar, vehicles and the camera
+    if (!this.riding) {
+      this.avatar.root.position.copy(this.pos);
+      this.avatar.root.rotation.y = this.yaw;
+    }
+    this.avatar.animate(dt, this.riding ? 0 : this.vel.length(), this.riding ? this.riding.kind : 'none', this.settings.reduceMotion);
+    if (this.riding) this.engine.set(Math.min(1, Math.abs(this.riding.speed) / this.riding.t.maxSpeed), this.riding.kind);
+
+    const phase = dayPhase(Date.now(), this.settings.time);
+    const t = now / 1000;
+    if (this.arranger) {
+      this.arranger.update(dt);
+    } else {
+      const look = control ? this.input.look : { x: 0, y: 0 };
+      this.rig.update(dt, now, look, this.follow(), cols, this.settings);
+      if (this.space.kind !== 'hub') this.space.interior.cutaway(this.camera.position);
+    }
+    this.sky.update(phase, this.pos);
+    if (this.space.kind === 'hub') {
+      this.town.update(this.sky.night, t, phase);
+    } else {
+      this.space.interior.update(this.sky.night, t);
+    }
+
+    this.updateHud(dt, control);
+    const scene = this.space.kind === 'hub' ? this.scene : this.space.interior.scene;
+    this.renderer.render(scene, this.camera);
+  }
+
+  private updateHud(dt: number, control: boolean): void {
+    const ui = this.ui;
+    const place = this.space.kind === 'hub' ? 'Toyboxes town' : this.space.kind === 'room' ? `${this.roomTitle(this.space.room)} · Room ${this.space.room.slot + 1}` : `${this.space.area.name} · ${this.space.room.ownerName}'s room`;
+    ui.setPlace(place);
+    ui.setLocked(!!this.session && !!this.currentRoom() && this.session.roomId === this.currentRoom()!.id);
+    if (!control || this.arranger) {
+      ui.prompt(null);
+      this.touch.setAction(null);
+      ui.hint(null);
+      return;
+    }
+    if (this.riding) {
+      ui.prompt('Get off');
+      this.touch.setAction('Get off');
+      this.touch.setKick('Brake');
+    } else {
+      const it = this.current;
+      ui.prompt(it ? it.label : null);
+      this.touch.setAction(it ? it.short : null);
+      const ball = this.toys.nearestBall(this.pos.x, this.pos.z);
+      this.touch.setKick('Kick');
+      if (!it && ball && ball.dist < 1.8) ui.prompt('Kick', 'kick');
+    }
+    if (this.hintTimer > 0) {
+      this.hintTimer -= dt;
+      if (this.movedFor > 2.5 && this.hintTimer > 2) this.hintTimer = 2;
+      ui.hint(
+        this.hintTimer > 0
+          ? [
+              ['move', 'Move'],
+              ['look', 'Look'],
+              ['interact', 'Use'],
+              ['kick', 'Kick'],
+              ['pause', 'Menu'],
+            ]
+          : null,
+      );
+    } else ui.hint(null);
+  }
+
+  // -------------------------------------------------------------------------
+
+  /** Read-outs and a teleport for scripted playtests. Nothing here touches the server. */
+  readonly debug = {
+    teleport: (x: number, z: number, yaw: number) => this.placePlayer(x, z, yaw),
+    state: () => ({
+      space: this.space.kind,
+      x: this.pos.x,
+      z: this.pos.z,
+      yaw: this.yaw,
+      riding: this.riding?.kind ?? null,
+      speed: this.riding ? this.riding.speed : this.vel.length(),
+      prompt: this.current?.label ?? null,
+      room: this.currentRoom()?.id ?? null,
+      unlocked: !!this.token(),
+      night: this.sky.night,
+      renderScale: this.renderScale,
+      menu: this.ui.isOpen,
+    }),
+    entrances: () => this.town.entrances,
+    vehicles: () => this.vehicles.map((v) => ({ kind: v.kind, x: v.pos.x, z: v.pos.z, yaw: v.yaw })),
+    spots: () => {
+      if (this.space.kind === 'hub') return null;
+      const it = this.space.interior;
+      return { door: it.door, lectern: it.lectern, chest: it.chest, areaDoors: it.areaDoors.map((d) => ({ x: d.x, z: d.z, name: d.area.name })), exhibits: it.exhibitSpots.map((e) => ({ x: e.x, z: e.z, title: e.exhibit.title })) };
+    },
+    toys: () => this.toys.nearestBall(this.pos.x, this.pos.z),
+  };
+
+  onHidden(hidden: boolean): void {
+    suspendAudio(hidden);
+    if (hidden) {
+      this.input.releaseAll();
+      if (this.riding) this.engine.set(0, this.riding.kind);
+    }
+  }
+}
