@@ -62,6 +62,8 @@ export interface SpaceView {
   kickAction?(player: PlayerState): { label: string; run: () => void } | null;
   /** Something that pauses with the menu, like a race. */
   holdsTime?(): boolean;
+  /** Gravity for jumps here, as a share of normal (low in space). */
+  gravity?(): number;
   /** Graphics tier from the settings and measured frame times. */
   setQuality?(tier: Tier): void;
   /** Draw the frame itself (post-processing). Return true when it did. */

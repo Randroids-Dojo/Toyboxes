@@ -6,6 +6,7 @@ export type Device = 'kbm' | 'touch' | 'pad';
 export type Action =
   | 'interact'
   | 'kick'
+  | 'jump'
   | 'back'
   | 'pause'
   | 'run'
@@ -27,7 +28,7 @@ const KEY_ACTIONS: Record<string, Action> = {
   KeyE: 'interact',
   Enter: 'interact',
   NumpadEnter: 'interact',
-  Space: 'kick',
+  Space: 'jump',
   KeyF: 'kick',
   Escape: 'pause',
   KeyP: 'pause',
@@ -52,6 +53,7 @@ const PAD_ACTIONS: [number, Action][] = [
   [PAD.LB, 'prev'],
   [PAD.RB, 'next'],
   [PAD.Y, 'remove'],
+  [PAD.Y, 'jump'],
   [PAD.L3, 'run'],
   [PAD.R3, 'reset'],
 ];

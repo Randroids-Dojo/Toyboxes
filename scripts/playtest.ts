@@ -50,6 +50,7 @@ type Dbg = {
       entrances(): { kind: string; slot: number; x: number; z: number; outYaw: number }[];
       vehicles(): { kind: string; x: number; z: number; yaw: number }[];
       spots(): { door: { x: number; z: number }; lectern: { x: number; z: number }; chest: { x: number; z: number } } | null;
+      blocks(): { x: number; z: number; rot: number }[];
     };
   };
 };
@@ -260,6 +261,9 @@ else await tray('Cone').click();
 await page.waitForTimeout(300);
 if (phone) await tray('Target').tap();
 else await tray('Target').click();
+await page.waitForTimeout(300);
+if (phone) await tray('Block').tap();
+else await tray('Block').click();
 await page.waitForTimeout(600);
 await snap('arrange');
 await tapButton(page, 'Done');
@@ -270,10 +274,44 @@ await snap('arranged-room');
 await teleport(0, 0.2, Math.PI);
 await page.waitForTimeout(500);
 if (phone) await page.locator('.tbtn-kick').tap();
-else await page.keyboard.press('Space');
+else await page.keyboard.press('KeyF');
 await page.waitForTimeout(250);
 await snap('kick');
 await page.waitForTimeout(1000);
+
+// 7b. Jump onto the toy block: run at it from touching distance, jump, and stop on top.
+const blocks = await page.evaluate(() => (window as unknown as Dbg).toyboxes.debug.blocks());
+if (!blocks.length) throw new Error('The arranged room has no toy block');
+const block = blocks[blocks.length - 1];
+let onTop = false;
+for (let attempt = 0; attempt < 3 && !onTop; attempt++) {
+  await teleport(block.x, block.z + 0.84, Math.PI);
+  await page.waitForTimeout(400);
+  let peak = 0;
+  if (phone) {
+    await page.locator('.tbtn-jump').tap();
+    const cdp = await ctx.newCDPSession(page);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 90, y: 700, id: 3 }] });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 90, y: 630, id: 3 }] });
+    await page.waitForTimeout(200);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  } else {
+    await page.keyboard.down('KeyW');
+    await page.keyboard.press('Space');
+    await page.waitForTimeout(220);
+    await page.keyboard.up('KeyW');
+  }
+  for (let i = 0; i < 12; i++) {
+    peak = Math.max(peak, Number((await state()).y));
+    await page.waitForTimeout(60);
+  }
+  const s = await state();
+  console.log('jump attempt', attempt + 1, 'peak', peak.toFixed(2), 'now', Number(s.y).toFixed(2), s.grounded ? 'standing' : 'in the air');
+  if (peak < 1.0) throw new Error(`The jump only reached ${peak.toFixed(2)} m`);
+  onTop = s.grounded === true && Math.abs(Number(s.y) - 0.9) < 0.05;
+}
+if (!onTop) throw new Error('Could not land on top of the toy block');
+await snap('on-a-block');
 
 // 8. Leave, check the house sign, then reload as a returning visitor.
 await teleport(spots.door.x, spots.door.z, 0);

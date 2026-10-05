@@ -1,6 +1,6 @@
 // Black hole galaxy: fall through the portal, measure frame times at each
-// graphics tier, kick orbs into the black hole, play a short frenzy that
-// reaches the board, and leave through the exit vortex.
+// graphics tier, float on a low-gravity jump, kick orbs into the black hole,
+// play a short frenzy that reaches the board, and leave through the exit vortex.
 //
 //   npx tsx scripts/galaxytest.ts [outDir] [url]
 //   PHONE=1 npx tsx scripts/galaxytest.ts
@@ -45,7 +45,7 @@ const snap = async (n: string) => {
 };
 type G = { toyboxes: { debug: Record<string, (...a: any[]) => any> } };
 const d = <T = any>(f: string, ...a: unknown[]) => page.evaluate(([f, a]) => (window as unknown as G).toyboxes.debug[f as string](...(a as unknown[])), [f, a] as const) as Promise<T>;
-const act = (what: 'interact' | 'kick') => (phone ? page.locator(what === 'interact' ? '.tbtn-action' : '.tbtn-kick').tap() : page.keyboard.press(what === 'interact' ? 'KeyE' : 'Space'));
+const act = (what: 'interact' | 'kick') => (phone ? page.locator(what === 'interact' ? '.tbtn-action' : '.tbtn-kick').tap() : page.keyboard.press(what === 'interact' ? 'KeyE' : 'KeyF'));
 async function until(check: () => Promise<boolean>, what: string, ms = 10000) {
   const end = Date.now() + ms;
   while (Date.now() < end) {
@@ -82,6 +82,26 @@ for (const tier of ['high', 'medium', 'low'] as const) {
 }
 console.log('frame times', JSON.stringify(perf));
 await d('setQuality', 'auto');
+
+// Low gravity: a jump floats much higher and longer than in town.
+if (phone) await page.locator('.tbtn-jump').tap();
+else await page.keyboard.press('Space');
+let peak = 0;
+let airborne = 0;
+let shotMid = false;
+const t0 = Date.now();
+while (Date.now() - t0 < 3000) {
+  const s = await d('state');
+  peak = Math.max(peak, Number(s.y));
+  if (!s.grounded) airborne = (Date.now() - t0) / 1000;
+  if (!shotMid && Number(s.y) > 2) {
+    shotMid = true;
+    await snap('floating');
+  }
+  await page.waitForTimeout(80);
+}
+console.log('low gravity jump peak', peak.toFixed(2), 'm, in the air for about', airborne.toFixed(1), 's');
+if (peak < 2.5 || airborne < 1.3) throw new Error(`The jump did not float: peak ${peak.toFixed(2)} m, ${airborne.toFixed(1)} s`);
 
 // Kick an orb towards the black hole.
 async function kickOne(): Promise<void> {

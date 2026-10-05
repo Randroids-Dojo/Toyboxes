@@ -32,6 +32,10 @@ export class Avatar {
   private shadow: THREE.Mesh;
   private phase = 0;
   private kickT = 0;
+  /** Height of the feet above whatever is below, and whether in the air. */
+  private air = 0;
+  private airborne = false;
+  private jumpT = 0;
   private shirtMat: THREE.MeshStandardMaterial;
 
   constructor(shirt: string) {
@@ -76,6 +80,16 @@ export class Avatar {
     this.kickT = 0.32;
   }
 
+  jump(): void {
+    this.jumpT = 0.18;
+  }
+
+  /** The shadow stays on the ground while the figure is in the air. */
+  setAir(height: number, airborne: boolean): void {
+    this.air = Math.max(0, height);
+    this.airborne = airborne;
+  }
+
   /** `speed` in m/s on foot; `ride` picks a pose. */
   animate(dt: number, speed: number, ride: 'none' | 'scooter' | 'kart', reduceMotion: boolean): void {
     this.kickT = Math.max(0, this.kickT - dt);
@@ -101,6 +115,21 @@ export class Avatar {
       return;
     }
     this.shadow.visible = true;
+    this.shadow.position.y = 0.02 - this.air;
+    const k = 1.1 * Math.max(0.45, 1 - this.air * 0.25);
+    this.shadow.scale.set(k, 1, k);
+    this.jumpT = Math.max(0, this.jumpT - dt);
+    if (this.airborne) {
+      // Knees up, arms out: a toy mid-hop.
+      this.legL.rotation.x = -0.7;
+      this.legR.rotation.x = -0.25;
+      this.armL.rotation.set(-0.4, 0, 0.9);
+      this.armR.rotation.set(-0.4, 0, -0.9);
+      this.rig.position.set(0, 0, 0);
+      this.rig.rotation.x = 0.05;
+      this.head.rotation.y = 0;
+      return;
+    }
     this.armL.rotation.z = 0.06;
     this.armR.rotation.z = -0.06;
     const moving = Math.min(1, speed / 4.2);

@@ -1487,6 +1487,14 @@ html.reduce-motion .banner-text.out {
   height: 70px;
 }
 
+.tbtn-jump {
+  right: calc(126px + var(--safe-r));
+  bottom: calc(108px + var(--safe-b));
+  width: 70px;
+  height: 70px;
+  background: #d8f2ff;
+}
+
 .tbtn-menu {
   top: calc(10px + var(--safe-t));
   right: calc(12px + var(--safe-r));
@@ -1523,6 +1531,12 @@ html.reduce-motion .banner-text.out {
   .tbtn-kick {
     right: calc(30px + var(--safe-r));
     bottom: calc(28px + var(--safe-b));
+    width: 66px;
+    height: 66px;
+  }
+  .tbtn-jump {
+    right: calc(110px + var(--safe-r));
+    bottom: calc(40px + var(--safe-b));
     width: 66px;
     height: 66px;
   }

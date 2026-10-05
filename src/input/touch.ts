@@ -12,6 +12,7 @@ export class TouchControls {
   private knob: HTMLDivElement;
   private actionBtn: HTMLButtonElement;
   private kickBtn: HTMLButtonElement;
+  private jumpBtn: HTMLButtonElement;
   private stick: { id: number; x: number; y: number } | null = null;
   private lookers = new Map<number, { x: number; y: number }>();
   private enabled = true;
@@ -23,6 +24,7 @@ export class TouchControls {
       <div class="touch-surface"></div>
       <div class="stick-base"><div class="stick-knob"></div></div>
       <button class="tbtn tbtn-kick" tabindex="-1" aria-label="Kick">Kick</button>
+      <button class="tbtn tbtn-jump" tabindex="-1" aria-label="Jump">Jump</button>
       <button class="tbtn tbtn-action" tabindex="-1" aria-label="Interact"></button>
       <button class="tbtn tbtn-menu" tabindex="-1" aria-label="Menu"><span></span><span></span><span></span></button>
     `;
@@ -32,8 +34,10 @@ export class TouchControls {
     this.knob = this.root.querySelector('.stick-knob')!;
     this.actionBtn = this.root.querySelector('.tbtn-action')!;
     this.kickBtn = this.root.querySelector('.tbtn-kick')!;
+    this.jumpBtn = this.root.querySelector('.tbtn-jump')!;
     this.bindButton(this.actionBtn, 'interact');
     this.bindButton(this.kickBtn, 'kick');
+    this.bindButton(this.jumpBtn, 'jump');
     this.bindButton(this.root.querySelector('.tbtn-menu')!, 'pause');
 
     this.surface.addEventListener('pointerdown', (e) => this.down(e));
@@ -89,6 +93,10 @@ export class TouchControls {
     } else {
       this.kickBtn.classList.add('gone');
     }
+  }
+
+  setJump(show: boolean): void {
+    this.jumpBtn.classList.toggle('gone', !show);
   }
 
   private reset(): void {

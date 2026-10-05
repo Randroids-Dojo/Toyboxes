@@ -20,12 +20,12 @@ export interface Panel {
   capture?: (a: MenuAction) => boolean;
 }
 
-export type Glyph = 'interact' | 'kick' | 'back' | 'pause' | 'move' | 'look' | 'rotate' | 'remove' | 'next';
+export type Glyph = 'interact' | 'kick' | 'jump' | 'back' | 'pause' | 'move' | 'look' | 'rotate' | 'remove' | 'next';
 
 const GLYPHS: Record<'kbm' | 'tv' | 'pad', Record<Glyph, string>> = {
-  kbm: { interact: 'E', kick: 'Space', back: 'Esc', pause: 'Esc', move: 'WASD', look: 'Drag', rotate: 'R', remove: 'Del', next: 'Tab' },
-  tv: { interact: 'OK', kick: 'Space', back: 'Back', pause: 'Back', move: 'Arrows', look: '', rotate: 'R', remove: 'Del', next: 'Tab' },
-  pad: { interact: 'A', kick: 'X', back: 'B', pause: 'Menu', move: 'L', look: 'R', rotate: 'X', remove: 'Y', next: 'RB' },
+  kbm: { interact: 'E', kick: 'F', jump: 'Space', back: 'Esc', pause: 'Esc', move: 'WASD', look: 'Drag', rotate: 'R', remove: 'Del', next: 'Tab' },
+  tv: { interact: 'OK', kick: 'F', jump: 'Space', back: 'Back', pause: 'Back', move: 'Arrows', look: '', rotate: 'R', remove: 'Del', next: 'Tab' },
+  pad: { interact: 'A', kick: 'X', jump: 'Y', back: 'B', pause: 'Menu', move: 'L', look: 'R', rotate: 'X', remove: 'Y', next: 'RB' },
 };
 
 export function h<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string | boolean | number | undefined> = {}, ...children: (Node | string | null | undefined | false)[]): HTMLElementTagNameMap[K] {

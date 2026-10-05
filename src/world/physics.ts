@@ -65,6 +65,21 @@ export function resolveCircle(p: { x: number; z: number }, r: number, colliders:
   return best;
 }
 
+/**
+ * Height of the highest top under a circle of radius r at (x, z) that is no
+ * higher than `y` plus a small step, or 0 for the floor. Tall things (walls)
+ * are never stood on because their tops are out of reach.
+ */
+export function groundHeight(x: number, z: number, r: number, colliders: Collider[], y: number): number {
+  let top = 0;
+  for (const c of colliders) {
+    if (c.h <= top || c.h > y + 0.12) continue;
+    const hit = c.kind === 'box' ? circleBox(x, z, r, c) : circleCircle(x, z, r, c);
+    if (hit) top = c.h;
+  }
+  return top;
+}
+
 function circleCircle(x: number, z: number, r: number, c: CircleCollider): Hit | null {
   const dx = x - c.x;
   const dz = z - c.z;

@@ -58,7 +58,7 @@ page.on('pageerror', (e) => errors.push(e.message));
 page.on('console', (m) => m.type() === 'error' && !m.text().startsWith('Failed to load resource') && errors.push(m.text()));
 let shot = 0;
 /** Interact and kick with the on-screen buttons on a phone, keys elsewhere. */
-const act = (what: 'interact' | 'kick') => (phone ? page.locator(what === 'interact' ? '.tbtn-action' : '.tbtn-kick').tap() : page.keyboard.press(what === 'interact' ? 'KeyE' : 'Space'));
+const act = (what: 'interact' | 'kick') => (phone ? page.locator(what === 'interact' ? '.tbtn-action' : '.tbtn-kick').tap() : page.keyboard.press(what === 'interact' ? 'KeyE' : 'KeyF'));
 async function forward(ms: number) {
   if (!phone) {
     await page.keyboard.down('KeyW');

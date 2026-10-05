@@ -14,7 +14,7 @@ import { h, type UI } from '../ui/ui';
 import { Avatar, shirtFor } from '../world/avatar';
 import { Interior } from '../world/interior';
 import { disposeTree } from '../world/kit';
-import { circle, clamp, damp, resolveCircle, wrapAngle, type Collider } from '../world/physics';
+import { circle, clamp, damp, groundHeight, resolveCircle, wrapAngle, type Collider } from '../world/physics';
 import { Sky, dayPhase } from '../world/sky';
 import { Town, type Entrance } from '../world/town';
 import { Toys, type Mover, type ToyEvent } from '../world/toys';
@@ -45,6 +45,9 @@ interface Interactable {
 
 const PLAYER_R = 0.36;
 const WALK = 6.0;
+/** Jumps clear about 1.2 m, enough to land on a toy block. Spaces can lower gravity. */
+const GRAVITY = 24;
+const JUMP_SPEED = 7.6;
 const IDLE_RELOCK_MS = 5 * 60 * 1000;
 
 export class Game {
@@ -60,6 +63,11 @@ export class Game {
   private avatar: Avatar;
   private pos = new THREE.Vector3();
   private vel = new THREE.Vector2();
+  /** Vertical speed on foot; pos.y is the height of your feet. */
+  private vy = 0;
+  private grounded = true;
+  /** Top of whatever is under you, for the shadow. */
+  private groundY = 0;
   private yaw = Math.PI;
   private riding: Vehicle | null = null;
   private engine = new Engine();
@@ -352,6 +360,9 @@ export class Game {
     }
     this.pos.set(x, 0, z);
     this.vel.set(0, 0);
+    this.vy = 0;
+    this.grounded = true;
+    this.groundY = 0;
     this.yaw = yaw;
     this.avatar.root.position.copy(this.pos);
     this.avatar.root.rotation.y = yaw;
@@ -622,6 +633,9 @@ export class Game {
     this.riding = v;
     v.ridden = true;
     this.vel.set(0, 0);
+    this.vy = 0;
+    this.grounded = true;
+    this.pos.y = 0;
     this.currentScene().remove(this.avatar.root);
     v.seat.add(this.avatar.root);
     this.avatar.root.position.set(0, 0, 0);
@@ -999,7 +1013,7 @@ export class Game {
     return {
       x: v ? v.pos.x : this.pos.x,
       z: v ? v.pos.z : this.pos.z,
-      height: v ? 1.35 : 1.25,
+      height: v ? 1.35 : 1.25 + this.pos.y,
       heading: v ? v.yaw : this.yaw,
       speed: v ? Math.abs(v.speed) : this.vel.length(),
       riding: !!v,
@@ -1073,7 +1087,8 @@ export class Game {
         const mx = control ? this.input.move.x : 0;
         const my = control ? this.input.move.y : 0;
         const throttle = control ? clamp(my + this.input.throttle - this.input.brake, -1, 1) : 0;
-        const brake = control && this.input.isHeld('kick') ? 1 : 0;
+        // Kick or jump held brakes (and drifts on a race track).
+        const brake = control && (this.input.isHeld('kick') || this.input.isHeld('jump')) ? 1 : 0;
         v.drive(h, throttle, -mx, brake, cols);
         if (v.bumped) {
           sfx.bump(Math.min(1, v.bumped / 10));
@@ -1104,7 +1119,8 @@ export class Game {
         this.vel.y += (wz - this.vel.y) * k;
         this.pos.x += this.vel.x * h;
         this.pos.z += this.vel.y * h;
-        const hit = resolveCircle(this.pos, PLAYER_R, cols);
+        // Things lower than your feet pass under you.
+        const hit = resolveCircle(this.pos, PLAYER_R, cols, this.pos.y);
         if (hit) {
           const vn = this.vel.x * hit.nx + this.vel.y * hit.nz;
           if (vn < 0) {
@@ -1114,12 +1130,29 @@ export class Game {
         }
         const sp = this.vel.length();
         if (sp > 0.4) this.yaw += wrapAngle(Math.atan2(this.vel.x, this.vel.y) - this.yaw) * damp(14, h);
-        this.stepDist += sp * h;
+        if (this.grounded) this.stepDist += sp * h;
         if (this.stepDist > 1.25) {
           this.stepDist = 0;
           sfx.step();
         }
         if (sp > 1) this.movedFor += h;
+        // Jumping, falling and landing on top of low things like toy blocks.
+        if (i === 0 && control && this.grounded && this.input.take('jump')) {
+          this.vy = JUMP_SPEED;
+          this.grounded = false;
+          this.avatar.jump();
+          sfx.jump();
+        }
+        const was = this.pos.y;
+        this.vy -= GRAVITY * (sv?.gravity?.() ?? 1) * h;
+        this.pos.y += this.vy * h;
+        this.groundY = groundHeight(this.pos.x, this.pos.z, PLAYER_R * 0.7, cols, Math.max(was, this.pos.y));
+        if (this.pos.y <= this.groundY) {
+          if (!this.grounded && this.vy < -4) sfx.land(Math.min(1, -this.vy / 12));
+          this.pos.y = this.groundY;
+          this.vy = 0;
+          this.grounded = true;
+        } else this.grounded = false;
       }
       for (const v of this.rideables()) if (v !== this.riding) v.idle(h, this.space.kind === 'hub' ? this.town.colliders : cols);
       sv?.step?.(h, this.playerState());
@@ -1168,6 +1201,7 @@ export class Game {
       this.avatar.root.position.copy(this.pos);
       this.avatar.root.rotation.y = this.yaw;
     }
+    this.avatar.setAir(this.riding ? 0 : this.pos.y - this.groundY, !this.riding && !this.grounded);
     this.avatar.animate(dt, this.riding ? 0 : this.vel.length(), this.riding ? this.riding.kind : 'none', this.settings.reduceMotion);
     if (this.riding) this.engine.set(Math.min(1, Math.abs(this.riding.speed) / this.riding.t.maxSpeed), this.riding.kind);
 
@@ -1210,6 +1244,7 @@ export class Game {
       ui.prompt(label || null);
       this.touch.setAction(act ? act.short || null : 'Get off');
       this.touch.setKick('Brake');
+      this.touch.setJump(false);
     } else {
       const it = this.current;
       const kick = sv?.kickAction?.(this.playerState()) ?? null;
@@ -1217,6 +1252,7 @@ export class Game {
       this.touch.setAction(it ? it.short : null);
       const ball = this.toys.nearestBall(this.pos.x, this.pos.z);
       this.touch.setKick(kick ? kick.label : 'Kick');
+      this.touch.setJump(true);
       if (!it && !kick && ball && ball.dist < 1.8) ui.prompt('Kick', 'kick');
     }
     if (this.hintTimer > 0) {
@@ -1228,6 +1264,7 @@ export class Game {
               ['move', 'Move'],
               ['look', 'Look'],
               ['interact', 'Use'],
+              ['jump', 'Jump'],
               ['kick', 'Kick'],
               ['pause', 'Menu'],
             ]
@@ -1245,6 +1282,8 @@ export class Game {
       space: this.space.kind,
       x: this.pos.x,
       z: this.pos.z,
+      y: this.pos.y,
+      grounded: this.grounded,
       yaw: this.yaw,
       riding: this.riding?.kind ?? null,
       speed: this.riding ? this.riding.speed : this.vel.length(),
@@ -1266,6 +1305,8 @@ export class Game {
       return { door: it.door, lectern: it.lectern, chest: it.chest, areaDoors: it.areaDoors.map((d) => ({ x: d.x, z: d.z, name: d.area.name })), exhibits: it.exhibitSpots.map((e) => ({ x: e.x, z: e.z, title: e.exhibit.title })) };
     },
     toys: () => this.toys.nearestBall(this.pos.x, this.pos.z),
+    /** Toy blocks in the current space, for jump playtests. */
+    blocks: () => this.toys.placements.filter((p) => p.kind === 'crate').map((p) => ({ x: p.x, z: p.z, rot: p.rot })),
     experience: () => {
       if (this.space.kind !== 'area') return null;
       const sv = this.space.interior as SpaceView & { debugInfo?: () => unknown };

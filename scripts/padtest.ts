@@ -121,6 +121,18 @@ const moved = Math.hypot((after.x as number) - (before.x as number), (after.z as
 console.log('moved', moved.toFixed(2));
 if (moved < 2) throw new Error('Stick did not move the player');
 
+// 2b. Y jumps.
+let peak = 0;
+await page.evaluate((i) => ((window as unknown as { __pad: { buttons: number[] } }).__pad.buttons[i] = 1), BTN.Y);
+for (let i = 0; i < 10; i++) {
+  peak = Math.max(peak, Number((await state()).y));
+  await page.waitForTimeout(50);
+}
+await page.evaluate((i) => ((window as unknown as { __pad: { buttons: number[] } }).__pad.buttons[i] = 0), BTN.Y);
+console.log('jump peak', peak.toFixed(2));
+if (peak < 0.5) throw new Error(`Y did not jump: peak ${peak.toFixed(2)} m`);
+await page.waitForTimeout(600);
+
 // 3. Pause menu opens with Start and closes with B.
 await press(BTN.START);
 await page.waitForTimeout(300);

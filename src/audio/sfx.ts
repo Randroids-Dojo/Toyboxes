@@ -161,6 +161,14 @@ export const sfx = {
     tone(880, 0.12, { type: 'triangle', gain: 0.14 });
     tone(best ? 1318 : 1046, best ? 0.4 : 0.2, { type: 'triangle', gain: 0.14, at: 0.1 });
   },
+  jump(): void {
+    tone(330, 0.16, { type: 'triangle', gain: 0.1, slide: 1.9 });
+  },
+  land(strength: number): void {
+    if (!gate('land', 120)) return;
+    tone(120, 0.1, { gain: 0.08 + strength * 0.12, slide: 0.6 });
+    noise(0.06, { gain: 0.04 + strength * 0.05, freq: 700, q: 0.7 });
+  },
   boost(): void {
     if (!gate('boost', 250)) return;
     noise(0.55, { gain: 0.13, freq: 500, sweep: 2600, q: 0.7 });

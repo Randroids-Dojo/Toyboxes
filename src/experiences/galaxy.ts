@@ -219,7 +219,8 @@ export class Galaxy implements SpaceView {
     s.add(fence);
     for (let i = 0; i < 36; i++) {
       const a = (i / 36) * Math.PI * 2;
-      this.colliders.push(box(Math.sin(a) * (PR + 0.9), -Math.cos(a) * (PR + 0.9), 1.0, 0.25, -a, 3, 0.5, false));
+      // Taller than any low-gravity jump, so nobody floats over the edge.
+      this.colliders.push(box(Math.sin(a) * (PR + 0.9), -Math.cos(a) * (PR + 0.9), 1.0, 0.25, -a, 40, 0.5, false));
     }
 
     // The way home: a vortex ring at the back of the platform.
@@ -445,6 +446,11 @@ export class Galaxy implements SpaceView {
   actions(player: PlayerState): SpaceAction[] {
     if (player.riding || this.frenzy) return [];
     return [{ ...this.shrineSpot, range: 1.8, label: 'Start a feeding frenzy', short: 'Frenzy', run: () => this.startFrenzy() }];
+  }
+
+  /** Low gravity: jumps float. */
+  gravity(): number {
+    return 0.35;
   }
 
   holdsTime(): boolean {
