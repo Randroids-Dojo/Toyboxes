@@ -21,6 +21,7 @@ const actions = z.discriminatedUnion('action', [
   z.object({ action: z.literal('resetLayout'), roomId: s.roomId }),
   z.object({ action: z.literal('pageStatus'), roomId: s.roomId, pageId: s.pageId, status: z.enum(['requested', 'building', 'available']) }),
   z.object({ action: z.literal('markSeen'), roomId: s.roomId, pageId: s.pageId }),
+  z.object({ action: z.literal('pageNote'), roomId: s.roomId, pageId: s.pageId, note: z.string().max(600) }),
   z.object({ action: z.literal('removePage'), roomId: s.roomId, pageId: s.pageId, removed: z.boolean() }),
   z.object({ action: z.literal('revertPage'), roomId: s.roomId, pageId: s.pageId, index: z.number().int().min(0).max(30) }),
   z.object({ action: z.literal('saveContent'), roomId: s.roomId, content: s.content }),
@@ -68,6 +69,8 @@ export default route({
         return admin.setPageStatus(b.roomId, b.pageId, b.status);
       case 'markSeen':
         return admin.markSeen(b.roomId, b.pageId);
+      case 'pageNote':
+        return admin.setPageNote(b.roomId, b.pageId, b.note);
       case 'removePage':
         return admin.setPageRemoved(b.roomId, b.pageId, b.removed);
       case 'revertPage':

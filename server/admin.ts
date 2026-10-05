@@ -119,6 +119,7 @@ export async function feed() {
         status: meta.status,
         seen: meta.seenRev >= p.rev,
         removed: !!p.removed,
+        note: meta.note ?? '',
       };
     })
     .filter((x) => x !== null);
@@ -142,7 +143,7 @@ export async function roomDetail(id: string) {
     room: safe,
     pin: pin ? { epoch: pin.epoch, setAt: pin.setAt, setBy: pin.setBy, recentFailures: fails ?? 0 } : null,
     content: content ?? EMPTY_CONTENT,
-    pages: pages.map((p, i) => ({ ...p, seen: (metas[i]?.seenRev ?? 0) >= p.rev, history: history[i] })),
+    pages: pages.map((p, i) => ({ ...p, seen: (metas[i]?.seenRev ?? 0) >= p.rev, note: metas[i]?.note ?? '', history: history[i] })),
     log: logEntries,
   };
 }
@@ -255,6 +256,13 @@ export async function setPageStatus(roomId: string, pageId: string, status: Page
   await store.set(`pagemeta:${roomId}:${pageId}`, { ...meta, status });
   const page = await store.get<Page>(`page:${roomId}:${pageId}`);
   await log(roomId, 'admin', `Marked page ${page?.n ?? '?'} ${status}`);
+  return { ok: true };
+}
+
+export async function setPageNote(roomId: string, pageId: string, note: string) {
+  const store = getStore();
+  const meta = await pageMeta(roomId, pageId);
+  await store.set(`pagemeta:${roomId}:${pageId}`, { ...meta, note: note.slice(0, 600) });
   return { ok: true };
 }
 

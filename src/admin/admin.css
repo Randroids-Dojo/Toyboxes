@@ -342,6 +342,15 @@ textarea.in {
   padding: 10px;
 }
 
+.page-note {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: #eef6ff;
+  border: 2px solid #b9d8f2;
+  font-size: 0.9rem;
+}
+
 .page.removed {
   opacity: 0.6;
 }

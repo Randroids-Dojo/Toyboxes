@@ -57,6 +57,8 @@ export interface PageMeta {
   status: PageStatus;
   /** The page rev the creator last looked at. */
   seenRev: number;
+  /** Creator-only note, e.g. what an automatic build did or why it skipped. */
+  note?: string;
 }
 
 export interface LogEntry {

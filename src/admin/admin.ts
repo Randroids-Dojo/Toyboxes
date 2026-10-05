@@ -137,6 +137,7 @@ interface RoomRow {
 interface DetailPage extends Page {
   removed?: boolean;
   seen: boolean;
+  note?: string;
   history: (Page & { savedAt: number; by: string })[];
 }
 
@@ -405,6 +406,7 @@ function renderPage(p: DetailPage): HTMLElement {
       btn(p.removed ? 'Restore' : 'Remove', () => void act('removePage', { roomId, pageId: p.id, removed: !p.removed }, p.removed ? 'Restored' : 'Removed', p.removed ? undefined : 'Hide this page from the owner?'), 'small'),
     ),
     el('div', { class: 'page-body' }, p.sketch.length ? strokesCanvas(p.sketch) : null, el('div', { class: 'text' }, p.text)),
+    p.note ? el('p', { class: 'page-note' }, p.note) : null,
     p.history.length ? hist : null,
   );
 }
