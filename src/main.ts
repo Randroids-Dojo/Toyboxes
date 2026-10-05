@@ -60,10 +60,12 @@ async function boot(): Promise<void> {
     ui.setDevice(d);
     game.updateTouchVisibility();
   };
+  let syncBanner = () => {};
   ui.onStackChange = (open) => {
     input.menuMode = open;
     touch.setEnabled(!open);
     if (open) input.releaseAll();
+    syncBanner();
   };
 
   const resize = () => {
@@ -145,7 +147,8 @@ async function boot(): Promise<void> {
     banner.show();
     game.setUpdateReady();
   });
-  setInterval(() => banner.sync(game.isCalm()), 500);
+  syncBanner = () => banner.sync(game.isCalm());
+  setInterval(syncBanner, 500);
 
   document.body.classList.add('ready');
   (window as unknown as { toyboxes: Game }).toyboxes = game;

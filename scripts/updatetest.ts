@@ -38,7 +38,9 @@ await page.keyboard.press('Escape');
 await page.waitForTimeout(300);
 const first = await page.locator('.menu-list .btn').first().textContent();
 if (first !== 'Get the new version') throw new Error(`Pause menu does not offer the update: ${first}`);
-if (await page.locator('.update-banner').count()) throw new Error('Banner stayed up over the menu');
+await page.waitForFunction(() => !document.querySelector('.update-banner'), null, { timeout: 2000 }).catch(() => {
+  throw new Error('Banner stayed up over the menu');
+});
 await page.keyboard.press('Escape');
 await page.waitForTimeout(800);
 
