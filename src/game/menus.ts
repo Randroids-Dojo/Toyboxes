@@ -91,6 +91,7 @@ export function settingsPanel(ui: UI, onChange: (s: local.Settings) => void): Pa
     segmented('Graphics', [['auto', 'Auto'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High']], s.quality, (v) => set('quality', v)),
     toggle('Reduce motion', s.reduceMotion, (v) => set('reduceMotion', v)),
     toggle('Larger text', s.largeText, (v) => set('largeText', v)),
+    toggle('Show frame rate', s.showFps, (v) => set('showFps', v)),
     segmented('Touch controls', [['auto', 'Auto'], ['show', 'Show'], ['hide', 'Hide']], s.touchControls, (v) => set('touchControls', v)),
     installRow(),
   );

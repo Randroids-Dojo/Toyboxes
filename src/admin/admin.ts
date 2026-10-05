@@ -587,6 +587,7 @@ function renderExperienceFields(a: Area): HTMLElement {
     ['room', 'Room with toys'],
     ['kart', 'Kart track'],
     ['casino', 'Casino'],
+    ['galaxy', 'Black hole galaxy'],
   ]) kind.append(el('option', { value: v, selected: (a.experience?.kind ?? 'room') === v }, label));
   const sketched = detail!.pages.filter((p) => p.sketch.length);
   const pickTrack = (pageId: string): number[] | null => {
@@ -615,6 +616,7 @@ function renderExperienceFields(a: Area): HTMLElement {
     }
     if (v === 'room') a.experience = null;
     else if (v === 'casino') a.experience = { kind: 'casino' };
+    else if (v === 'galaxy') a.experience = { kind: 'galaxy' };
     else {
       const first = sketched.map((p) => pickTrackQuiet(p.sketch)).find((t) => t);
       if (!first) {
@@ -686,6 +688,9 @@ function renderAreaPages(a: Area): HTMLElement | null {
 /** A kart track's shape, or a note for a casino. */
 function renderExperiencePreview(a: Area): HTMLElement {
   const exp = a.experience!;
+  if (exp.kind === 'galaxy') {
+    return el('div', { class: 'inspector' }, el('h4', {}, 'Black hole galaxy'), el('p', { class: 'row-sub' }, 'A floating crystal platform in another dimension. Kick glowing orbs off the edge into the black hole; feeding frenzies are 60-second rounds with a best-score board.'));
+  }
   if (exp.kind === 'casino') {
     return el('div', { class: 'inspector' }, el('h4', {}, 'Casino'), el('p', { class: 'row-sub' }, 'A giant slot machine with a lever, a credits kiosk with each player\u2019s balance over time, and a top balances board. Players start with 1,000 play credits and get a free refill when they run out.'));
   }

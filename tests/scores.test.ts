@@ -32,6 +32,7 @@ function ovalSketch() {
 const track = trackFromSketch(ovalSketch())!;
 let roomId = '';
 let store: MemoryStore;
+let adminCookie = '';
 const alice = 'browser-alice-0000000000';
 const bob = 'browser-bob-000000000000';
 
@@ -43,6 +44,7 @@ beforeEach(async () => {
   const H = { 'x-toyboxes-admin': '1' };
   const login = await call(adminApi, { method: 'POST', body: { action: 'login', password: 'toyboxes-dev' }, headers: H });
   const cookie = String(login.headers['set-cookie']).split(';')[0];
+  adminCookie = cookie;
   const content = {
     rev: 0,
     areas: [
@@ -155,5 +157,40 @@ describe('casino', () => {
     expect(b.body.board[0].value).toBeGreaterThanOrEqual(b.body.board[1].value);
     const closed = await call(scoresApi, { method: 'POST', body: { action: 'spin', roomId, areaId: 'closed', browserId: alice, name: 'Alice', bet: 10 } });
     expect(closed.status).toBe(404);
+  });
+});
+
+describe('black hole galaxy', () => {
+  beforeEach(async () => {
+    // Swap the casino for a galaxy so the room stays within three areas.
+    const content = {
+      rev: 1,
+      areas: [{ id: 'galaxy', name: 'Black hole galaxy', theme: { wall: 0, floor: 0, trim: 0 }, props: [], published: true, experience: { kind: 'galaxy' } }],
+      exhibits: [],
+    };
+    const r = await call(adminApi, { method: 'POST', body: { action: 'saveContent', roomId, content }, headers: { 'x-toyboxes-admin': '1', cookie: adminCookie } });
+    expect(r.status).toBe(200);
+  });
+
+  const frenzy = (browserId: string, name: string, score: number) => call(scoresApi, { method: 'POST', body: { action: 'frenzy', roomId, areaId: 'galaxy', browserId, name, score } });
+
+  it('keeps each player best frenzy and ranks the board', async () => {
+    expect((await frenzy(alice, 'Alice', 12)).body).toMatchObject({ improved: true, best: 12 });
+    expect((await frenzy(alice, 'Alice', 7)).body).toMatchObject({ improved: false, best: 12 });
+    await frenzy(bob, 'Bob', 20);
+    const b = await call(scoresApi, { query: { roomId, areaId: 'galaxy' }, headers: { 'x-browser-id': alice } });
+    expect(b.body.kind).toBe('galaxy');
+    expect(b.body.board.map((r: any) => [r.name, r.value])).toEqual([
+      ['Bob', 20],
+      ['Alice', 12],
+    ]);
+    expect(b.body.best).toBe(12);
+  });
+
+  it('refuses impossible scores and the wrong kind of area', async () => {
+    expect((await frenzy(alice, 'Alice', 999)).status).toBe(400);
+    expect((await frenzy(alice, 'Alice', -1)).status).toBe(400);
+    const gone = await call(scoresApi, { method: 'POST', body: { action: 'frenzy', roomId, areaId: 'kart', browserId: alice, name: 'Alice', score: 3 } });
+    expect(gone.status).toBe(404);
   });
 });

@@ -21,8 +21,9 @@ import { Toys, type Mover, type ToyEvent } from '../world/toys';
 import { Vehicle } from '../world/vehicles';
 import type { ExperienceCtx } from '../experiences/common';
 import { Casino } from '../experiences/casino';
+import { Galaxy } from '../experiences/galaxy';
 import { KartTrack } from '../experiences/kart';
-import type { PlayerState, SpaceView } from '../world/space';
+import type { PlayerState, SpaceView, Tier } from '../world/space';
 import { Arranger } from './arrange';
 import { CameraRig } from './camera';
 import { controlsPanel, pauseMenu, settingsPanel } from './menus';
@@ -78,6 +79,12 @@ export class Game {
   private renderScale = 1;
   private frameTimes: number[] = [];
   private lastScaleChange = 0;
+  /** Graphics tier: fixed by the settings, or measured on Auto. */
+  private tier: Tier = 'high';
+  private tierCeiling: Tier = 'high';
+  private lastTierChange = 0;
+  private perf = { fps: 0, mean: 0, p75: 0, worst: 0 };
+  private perfEl: HTMLElement;
   private shadowSize = 1024;
   /** Set by main when a newer deploy is live. */
   private updateReady = false;
@@ -109,6 +116,8 @@ export class Game {
     this.rig.snap(this.follow(), this.yaw);
     this.fadeEl = h('div', { class: 'fade' });
     document.body.appendChild(this.fadeEl);
+    this.perfEl = h('div', { class: 'perf hidden', 'aria-hidden': 'true' });
+    ui.hud.appendChild(this.perfEl);
     this.applySettings(this.settings);
 
     ui.onMenuButton = () => this.openPause();
@@ -170,13 +179,25 @@ export class Game {
     setVolume(s.volume);
     document.documentElement.classList.toggle('large-text', s.largeText || IS_TV);
     document.documentElement.classList.toggle('reduce-motion', s.reduceMotion);
-    const q = s.quality === 'auto' ? (IS_TV || matchMedia('(pointer: coarse)').matches ? 'medium' : 'high') : s.quality;
-    this.shadowSize = q === 'high' ? 2048 : q === 'medium' ? 1024 : 0;
-    this.renderer.shadowMap.enabled = this.shadowSize > 0;
-    this.sky.setShadowQuality(this.shadowSize);
+    const q: Tier = s.quality === 'auto' ? (IS_TV || matchMedia('(pointer: coarse)').matches ? 'medium' : 'high') : s.quality;
+    this.tierCeiling = s.quality === 'auto' ? 'high' : q;
+    this.setTier(q);
     this.renderScale = q === 'low' ? 0.6 : q === 'medium' ? 0.85 : 1;
     this.applyPixelRatio();
     this.updateTouchVisibility();
+    this.perfEl.classList.toggle('hidden', !s.showFps);
+  }
+
+  private setTier(t: Tier): void {
+    this.tier = t;
+    this.shadowSize = t === 'high' ? 2048 : t === 'medium' ? 1024 : 0;
+    this.renderer.shadowMap.enabled = this.shadowSize > 0;
+    this.sky.setShadowQuality(this.shadowSize);
+    const sv = this.view();
+    if (sv) {
+      sv.sun.castShadow = this.shadowSize > 0;
+      sv.setQuality?.(t);
+    }
   }
 
   private applyPixelRatio(): void {
@@ -184,23 +205,42 @@ export class Game {
     this.renderer.setPixelRatio(dpr * this.renderScale);
   }
 
-  /** Auto quality trims render resolution when frames run long. */
+  /**
+   * Measures frame times every 40 frames. On Auto, long frames first trim the
+   * render resolution, then drop the graphics tier; spare time raises them.
+   */
   private adaptQuality(frameMs: number, now: number): void {
-    if (this.settings.quality !== 'auto') return;
     this.frameTimes.push(frameMs);
     if (this.frameTimes.length < 40) return;
     const sorted = [...this.frameTimes].sort((a, b) => a - b);
+    const mean = sorted.reduce((a, b) => a + b, 0) / sorted.length;
     this.frameTimes = [];
     const p75 = sorted[Math.floor(sorted.length * 0.75)];
-    if (now - this.lastScaleChange < 1500) return;
-    if (p75 > 24 && this.renderScale > 0.55) {
-      this.renderScale = Math.max(0.55, this.renderScale - 0.1);
-      this.lastScaleChange = now;
-      this.applyPixelRatio();
-    } else if (p75 < 13 && this.renderScale < 1) {
-      this.renderScale = Math.min(1, this.renderScale + 0.05);
-      this.lastScaleChange = now;
-      this.applyPixelRatio();
+    this.perf = { fps: Math.round(1000 / Math.max(1, mean)), mean, p75, worst: sorted[sorted.length - 1] };
+    if (this.settings.showFps) this.perfEl.textContent = `${this.perf.fps} fps · ${p75.toFixed(1)} ms · ${this.tier[0].toUpperCase()}${this.tier.slice(1)} · ${this.renderScale.toFixed(2)}x`;
+    if (this.settings.quality !== 'auto' || document.hidden) return;
+    const order: Tier[] = ['low', 'medium', 'high'];
+    const idx = order.indexOf(this.tier);
+    if (p75 > 24) {
+      if (this.renderScale > 0.55 && now - this.lastScaleChange > 1500) {
+        this.renderScale = Math.max(0.55, this.renderScale - 0.1);
+        this.lastScaleChange = now;
+        this.applyPixelRatio();
+      } else if (this.renderScale <= 0.55 && idx > 0 && now - this.lastTierChange > 4000) {
+        this.lastTierChange = now;
+        this.renderScale = 0.85;
+        this.applyPixelRatio();
+        this.setTier(order[idx - 1]);
+      }
+    } else if (p75 < 12) {
+      if (this.renderScale < 1 && now - this.lastScaleChange > 1500) {
+        this.renderScale = Math.min(1, this.renderScale + 0.05);
+        this.lastScaleChange = now;
+        this.applyPixelRatio();
+      } else if (this.renderScale >= 1 && idx < order.indexOf(this.tierCeiling) && now - this.lastTierChange > 10000) {
+        this.lastTierChange = now;
+        this.setTier(order[idx + 1]);
+      }
     }
   }
 
@@ -218,6 +258,7 @@ export class Game {
     this.camera.aspect = w / hh;
     this.camera.fov = w < hh ? 68 : 55;
     this.camera.updateProjectionMatrix();
+    this.view()?.resize?.(w, hh);
   }
 
   // -------------------------------------------------------------------------
@@ -343,7 +384,7 @@ export class Game {
   }
 
   private playerState(): PlayerState {
-    return { x: this.pos.x, z: this.pos.z, riding: this.riding };
+    return { x: this.pos.x, z: this.pos.z, yaw: this.yaw, vx: this.vel.x, vz: this.vel.y, riding: this.riding };
   }
 
   private setScene(space: Space): void {
@@ -364,6 +405,9 @@ export class Game {
       space.interior.scene.add(this.toys.group, this.avatar.root);
       this.rig.indoor = space.interior.indoor;
       space.interior.sun.castShadow = this.shadowSize > 0;
+      const sv: SpaceView = space.interior;
+      sv.setQuality?.(this.tier);
+      sv.resize?.(innerWidth, innerHeight);
     }
   }
 
@@ -433,6 +477,10 @@ export class Game {
     }
     if (area.experience?.kind === 'casino') {
       this.setScene({ kind: 'area', room, area, interior: new Casino(this.experienceCtx(room, area)) });
+      return;
+    }
+    if (area.experience?.kind === 'galaxy') {
+      this.setScene({ kind: 'area', room, area, interior: new Galaxy(this.experienceCtx(room, area)) });
       return;
     }
     const interior = new Interior({
@@ -1139,7 +1187,7 @@ export class Game {
 
     this.updateHud(dt, control);
     const scene = this.space.kind === 'hub' ? this.scene : this.space.interior.scene;
-    this.renderer.render(scene, this.camera);
+    if (!this.view()?.render?.(this.renderer, this.camera)) this.renderer.render(scene, this.camera);
   }
 
   private updateHud(dt: number, control: boolean): void {
@@ -1203,6 +1251,9 @@ export class Game {
       unlocked: !!this.token(),
       night: this.sky.night,
       renderScale: this.renderScale,
+      tier: this.tier,
+      fps: this.perf.fps,
+      p75: this.perf.p75,
       menu: this.ui.isOpen,
     }),
     entrances: () => this.town.entrances,
@@ -1218,6 +1269,14 @@ export class Game {
       const sv = this.space.interior as SpaceView & { debugInfo?: () => unknown };
       return sv.debugInfo?.() ?? null;
     },
+    /** Calls a debug method on the current experience, e.g. to shorten a round. */
+    experienceCall: (method: string, ...args: unknown[]) => {
+      const sv = this.view() as (SpaceView & Record<string, unknown>) | null;
+      const fn = sv?.[method];
+      return typeof fn === 'function' ? (fn as (...a: unknown[]) => unknown).apply(sv, args) : null;
+    },
+    /** Pins the graphics tier, as the Graphics setting would. */
+    setQuality: (q: local.Quality) => this.applySettings({ ...this.settings, quality: q }),
   };
 
   onHidden(hidden: boolean): void {

@@ -82,6 +82,8 @@ export interface Settings {
   time: TimeMode;
   touchControls: 'auto' | 'show' | 'hide';
   largeText: boolean;
+  /** Frame rate, frame time and graphics tier in a corner of the screen. */
+  showFps: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -94,6 +96,7 @@ export const DEFAULT_SETTINGS: Settings = {
   time: 'cycle',
   touchControls: 'auto',
   largeText: false,
+  showFps: false,
 };
 
 export function settings(): Settings {

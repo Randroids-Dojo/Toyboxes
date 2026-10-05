@@ -125,9 +125,12 @@ export interface Exhibit {
 }
 
 /** A built game an inner area can hold instead of a plain toy room. */
-export type Experience = { kind: 'kart'; track: number[]; laps: number } | { kind: 'casino' };
+export type Experience = { kind: 'kart'; track: number[]; laps: number } | { kind: 'casino' } | { kind: 'galaxy' };
 
-export const EXPERIENCE_KINDS = ['kart', 'casino'] as const;
+export const EXPERIENCE_KINDS = ['kart', 'casino', 'galaxy'] as const;
+
+/** The most orbs anyone could feed the black hole in one frenzy. */
+export const GALAXY_MAX_SCORE = 150;
 
 export interface Area {
   id: string;
@@ -358,7 +361,7 @@ export function contentProblem(content: RoomContent): string | null {
     if (areaIds.has(a.id) || a.id === 'main') return `Duplicate area id ${a.id}`;
     areaIds.add(a.id);
     if (a.experience) {
-      if (a.props.length) return `${a.name}: a ${a.experience.kind === 'kart' ? 'kart track' : 'casino'} has no toys`;
+      if (a.props.length) return `${a.name}: this kind of area has no toys`;
       if (exhibitsIn(content, a.id).length) return `${a.name}: move its game cabinets to another space`;
       if (a.experience.kind === 'kart') {
         const t = trackProblem(a.experience.track);

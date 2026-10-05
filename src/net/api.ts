@@ -10,7 +10,7 @@ export interface BoardRow {
   you: boolean;
 }
 
-export type ScoreBoard = { kind: 'kart'; board: BoardRow[]; best: number | null } | { kind: 'casino'; board: BoardRow[]; stats: CasinoStats };
+export type ScoreBoard = { kind: 'kart'; board: BoardRow[]; best: number | null } | { kind: 'casino'; board: BoardRow[]; stats: CasinoStats } | { kind: 'galaxy'; board: BoardRow[]; best: number | null };
 
 export type Result<T> =
   | { ok: true; data: T }
@@ -64,6 +64,8 @@ export const api = {
   spin: (roomId: string, areaId: string, browserId: string, name: string, bet: number) =>
     call<{ stops: number[]; line: SlotSymbol[]; rule: string | null; win: number; stats: CasinoStats }>('POST', '/api/scores', { action: 'spin', roomId, areaId, browserId, name, bet }),
   refill: (roomId: string, areaId: string, browserId: string, name: string) => call<{ stats: CasinoStats }>('POST', '/api/scores', { action: 'refill', roomId, areaId, browserId, name }),
+  frenzy: (roomId: string, areaId: string, browserId: string, name: string, score: number) =>
+    call<{ best: number; improved: boolean }>('POST', '/api/scores', { action: 'frenzy', roomId, areaId, browserId, name, score }),
   scoreName: (browserId: string, name: string) => call<{ ok: true }>('POST', '/api/scores', { action: 'name', browserId, name }),
 };
 

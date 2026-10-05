@@ -2,3 +2,5 @@
 # Every built experience adds its own lines here.
 experiencetest.ts
 PHONE=1 experiencetest.ts
+galaxytest.ts
+PHONE=1 galaxytest.ts

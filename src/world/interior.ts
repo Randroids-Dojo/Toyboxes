@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { FLOOR_COLORS, ROOM, TRIM_COLORS, WALL_COLORS, areaDoorX, type Area, type Exhibit, type RoomTheme } from '../shared/model';
 import { cached, disposeTree, mesh, plastic, roundBox, sign, signTexture } from './kit';
+import { QUAD_VERT, VORTEX_FRAG } from '../experiences/galaxy-shaders';
 import { box, circle, type Collider } from './physics';
 import type { SpaceView } from './space';
 
@@ -79,6 +80,7 @@ export class Interior implements SpaceView {
   private hemi: THREE.HemisphereLight;
   readonly sun: THREE.DirectionalLight;
   private book: THREE.Group | null = null;
+  private portalTime = { value: 0 };
 
   constructor(readonly spec: InteriorSpec) {
     const s = this.scene;
@@ -253,6 +255,12 @@ export class Interior implements SpaceView {
     const color = TRIM_COLORS[area.theme.trim] ?? '#8a6bd1';
     back.add(mesh(roundBox(1.9, 2.7, T + 0.12, 0.07), plastic(color, { rough: 0.5 }), dx, 1.35, 0));
     back.add(mesh(roundBox(1.5, 2.45, T + 0.18, 0.08), plastic('#2b2340', { rough: 0.4 }), dx, 1.22, 0));
+    if (area.experience?.kind === 'galaxy') {
+      // A swirling portal fills the doorway to the other dimension.
+      const portal = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 2.3), new THREE.ShaderMaterial({ vertexShader: QUAD_VERT, fragmentShader: VORTEX_FRAG, uniforms: { uTime: this.portalTime }, transparent: true }));
+      portal.position.set(dx, 1.2, T / 2 + 0.13);
+      back.add(portal);
+    }
     const s = sign(area.name, 2.4, 0.6, { bg: '#fffaf0', fg: '#2b2340', border: color, radius: 0.14 }, 0.2);
     s.position.set(dx, 3.05, T / 2 + 0.04);
     back.add(s);
@@ -307,6 +315,7 @@ export class Interior implements SpaceView {
   }
 
   update(night: number, t: number): void {
+    this.portalTime.value = t;
     const day = new THREE.Color('#cfeaff');
     const dusk = new THREE.Color('#2a3570');
     for (const m of this.windowMats) {

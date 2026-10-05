@@ -713,6 +713,17 @@ html.reduce-motion .modal > .card {
   justify-self: start;
 }
 
+.perf {
+  position: absolute;
+  right: calc(12px + var(--safe-r));
+  top: calc(64px + var(--safe-t));
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: rgba(29, 24, 48, 0.75);
+  color: #9ff0c6;
+  font: 700 0.75rem ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
 .prompt-gap {
   width: 6px;
 }
@@ -800,6 +811,29 @@ html.reduce-motion .modal > .card {
   }
 }
 
+.galaxy-hud {
+  position: absolute;
+  top: calc(56px + var(--safe-t));
+  left: calc(12px + var(--safe-l));
+  display: grid;
+  justify-items: start;
+  gap: 0;
+  padding: 8px 16px 10px;
+  border-radius: 16px;
+  color: var(--paper);
+  background: rgba(18, 8, 40, 0.7);
+  border: 2px solid rgba(83, 240, 192, 0.6);
+  box-shadow: 0 0 24px rgba(138, 107, 209, 0.45);
+}
+
+.galaxy-hud .kh-time {
+  font-size: 1.8rem;
+}
+
+.galaxy-hud .kh-top {
+  color: #53f0c0;
+}
+
 .ch-main {
   font-family: var(--display);
   font-size: 1.35rem;
@@ -828,6 +862,16 @@ html.reduce-motion .modal > .card {
   }
   .ch-sub {
     display: none;
+  }
+  .galaxy-hud {
+    top: calc(62px + var(--safe-t));
+    padding: 5px 12px 6px;
+  }
+  .galaxy-hud .kh-top {
+    font-size: 0.75rem;
+  }
+  .galaxy-hud .kh-time {
+    font-size: 1.3rem;
   }
   .kh-time {
     font-size: 1.8rem;

@@ -29,6 +29,12 @@ Randroid's room 1 asked for two things on its sketchbook pages:
 | 1 | A go-kart track to race CPU players and set personal best lap times | The **Kart track** inner area. The course is the page's own drawing, three computer drivers, 3-lap races, timed laps, personal bests and a best-laps board | `scripts/experiencetest.ts` (desktop and `PHONE=1`), `tests/scores.test.ts` |
 | 2 | A casino with a giant slot machine you walk up to and spin; credits earned and spent tracked over time | The **Casino** inner area, with a giant slot machine with a lever, server-decided spins, totals and a balance-over-time chart per player, and a top balances board | same |
 
+Room 12 (estevan) asked for a "black hole galaxy" (page 1, with a drawing of a ringed planet, a swirl and streaking comets). Built automatically on 2026-10-05:
+- **Black hole galaxy:** a portal-dimension inner area in its own art style (shader nebula, accretion disk, photon ring, bending light, iridescent glass platform, comet streaks).
+- **Gameplay:** kick orbs into the black hole, plus 60-second feeding frenzies with a board.
+- **Graphics tiers:** set by the Graphics setting, or measured on Auto.
+- **Evidence:** `scripts/galaxytest.ts` (desktop and `PHONE=1`) records frame times per tier.
+
 ## Needs a person
 
 - Load https://toyboxes.games on the Samsung S90H browser: check that focus is visible, the remote's arrows, OK and Back work, the on-screen keyboard and PIN pad work from the couch, and whether the TV browser exposes a paired controller.

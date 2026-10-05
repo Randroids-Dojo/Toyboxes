@@ -4,13 +4,14 @@
 //   lap:<roomId>:<areaId>          sorted set, browser key -> best lap ms
 //   casino:<roomId>:<areaId>:<bk>  CasinoStats (CAS on rev)
 //   casinoboard:<roomId>:<areaId>  sorted set, browser key -> balance
+//   galaxy:<roomId>:<areaId>       sorted set, browser key -> best frenzy score
 //   scorename:<bk>                 the name boards show for that browser
 //
 // Players are anonymous browsers, so scores follow the browser's current
 // name. The casino decides every spin here; the browser only animates it.
 
 import { randomInt } from 'node:crypto';
-import { EMPTY_CONTENT, cleanName, publishedContent, type Area, type RoomContent } from '../src/shared/model.js';
+import { EMPTY_CONTENT, GALAXY_MAX_SCORE, cleanName, publishedContent, type Area, type RoomContent } from '../src/shared/model.js';
 import { BETS, REEL_STRIP, START_CREDITS, freshStats, payout, pushHistory, type CasinoStats, type SlotSymbol } from '../src/shared/slots.js';
 import { minLapMs } from '../src/shared/track.js';
 import { browserKey } from './crypto.js';
@@ -26,11 +27,11 @@ export interface BoardRow {
   you: boolean;
 }
 
-async function experienceArea(roomId: string, areaId: string, kind: 'kart' | 'casino'): Promise<Area> {
+async function experienceArea(roomId: string, areaId: string, kind: 'kart' | 'casino' | 'galaxy'): Promise<Area> {
   await loadRoom(roomId);
   const content = (await getStore().get<RoomContent>(`content:${roomId}`)) ?? EMPTY_CONTENT;
   const area = publishedContent(content).areas.find((a) => a.id === areaId);
-  if (!area || area.experience?.kind !== kind) throw new ApiError(404, 'no_area', kind === 'kart' ? 'That track is closed' : 'That casino is closed');
+  if (!area || area.experience?.kind !== kind) throw new ApiError(404, 'no_area', 'That place is closed');
   return area;
 }
 
@@ -52,6 +53,12 @@ export async function board(roomId: string, areaId: string, browserId: string | 
   const content = (await store.get<RoomContent>(`content:${roomId}`)) ?? EMPTY_CONTENT;
   const area = publishedContent(content).areas.find((a) => a.id === areaId);
   if (!area?.experience) throw new ApiError(404, 'no_area', 'Nothing to score here');
+  if (area.experience.kind === 'galaxy') {
+    const z = `galaxy:${roomId}:${areaId}`;
+    const top = await rows(z, await store.zrevrange(z, 0, BOARD_SIZE - 1), me);
+    const best = me ? await store.zscore(z, me) : null;
+    return { kind: 'galaxy' as const, board: top, best };
+  }
   if (area.experience.kind === 'kart') {
     const z = `lap:${roomId}:${areaId}`;
     const top = await rows(z, await store.zrange(z, 0, BOARD_SIZE - 1), me);
@@ -77,6 +84,21 @@ export async function recordLap(roomId: string, areaId: string, browserId: strin
   if (improved) await store.zadd(z, ms, key);
   await rememberName(key, name);
   return { best: improved ? ms : before!, improved };
+}
+
+/** A feeding frenzy result: keeps each player's best. */
+export async function recordFrenzy(roomId: string, areaId: string, browserId: string, name: string, score: number) {
+  await experienceArea(roomId, areaId, 'galaxy');
+  const key = browserKey(browserId);
+  await limit(`frenzy:${key}`, 10, 60, 'Too many rounds at once');
+  if (!Number.isInteger(score) || score < 0 || score > GALAXY_MAX_SCORE) throw new ApiError(400, 'bad_score', 'That score does not look right');
+  const store = getStore();
+  const z = `galaxy:${roomId}:${areaId}`;
+  const before = await store.zscore(z, key);
+  const improved = before === null || score > before;
+  if (improved) await store.zadd(z, score, key);
+  await rememberName(key, name);
+  return { best: improved ? score : before!, improved };
 }
 
 async function updateStats(roomId: string, areaId: string, key: string, fn: (s: CasinoStats) => CasinoStats): Promise<CasinoStats> {
@@ -146,6 +168,6 @@ export async function renameScores(browserId: string, name: string) {
 export async function clearScores(roomId: string, areaId: string) {
   const store = getStore();
   const ids = await store.zrange(`casinoboard:${roomId}:${areaId}`, 0, -1);
-  await store.del(`lap:${roomId}:${areaId}`, `casinoboard:${roomId}:${areaId}`, ...ids.map((id) => `casino:${roomId}:${areaId}:${id}`));
+  await store.del(`lap:${roomId}:${areaId}`, `galaxy:${roomId}:${areaId}`, `casinoboard:${roomId}:${areaId}`, ...ids.map((id) => `casino:${roomId}:${areaId}:${id}`));
   return { ok: true };
 }

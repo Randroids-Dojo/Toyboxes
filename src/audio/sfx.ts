@@ -182,6 +182,66 @@ export const sfx = {
   },
 };
 
+export const sfxSpace = {
+  portal(): void {
+    noise(1.4, { gain: 0.12, freq: 2400, sweep: 120, q: 0.7 });
+    tone(880, 1.2, { type: 'sine', gain: 0.1, slide: 0.12 });
+  },
+  swallow(): void {
+    tone(320, 0.7, { type: 'sine', gain: 0.16, slide: 0.15 });
+    noise(0.6, { gain: 0.07, freq: 900, sweep: 90, q: 1.4, at: 0.1 });
+    tone(55, 0.9, { type: 'sine', gain: 0.22, at: 0.35, attack: 0.05 });
+  },
+  spawn(): void {
+    tone(1200, 0.25, { type: 'sine', gain: 0.05, slide: 1.6 });
+  },
+};
+
+/** A slow, low hum for otherworldly places. */
+export class Drone {
+  private nodes: AudioNode[] = [];
+  private gain: GainNode | null = null;
+
+  start(): void {
+    const c = ac();
+    if (!c || !master || this.gain) return;
+    this.gain = c.createGain();
+    this.gain.gain.value = 0.0001;
+    const filter = c.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 420;
+    filter.Q.value = 4;
+    const lfo = c.createOscillator();
+    const lfoGain = c.createGain();
+    lfo.frequency.value = 0.07;
+    lfoGain.gain.value = 260;
+    lfo.connect(lfoGain).connect(filter.frequency);
+    for (const f of [55, 82.4, 110.6]) {
+      const o = c.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.value = f;
+      o.detune.value = (Math.random() - 0.5) * 14;
+      o.connect(filter);
+      o.start();
+      this.nodes.push(o);
+    }
+    lfo.start();
+    this.nodes.push(lfo);
+    filter.connect(this.gain).connect(master);
+    this.gain.gain.setTargetAtTime(0.045, c.currentTime, 1.2);
+  }
+
+  stop(): void {
+    const c = ctx;
+    if (!c || !this.gain) return;
+    this.gain.gain.setTargetAtTime(0.0001, c.currentTime, 0.3);
+    const nodes = this.nodes;
+    setTimeout(() => nodes.forEach((n) => (n as OscillatorNode).stop?.()), 1200);
+    this.nodes = [];
+    this.gain = null;
+  }
+}
+
 /** A soft motor that follows vehicle speed. */
 export class Engine {
   private osc: OscillatorNode | null = null;
