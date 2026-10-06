@@ -13,11 +13,24 @@ cd "$(dirname "$0")/../.."
 LOG=/tmp/toyboxes-qa
 mkdir -p "$LOG"
 rm -f /tmp/toyboxes-qa-pass
+DEV_PID=''
+PREVIEW_PID=''
+stop_pid() {
+  if [ -n "$1" ]; then
+    kill "$1" 2>/dev/null || true
+    wait "$1" 2>/dev/null || true
+  fi
+}
+cleanup() {
+  stop_pid "$DEV_PID"
+  stop_pid "$PREVIEW_PID"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 fail() {
   echo "QA FAILED: $1"
   [ -f "$2" ] && tail -40 "$2"
-  pkill -f "vite --host 0.0.0.0" 2>/dev/null
-  pkill -f "vite preview" 2>/dev/null
   exit 1
 }
 step() { echo "== $1"; }
@@ -30,10 +43,15 @@ step "unit tests"; npm test > "$LOG/unit.log" 2>&1 || fail "unit tests" "$LOG/un
 step build; npm run build > "$LOG/build.log" 2>&1 || fail build "$LOG/build.log"
 
 fresh_server() {
-  pkill -f "vite --host 0.0.0.0" 2>/dev/null
-  sleep 1
-  (npx vite --host 0.0.0.0 > "$LOG/dev.log" 2>&1 &)
-  for _ in $(seq 1 40); do curl -s -o /dev/null http://localhost:5207/ && return 0; sleep 0.5; done
+  stop_pid "$DEV_PID"
+  DEV_PID=''
+  node node_modules/vite/bin/vite.js --host 0.0.0.0 --port 5207 --strictPort > "$LOG/dev.log" 2>&1 &
+  DEV_PID=$!
+  for _ in $(seq 1 40); do
+    kill -0 "$DEV_PID" 2>/dev/null || fail "dev server exited" "$LOG/dev.log"
+    curl -fs -o /dev/null http://localhost:5207/ && return 0
+    sleep 0.5
+  done
   fail "dev server did not start" "$LOG/dev.log"
 }
 
@@ -53,13 +71,17 @@ for t in "${PLAYTESTS[@]}"; do
   if ! env $envs npx tsx scripts/$cmd > "$LOG/$i-$name.log" 2>&1; then fail "playtest $t" "$LOG/$i-$name.log"; fi
   grep -q "ERRORS" "$LOG/$i-$name.log" && fail "page errors in $t" "$LOG/$i-$name.log"
 done
-pkill -f "vite --host 0.0.0.0" 2>/dev/null
+stop_pid "$DEV_PID"
+DEV_PID=''
 
 step "update banner on a production build"
-(npx vite preview --port 4317 > "$LOG/preview.log" 2>&1 &)
+node node_modules/vite/bin/vite.js preview --port 4317 --strictPort > "$LOG/preview.log" 2>&1 &
+PREVIEW_PID=$!
 sleep 2
+kill -0 "$PREVIEW_PID" 2>/dev/null || fail "preview server exited" "$LOG/preview.log"
 npx tsx scripts/updatetest.ts > "$LOG/update.log" 2>&1 || fail "update banner" "$LOG/update.log"
-pkill -f "vite preview" 2>/dev/null
+stop_pid "$PREVIEW_PID"
+PREVIEW_PID=''
 
 echo "$SHA" > /tmp/toyboxes-qa-pass
 echo "QA PASSED for $SHA (logs in $LOG, screenshots in /tmp/toyboxes-*)"

@@ -5,10 +5,11 @@
 //   npx tsx scripts/autobuild/release.ts [roomId ...]
 //
 // Room ids are smoke-tested read-only after the deploy. Exit 0 = released,
-// 2 = rolled back, 1 = refused to start.
+// 2 = verified rollback, 3 = deployment or rollback unverified, 1 = refused.
 
 import { execSync, spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { confirmVersion } from './safety';
 
 const BASE = 'https://toyboxes.games';
 const rooms = process.argv.slice(2);
@@ -48,26 +49,16 @@ function run(cmd: string, args: string[], env: Record<string, string> = {}): boo
 
 function smoke(): boolean {
   if (!run('npx', ['tsx', 'scripts/autobuild/prodsmoke.ts', ...rooms])) return false;
-  // The full experience playtest on a temporary room, cleaned up afterwards.
-  if (!run('vercel', ['env', 'pull', '/tmp/toyboxes-prod.env', '--environment', 'production', '--scope', 'randroid88s-projects', '--yes'])) return false;
-  const env: Record<string, string> = {};
-  for (const line of readFileSync('/tmp/toyboxes-prod.env', 'utf8').split('\n')) {
-    const m = line.match(/^(KV_REST_API_URL|KV_REST_API_TOKEN)="?([^"]*)"?$/);
-    if (m) env[m[1]] = m[2];
-  }
-  rmSync('/tmp/toyboxes-prod.env', { force: true });
-  env.ADMIN_PASSWORD = readFileSync(`${process.env.HOME}/.config/toyboxes/admin.pass`, 'utf8').trim();
-  run('npx', ['tsx', 'scripts/kvsnapshot.ts', 'save', '/tmp/toyboxes-release-keys.json'], env);
-  const ok = run('npx', ['tsx', 'scripts/experiencetest.ts', '/tmp/toyboxes-release-exp', `${BASE}/`], env);
-  run('npx', ['tsx', 'scripts/kvsnapshot.ts', 'clean', '/tmp/toyboxes-release-keys.json'], env);
-  return ok;
+  // The complete mutating experience suite runs against local memory in QA.
+  // Production smoke only reads existing rooms. No store snapshots or cleanup.
+  return true;
 }
 
 console.log(`Releasing ${sha.slice(0, 7)}`);
 sh('git push origin main');
 if (!(await waitFor(sha))) {
   console.log('The deploy never went live; check Vercel. Nothing was rolled back.');
-  process.exit(2);
+  process.exit(3);
 }
 console.log('Live. Smoke testing production.');
 if (smoke()) {
@@ -78,6 +69,9 @@ console.log('Production smoke failed. Rolling back.');
 sh(`git revert --no-edit ${sha}`);
 sh('git push origin main');
 const back = sh('git rev-parse HEAD');
-await waitFor(back);
+if (!(await waitFor(back)) || !(await confirmVersion(back, live))) {
+  console.log(`ROLLBACK UNVERIFIED for ${back.slice(0, 7)}; check Vercel`);
+  process.exit(3);
+}
 console.log(`ROLLED BACK to ${back.slice(0, 7)}`);
 process.exit(2);

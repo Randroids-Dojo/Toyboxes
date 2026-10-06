@@ -18,10 +18,10 @@ Work in `/Users/randroid/Documents/Dev/Toyboxes` on `main`, starting from a clea
 4. Plan the smallest build that gives the request a real, playable result (see "What to build").
 5. Implement it, following the conventions below, and commit. Write the message as a human would: no AI attribution, no em or en dashes.
 6. `scripts/autobuild/qa.sh`. On failure, fix and rerun, up to three attempts. If it still fails:
-   - `git reset --hard origin/main`;
+   - preserve the failed commit and any working changes for review; never reset unrelated work;
    - note "Automatic build could not pass QA: <reason>";
    - set the status back to `requested`, mark the page seen and notify the creator.
-7. `npx tsx scripts/autobuild/release.ts <roomId>`. On exit code 2 (rolled back), take the same steps as a QA failure, with the reason from the log.
+7. `npx tsx scripts/autobuild/release.ts <roomId>`. Exit 0 means released. Exit 2 means a rollback was verified live: take the same steps as a QA failure, preserving the rollback commit. Exit 3 means deployment or rollback could not be verified: stop, preserve all work, and notify the creator. Never call exit 3 a successful rollback. Production smoke reads existing rooms only; the complete gameplay suite remains in local QA. Production snapshots and store-wide cleanup are prohibited.
 8. Publish into the room:
    - `admin-cli.ts content-get <roomId> /tmp/content.json`;
    - edit the file: add or update the inner area, put the page id in `pages`, keep everything else unchanged;
@@ -33,7 +33,7 @@ Work in `/Users/randroid/Documents/Dev/Toyboxes` on `main`, starting from a clea
    - `admin-cli.ts seen <roomId> <pageId>`.
 10. Send the creator a push notification: the room, the page, what was built, and the commit.
 
-If a later page is waiting, start again from step 2 with a fresh `queue.ts`.
+Each hourly wake handles at most one page. Leave later pages for the next wake. The queue enumerates every world slot and each active room's complete pages, oldest edit first. It refuses incomplete or changing room membership and more than 10000 pages; a failed check never means nothing new.
 
 ## Safety screen
 

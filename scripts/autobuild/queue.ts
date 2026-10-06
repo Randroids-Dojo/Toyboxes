@@ -9,7 +9,8 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { chromium } from 'playwright-core';
-import { admin } from './client';
+import { admin, BASE } from './client';
+import { allRoomQueue } from './coverage';
 
 const out = process.argv[2] ?? '/tmp/toyboxes-autobuild';
 mkdirSync(out, { recursive: true });
@@ -17,24 +18,27 @@ mkdirSync(out, { recursive: true });
 const COLORS = ['#2b2340', '#e8574a', '#4aa3df', '#3fb68b', '#f4b740', '#8a6bd1'];
 const WIDTHS = [3, 7, 14];
 
-interface FeedItem { roomId: string; pageId: string; slot: number; ownerName: string; roomStatus: string; n: number; rev: number; status: string; seen: boolean; removed: boolean }
-
-const feed = (await admin<{ feed: FeedItem[] }>('GET', '?view=feed')).feed;
-const todo = feed.filter((f) => !f.seen && !f.removed && f.roomStatus === 'active');
+const { todo, rooms, pagesRead } = await allRoomQueue(async () => {
+  const response = await fetch(`${BASE}/api/world`, { cache: 'no-store' });
+  if (!response.ok) throw new Error(`World check failed (${response.status})`);
+  const data = await response.json();
+  return data.slots;
+}, id => admin('GET', `?view=room&id=${encodeURIComponent(id)}`));
+console.log(`Checked every world slot and ${pagesRead} page(s)`);
 if (!todo.length) {
+  writeFileSync(join(out, 'queue.json'), '[]\n');
   console.log('nothing new');
   process.exit(0);
 }
-
-const rooms = new Map<string, any>();
-for (const f of todo) if (!rooms.has(f.roomId)) rooms.set(f.roomId, await admin('GET', `?view=room&id=${encodeURIComponent(f.roomId)}`));
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 600, height: 600 } });
 const items = [];
 for (const f of todo) {
   const d = rooms.get(f.roomId);
+  if (!d) throw new Error('Room disappeared from complete queue');
   const p = d.pages.find((x: { id: string }) => x.id === f.pageId);
+  if (!p) throw new Error('Page disappeared from complete queue');
   const prev = p.history?.[0] ?? null;
   const image = join(out, `room${f.slot + 1}-page${p.n}-rev${p.rev}.png`);
   await page.setContent('<canvas id=c width=600 height=600></canvas>');
@@ -63,6 +67,7 @@ for (const f of todo) {
     pageId: p.id,
     page: p.n,
     rev: p.rev,
+    updatedAt: p.updatedAt,
     status: p.status,
     kind: p.rev > 1 ? 'edited' : 'new',
     text: p.text,

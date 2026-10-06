@@ -10,10 +10,12 @@
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { chromium } from 'playwright-core';
+import { requireLocalPlaytest } from './autobuild/safety';
 import { grandPrixTrack } from '../src/shared/circuits';
 
 const out = process.argv[2] ?? '/tmp/toyboxes-exp';
 const base = process.argv[3] ?? 'http://localhost:5207/';
+requireLocalPlaytest(base);
 mkdirSync(out, { recursive: true });
 const pages = JSON.parse(readFileSync(new URL('../tests/fixtures/randroid-pages.json', import.meta.url), 'utf8')).pages as { text: string; sketch: { c: number; w: number; p: number[] }[] }[];
 
