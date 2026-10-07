@@ -115,7 +115,7 @@ export interface SpaceView {
   kickAction?(player: PlayerState): { label: string; run: () => void } | null;
   /** Something that pauses with the menu, like a race. */
   holdsTime?(): boolean;
-  /** Extra pause menu items under Resume, e.g. "Restart the song" or "Quit the round". */
+  /** Extra pause menu items under Resume, e.g. "Leave the race" or "Restart the song". The menu closes before `run`. */
   pauseItems?(): { label: string; run: () => void }[];
   /** Gravity for jumps here, as a share of normal (low in space). */
   gravity?(): number;
@@ -141,8 +141,6 @@ export interface SpaceView {
   runScale?(): number;
   /** The jump button on foot. Return a label to use it for something else here. */
   jumpAction?(player: PlayerState): { label: string; run: () => void } | null;
-  /** Extra pause menu items, shown after Resume (e.g. "Leave the race"). The menu closes before `run`. */
-  pauseItems?(): { label: string; run: () => void }[];
   /** Graphics tier from the settings and measured frame times. */
   setQuality?(tier: Tier): void;
   /** Draw the frame itself (post-processing). Return true when it did. */
