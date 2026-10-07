@@ -10,7 +10,7 @@
 //   PHONE=1 / PAD=1 / REMOTE=1 for the other devices (REMOTE sends only arrows, Enter and Back).
 //   STAGES=wake,ring,... runs a subset (always starts with arrival).
 
-import { HUB, RING, STAIR } from '../src/shared/galaxy-rules';
+import { HUB, RING, RING_FINISH_S, STAIR, ringGates, ringPoint } from '../src/shared/galaxy-rules';
 import { openWorld } from './lib/world';
 
 const w = await openWorld({ kind: 'galaxy', areaId: 'black-hole-galaxy', name: 'Black hole galaxy', quality: 'high' });
@@ -109,7 +109,7 @@ async function settle(): Promise<void> {
   for (let i = 0; i < 40; i++) {
     const e = await exp();
     if (await w.menuOpen()) await confirm();
-    else if (e.cine || e.flyingStars) await w.act();
+    else if (e.cine || e.flyingStars) await act();
     else return;
     await page.waitForTimeout(250);
   }
@@ -118,7 +118,10 @@ async function settle(): Promise<void> {
 /** Confirms the focused card button (a tap on a phone lifts the stick finger too). */
 async function confirm(): Promise<void> {
   if (touch?.down) await stop();
-  await w.confirm();
+  if (device === 'pad') {
+    await w.hold('interact', 280);
+    await page.waitForTimeout(200);
+  } else await w.confirm();
   if (touch) touch.down = false;
 }
 
@@ -129,21 +132,31 @@ async function closeCard(): Promise<void> {
     await btn.first().tap();
     if (touch) touch.down = false;
     await page.waitForTimeout(300);
-  } else await w.back();
+  } else await back();
 }
 
 /** Interact (E, A, OK or the Action button). */
+/** A press long enough for a slow software-rendered frame to see it (the pad is polled once a frame). */
+const press = (b: 'interact' | 'kick') => (device === 'pad' ? w.hold(b, 280) : w.act(b));
+const back = async () => {
+  if (device === 'pad') {
+    await page.evaluate(() => ((window as any).__pad.buttons[1] = 1));
+    await page.waitForTimeout(280);
+    await page.evaluate(() => ((window as any).__pad.buttons[1] = 0));
+    await page.waitForTimeout(150);
+  } else await w.back();
+};
 const act = async () => {
   // Lift the stick finger first: the harness's tap ends every touch at once.
   if (touch?.down) await stop();
-  await w.act('interact');
+  await press('interact');
   // A tap lifts every finger, including the one on the stick.
   if (touch) touch.down = false;
 };
 /** Kick: F, X, the Kick button; the remote kicks with OK. */
 const kick = async () => {
   if (touch?.down) await stop();
-  await (device === 'remote' ? w.act('interact') : w.act('kick'));
+  await (device === 'remote' ? w.act('interact') : press('kick'));
   if (touch) touch.down = false;
 };
 
@@ -254,8 +267,15 @@ if (stages.has('ring')) {
   await shot('ring-go');
   const t0 = Date.now();
   let lapShot = false;
+  const gates = ringGates();
   await steer(
-    async () => (await exp()).spark,
+    async () => {
+      // Aim a little past the next gate's middle so the line is always crossed.
+      const r = (await exp()).round;
+      if (!r) return null;
+      const g = gates[r.next];
+      return g ? ringPoint(g.s + 2.5, (g.r0 + g.r1) / 2) : ringPoint(RING_FINISH_S + 3, RING.mid);
+    },
     async () => {
       const r = (await exp()).round;
       if (r?.next >= 16 && !lapShot) {
@@ -505,7 +525,7 @@ if (stages.has('leave')) {
   await w.call('debugWarp', 'hub');
   await page.waitForTimeout(400);
   if (device === 'remote') {
-    await w.back();
+    await back();
     await until(async () => w.menuOpen(), 'pause menu', 4000);
     const labels: string[] = await page.evaluate(() => [...document.querySelectorAll('.modal.in .btn')].map((b) => b.textContent ?? ''));
     const idx = labels.findIndex((l) => l.startsWith('Back to') && l.includes('room'));
