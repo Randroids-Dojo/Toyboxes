@@ -815,7 +815,16 @@ export class TagMode implements Mode {
       const l = Math.hypot(dx, dz) || 1;
       const ux = dx / l;
       const uz = dz / l;
-      const want3 = new THREE.Vector3(p.x - ux * 5.4 - uz * 1.1, 3.3, p.z - uz * 5.4 + ux * 1.1);
+      // Pull in toward you rather than end up behind the arena wall, the pillar or a mirror.
+      let back = 5.4;
+      for (; back > 1.6; back -= 0.4) {
+        const k = back / 5.4;
+        const cx = p.x - ux * back - uz * 1.1 * k;
+        const cz = p.z - uz * back + ux * 1.1 * k;
+        if (inArena(cx, cz, 0.5) && clearLine(p.x, p.z, cx, cz, this.live.pieces, 2)) break;
+      }
+      const k = back / 5.4;
+      const want3 = new THREE.Vector3(p.x - ux * back - uz * 1.1 * k, 2.4 + 0.9 * k, p.z - uz * back + ux * 1.1 * k);
       const look = new THREE.Vector3(p.x + ux * Math.min(4, l * 0.4), 1.2, p.z + uz * Math.min(4, l * 0.4));
       if (this.camPos.lengthSq() === 0) {
         this.camPos.copy(want3);
