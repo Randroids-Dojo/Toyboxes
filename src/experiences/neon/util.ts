@@ -80,17 +80,7 @@ export function glowPlastic(color: number, emissive: number, intensity = 1, roug
   return new THREE.MeshStandardMaterial({ color, emissive, emissiveIntensity: intensity, roughness: rough, metalness: metal });
 }
 
-/** Seeded random numbers (mulberry32): the same seed gives the same run. */
-export function rng(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+export { rng } from '../../shared/neon/rng';
 
 export function canvasTexture(w: number, h: number, draw: (g: CanvasRenderingContext2D) => void, srgb = true): THREE.CanvasTexture {
   const c = document.createElement('canvas');

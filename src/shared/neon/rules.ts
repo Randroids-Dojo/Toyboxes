@@ -6,6 +6,7 @@ import type { ScoreMode } from '../score-modes.js';
 import { chartFor } from './charts.js';
 import { danceCeiling, scoreDance } from './judge.js';
 import type { SongId } from './songs.js';
+import { tagBoardScore, tagCeiling } from './tag.js';
 
 /** Board ids for the dance songs (normal charts only). */
 export const DANCE_BOARD: Partial<Record<SongId, string>> = {
@@ -45,8 +46,18 @@ function danceMode(song: SongId): ScoreMode | null {
   };
 }
 
+/** Free play laser tag (Normal and Hard; Hard counts for a quarter more). */
+export const TAG_SECONDS = 120;
+
+export function tagFromLog(log: unknown): number | null {
+  if (!log || typeof log !== 'object' || typeof (log as { dur?: unknown }).dur !== 'number' || (log as { dur: number }).dur < TAG_SECONDS - 1) return null;
+  return tagBoardScore(log);
+}
+
 export function neonModes(): ScoreMode[] {
-  const out: ScoreMode[] = [];
+  const out: ScoreMode[] = [
+    { id: 'tag', label: 'Laser tag', better: 'higher', unit: 'points', min: 0, max: tagCeiling(TAG_SECONDS + 60), ticket: { minMs: (TAG_SECONDS - 5) * 1000 }, fromLog: tagFromLog },
+  ];
   for (const song of Object.keys(DANCE_BOARD) as SongId[]) {
     const m = danceMode(song);
     if (m) out.push(m);

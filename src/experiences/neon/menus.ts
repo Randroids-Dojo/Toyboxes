@@ -7,6 +7,8 @@ import { button, h, type Panel } from '../../ui/ui';
 import { chartFor, DIFF_NAMES, DANCE_SONGS, diffsFor, type Diff } from '../../shared/neon/charts';
 import { danceCeiling } from '../../shared/neon/judge';
 import { SONGS, type SongId } from '../../shared/neon/songs';
+import { LAYOUT_NAMES, type LayoutId } from '../../shared/neon/arena';
+import { TAG_DIFF_NAMES, type TagDiff } from '../../shared/neon/tag';
 import { songData } from './music';
 import type { Nova } from './world';
 
@@ -158,6 +160,53 @@ export function askSoundCheck(nova: Nova, onYes: () => void, onSkip: () => void,
       if (!chose) onSkip();
     },
     initial: () => yes,
+  };
+  ui.open(panel);
+}
+
+/** Which night opens each laser tag layout in free play. */
+export const LAYOUT_NIGHT: Record<LayoutId, number> = { prism: 0, maze: 3, ring: 4 };
+
+/** The Comet Yard terminal: difficulty and layout for a free play match. */
+export function tagSetup(nova: Nova, onPick: (diff: TagDiff, layout: LayoutId) => void, onClose: () => void): void {
+  const ui = nova.ctx.ui;
+  const save = nova.save.data;
+  let layout: LayoutId = 'prism';
+  let picked = false;
+  const layoutBtns = (Object.keys(LAYOUT_NAMES) as LayoutId[]).map((id) => {
+    const locked = save.nights < LAYOUT_NIGHT[id];
+    const b = button(locked ? `${LAYOUT_NAMES[id]} (night ${LAYOUT_NIGHT[id]})` : LAYOUT_NAMES[id], () => {
+      layout = id;
+      for (const x of layoutBtns) x.classList.toggle('on', x === b);
+    }, 'ghost');
+    b.disabled = locked;
+    if (id === 'prism') b.classList.add('on');
+    return b;
+  });
+  const diffBtns = (['easy', 'normal', 'hard'] as TagDiff[]).map((d) => {
+    const key = `tag:${d}`;
+    return button(`${TAG_DIFF_NAMES[d]}  ${stars(save.stars[key] ?? 0, !!save.crowns[key])}`, () => {
+      picked = true;
+      ui.close(panel);
+      onPick(d, layout);
+    }, d === 'normal' ? 'primary' : 'ghost');
+  });
+  const back = button('Back', () => ui.close(panel), 'ghost');
+  const panel: Panel = {
+    el: card(
+      'Laser tag',
+      'Comet Yard',
+      h('p', { class: 'xk-tagline' }, 'Three of us against three of them, two minutes. Tag on the beat to keep your blaster cool.'),
+      h('div', { class: 'nova-grid' }, ...layoutBtns),
+      h('div', { class: 'nova-song-diffs' }, ...diffBtns),
+      h('p', { class: 'muted' }, 'Normal and Hard go on the board.'),
+      h('div', { class: 'actions' }, back),
+    ),
+    onBack: () => ui.close(panel),
+    onClose: () => {
+      if (!picked) onClose();
+    },
+    initial: () => diffBtns[1],
   };
   ui.open(panel);
 }

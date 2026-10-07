@@ -14,21 +14,25 @@ import { Hud, Particles, PostFX, Shockwaves } from '../kit';
 import { DIFF_NAMES, type Diff } from '../../shared/neon/charts';
 import { SONGS, type SongId } from '../../shared/neon/songs';
 import { BLADE_COLORS } from '../../shared/neon/progress';
-import { DANCE_BOARD } from '../../shared/neon/rules';
+import { DANCE_BOARD, TAG_SECONDS } from '../../shared/neon/rules';
 import { boardLine, Boards } from './boards';
 import { BeatClock } from './clock';
 import { NovaCore } from './core';
 import { Crowd } from './crowd';
 import { DanceMode, RIVALS, type DanceOutcome } from './dance';
 import { FLOOR_R, NovaFloor } from './floor';
-import { askSoundCheck, partySettings, songSelect } from './menus';
+import { askSoundCheck, partySettings, songSelect, tagSetup } from './menus';
+import { ArenaView } from './arena-view';
+import { TagMode, type TagOutcome } from './tag';
+import { tagStars, TAG_DIFF_NAMES, type TagDiff } from '../../shared/neon/tag';
+import type { LayoutId } from '../../shared/neon/arena';
 import { songData } from './music';
 import { RhythmInput } from './rhythm-input';
 import { DUELISTS, judgeBot, orbitBot, Robot } from './robots';
 import { NovaProgress } from './save';
 import { Sky } from './sky';
 import { nova as snd } from './sounds';
-import { BOOTH, buildStation, DOOR, JUDGES, JUKEBOX, ORBIT_SPOT, paintBoard, PEDESTALS, STAR_PAD, stationQuality, type StationParts } from './station';
+import { BOOTH, buildStation, DOOR, JUDGES, JUKEBOX, ORBIT_SPOT, paintBoard, PEDESTALS, STAR_PAD, stationQuality, TAG_TERMINAL, type StationParts } from './station';
 import { SyncMode, type SyncResult } from './sync';
 import { Dancer, Fencer, Outfit, type SuitId } from './style';
 import { C } from './util';
@@ -65,6 +69,7 @@ export class NeonParty implements SpaceView, Nova {
 
   private sky: Sky;
   private station: StationParts;
+  private arena: ArenaView;
   private hemi: THREE.HemisphereLight;
   private fill: THREE.DirectionalLight;
   private duelists: Robot[] = [];
@@ -117,6 +122,7 @@ export class NeonParty implements SpaceView, Nova {
     this.scene.add(this.sky.group);
     this.station = buildStation(this.scene, ctx.ownerName);
     this.colliders = this.station.colliders;
+    this.arena = new ArenaView(this.scene, this.colliders);
 
     this.core = new NovaCore();
     this.scene.add(this.core.group);
@@ -295,6 +301,7 @@ export class NeonParty implements SpaceView, Nova {
     this.floor.setLow(t === 'low');
     for (const p of [this.fx.sparks, this.fx.glow, this.fx.confetti]) p.setQuality(t);
     stationQuality(this.station, t);
+    this.arena.setQuality(t);
     this.sun.shadow.mapSize.set(t === 'high' ? 2048 : 1024, t === 'high' ? 2048 : 1024);
     this.sun.shadow.map?.dispose();
     this.sun.shadow.map = null;
@@ -363,6 +370,7 @@ export class NeonParty implements SpaceView, Nova {
     const out: SpaceAction[] = [];
     out.push({ x: BOOTH.x, z: BOOTH.z + 1.6, range: 2.2, label: 'Dance off: pick a song', short: 'Songs', run: () => this.openSongs() });
     out.push({ x: STAR_PAD.x, z: STAR_PAD.z, range: 1.8, label: 'Dance off with Orbit', short: 'Dance', run: () => this.openSongs() });
+    out.push({ x: TAG_TERMINAL.x, z: TAG_TERMINAL.z + 0.9, range: 1.8, label: 'Laser tag', short: 'Tag', run: () => this.openTag() });
     out.push({ x: JUKEBOX.x, z: JUKEBOX.z - 1.2, range: 1.8, label: 'Party settings and sound check', short: 'Settings', run: () => this.openSettings() });
     if (Math.hypot(p.x, p.z) < FLOOR_R - 0.3) out.push({ x: p.x, z: p.z, range: 0.5, label: 'Dance', short: 'Dance', run: () => this.queueFreeDance() });
     return out;
@@ -403,6 +411,80 @@ export class NeonParty implements SpaceView, Nova {
     const beat = this.clock.beatAt();
     this.freeDance = { beat: Math.floor(beat) + 1 };
     this.hint('hint-freedance', 'Dance on the beat!');
+  }
+
+  private openTag(): void {
+    tagSetup(this, (diff, layout) => this.startTag(diff, layout), () => undefined);
+  }
+
+  startTag(diff: TagDiff, layout: LayoutId = 'prism', opts: { size?: 2 | 3 | 4; duration?: number; captain?: boolean; echo?: boolean } = {}): void {
+    if (this.mode) this.endMode();
+    const seed = (Date.now() & 0xffffff) | 1;
+    this.ticket = null;
+    const board = diff !== 'easy' && !opts.duration;
+    this.mode = new TagMode(this, this.arena, {
+      diff,
+      size: opts.size ?? 3,
+      layout,
+      duration: opts.duration ?? TAG_SECONDS,
+      captain: opts.captain ?? false,
+      echo: opts.echo ?? false,
+      practice: !this.save.seen('tag-practice'),
+      seed,
+      onDone: (o) => void this.tagDone(diff, layout, o, board),
+    });
+    if (board) void this.boards.start('tag').then((t) => (this.ticket = t));
+  }
+
+  private async tagDone(diff: TagDiff, layout: LayoutId, o: TagOutcome, board: boolean): Promise<void> {
+    if (o.quit) {
+      this.endMode();
+      return;
+    }
+    const s = o.score;
+    const key = `tag:${diff}`;
+    const total = s?.total ?? 0;
+    const newBest = this.save.best(key, total);
+    const stars = s ? tagStars(diff, s) : 0;
+    const gained = this.save.award(key, stars);
+    if (s && s.win && total >= ({ easy: 1500, normal: 2200, hard: 3000 }[diff] * 1.6)) this.save.data.crowns[key] = true;
+    this.save.data.tagLosses = o.won ? 0 : this.save.data.tagLosses + 1;
+    this.save.save();
+    let line = board ? 'Saving your score...' : 'Easy matches stay on this device.';
+    let rows: { name: string; value: string; you?: boolean }[] | null = null;
+    if (board && s) {
+      const posted = await this.boards.submit('tag', Math.round(total * (diff === 'hard' ? 1.25 : 1)), o.log, this.ticket);
+      line = boardLine(posted, false);
+      const b = await this.boards.fetch(['tag'], true);
+      rows = (b.tag?.rows ?? []).slice(0, 5).map((x) => ({ name: x.name, value: x.value.toLocaleString('en-US'), you: x.you }));
+    }
+    const choice = await this.hud.results({
+      title: o.won ? 'Cyan wins!' : o.us === o.them ? 'A draw' : 'Magenta wins',
+      subtitle: `${o.us} to ${o.them} · ${TAG_DIFF_NAMES[diff]}`,
+      stars,
+      rows: [
+        { label: 'Your points', value: total.toLocaleString('en-US'), best: newBest },
+        { label: 'Tags', value: String(s?.tags ?? 0) },
+        { label: 'Bank shots / Reflects', value: `${s?.banks ?? 0} / ${s?.reflects ?? 0}` },
+        { label: 'Beat shots', value: String(s?.beats ?? 0) },
+      ],
+      badges: [...(newBest && total > 0 ? ['New best!'] : []), ...(gained ? [`+${gained} star${gained > 1 ? 's' : ''}`] : [])],
+      board: rows ? { title: line, rows } : undefined,
+      buttons: [
+        { id: 'again', label: 'Play again', primary: true },
+        ...(diff !== 'easy' && this.save.data.tagLosses >= 2 ? [{ id: 'easier', label: 'Easier bots' }] : []),
+        { id: 'done', label: 'Done' },
+      ],
+    });
+    if (!rows && board) this.ctx.ui.toast(line);
+    this.endMode();
+    if (choice === 'again') this.startTag(diff, layout);
+    else if (choice === 'easier') this.startTag(diff === 'hard' ? 'normal' : 'easy', layout);
+    else this.ctx.teleport(TAG_TERMINAL.x, TAG_TERMINAL.z + 1.4, 0);
+  }
+
+  runScale(): number {
+    return this.mode ? 1 : 1.3;
   }
 
   private openSongs(): void {
@@ -462,6 +544,7 @@ export class NeonParty implements SpaceView, Nova {
       ];
     }
     if (m instanceof SyncMode) return [{ label: 'Skip the sound check', run: () => this.endMode() }];
+    if (m instanceof TagMode && m.playing) return [{ label: 'Leave the match', run: () => m.abandon() }];
     return [];
   }
 
@@ -560,6 +643,7 @@ export class NeonParty implements SpaceView, Nova {
     st.ringMat.uniforms.uBeat.value = beat;
     st.portalMat.uniforms.uTime.value = t;
     this.animateEq(beat);
+    this.arena.update(dt, beat, t);
     st.lasers.visible = this.tierNow !== 'low' && (night > 0.35 || this.glowAmt > 0);
     if (st.lasers.visible) {
       st.lasers.children.forEach((hld, i) => {
@@ -580,7 +664,8 @@ export class NeonParty implements SpaceView, Nova {
     for (const hl of st.holos) hl.position.y = 2.45 + Math.sin(t * 2) * 0.05;
     // The airlock curtain slides open when the yard is free and fades when the camera is near it.
     const cam = this.ctx.camera.position;
-    const near = Math.abs(cam.z - (-20.3)) < 2.5 && Math.abs(cam.x) < 5 ? 0 : 1;
+    // Seen from inside the yard (or right next to it) the curtain hides.
+    const near = (Math.abs(cam.z - -20.3) < 2.5 && Math.abs(cam.x) < 5) || this.player_.z < -20 ? 0 : 1;
     this.doorOpen += ((this.doorsShut ? 0 : 1) - this.doorOpen) * Math.min(1, dt * 4);
     for (const d of st.airlockDoors) {
       d.visible = this.doorOpen < 0.98;
@@ -652,6 +737,7 @@ export class NeonParty implements SpaceView, Nova {
     this.hud.dispose();
     this.layer.remove();
     this.post.dispose();
+    this.arena.dispose();
     if (this.renderer) this.renderer.info.autoReset = true;
     for (const p of [this.fx.sparks, this.fx.glow, this.fx.confetti]) p.dispose();
     this.fx.rings.dispose();
@@ -700,6 +786,15 @@ export class NeonParty implements SpaceView, Nova {
   debugSync(): void {
     this.ctx.ui.closeAll();
     this.runSync(() => this.roam());
+  }
+
+  debugTag(diff: TagDiff = 'normal', layout: LayoutId = 'prism', duration?: number): void {
+    this.ctx.ui.closeAll();
+    this.startTag(diff, layout, { duration });
+  }
+
+  debugSkipPractice(): void {
+    this.save.markSeen('tag-practice');
   }
 
   debugSkipIntro(): void {

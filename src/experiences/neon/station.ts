@@ -624,7 +624,7 @@ export function buildStation(scene: THREE.Scene, ownerName: string): StationPart
       S.add(new THREE.BoxGeometry(w, 1.2, t), wallMat, x, 0.6, ARENA.z1 + t / 2);
       S.add(new THREE.BoxGeometry(w, WALL_H - 1.2, 0.1), glass, x, 1.2 + (WALL_H - 1.2) / 2, ARENA.z1 + t / 2);
       G.add(new THREE.BoxGeometry(w, 0.06, 0.06), neonPink, x, 1.24, ARENA.z1 + t + 0.02);
-      colliders.push(box(x, ARENA.z1 + t / 2, w / 2, t / 2, 0, WALL_H, 0.5, false));
+      colliders.push(box(x, ARENA.z1 + t / 2, w / 2, t / 2, 0, WALL_H, 0.5, true));
     }
     // Light strips along the inner walls, cyan in our half and pink in theirs.
     for (const side of [-1, 1]) {
