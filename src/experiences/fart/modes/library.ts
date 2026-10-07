@@ -15,12 +15,13 @@ import { BISCUIT_SPOT, LIB, Library, NOISE_RADIUS, SIGHT, type LibEvent, type Ma
 import { rng } from '../sim/rng';
 import { LIBRARY_TIPTOE } from '../songs';
 import { fx, hiss, SqueezeHiss, toot, voices } from '../toots';
-import type { Figures } from '../figures';
+import { at, compound, type Figures } from '../figures';
 import type { Trial, TrialWorld } from './trial';
 
 interface Cast {
   people: Map<string, Person>;
   pug: Pug;
+  cart: number;
 }
 
 const casts = new WeakMap<Figures, Cast>();
@@ -77,7 +78,20 @@ export class LibraryTrial implements Trial {
         const spec = rd.id === 'hush' ? CAST.hush : rd.id === 'dozer' ? CAST.dozer : { ...extra(rd.id, r), held: 'book' as const };
         people.set(rd.id, new Person(w.figures, spec, rd.x, rd.z, rd.yaw));
       }
-      cast = { people, pug: new Pug(w.figures, BISCUIT_SPOT.x, BISCUIT_SPOT.z, 0.6) };
+      w.figures.geo('book-cart', () =>
+        compound([
+          [new THREE.BoxGeometry(0.9, 0.08, 0.5), 0x8a5a3a, at(0, 0.55, 0)],
+          [new THREE.BoxGeometry(0.9, 0.08, 0.5), 0x8a5a3a, at(0, 0.2, 0)],
+          [new THREE.BoxGeometry(0.85, 0.28, 0.12), 0xc94f4f, at(-0.1, 0.73, -0.1)],
+          [new THREE.BoxGeometry(0.6, 0.24, 0.12), 0x4f7fc9, at(0.1, 0.71, 0.1)],
+          [new THREE.CylinderGeometry(0.02, 0.02, 0.9, 6), 0x5a3424, at(0.43, 0.45, 0)],
+          [new THREE.TorusGeometry(0.07, 0.025, 6, 10), 0x2b1d3a, at(-0.35, 0.07, 0.22, 0, 0, 0)],
+          [new THREE.TorusGeometry(0.07, 0.025, 6, 10), 0x2b1d3a, at(0.35, 0.07, 0.22, 0, 0, 0)],
+          [new THREE.TorusGeometry(0.07, 0.025, 6, 10), 0x2b1d3a, at(-0.35, 0.07, -0.22, 0, 0, 0)],
+          [new THREE.TorusGeometry(0.07, 0.025, 6, 10), 0x2b1d3a, at(0.35, 0.07, -0.22, 0, 0, 0)],
+        ]),
+      );
+      cast = { people, pug: new Pug(w.figures, BISCUIT_SPOT.x, BISCUIT_SPOT.z, 0.6), cart: w.figures.add('book-cart', 0xffffff) };
       casts.set(w.figures, cast);
     }
     this.cast = cast;
@@ -499,7 +513,15 @@ export class LibraryTrial implements Trial {
       }
       p.update();
     }
-    void hush;
+    // Ms. Hush pushes her squeaky book cart ahead of her.
+    if (hush) {
+      const m = new THREE.Matrix4().compose(new THREE.Vector3(hush.x + Math.sin(hush.yaw) * 0.85, 0, hush.z + Math.cos(hush.yaw) * 0.85), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), hush.yaw + Math.PI / 2), new THREE.Vector3(1, 1, 1));
+      this.w.figures.set(this.cast.cart, m);
+      if (s.hushMoving && Math.random() < dt * 2.5) {
+        fx.squeak();
+        this.w.words.word('squeak', { x: hush.x + Math.sin(hush.yaw) * 0.85, y: 1.0, z: hush.z + Math.cos(hush.yaw) * 0.85 }, { tiny: true, color: '#fff3b0', life: 0.7 });
+      }
+    }
     this.cast.pug.p.peck = 1;
     this.cast.pug.update();
     // View cones for alert readers.
@@ -535,6 +557,7 @@ export class LibraryTrial implements Trial {
     }
     this.cast.pug.p.visible = false;
     this.cast.pug.update();
+    this.w.figures.show(this.cast.cart, false);
     this.meter.remove();
     this.w.ph.tummy(true);
     this.w.clouds.fields = [];
