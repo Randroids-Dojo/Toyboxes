@@ -37,6 +37,8 @@ Page 1 was edited: "make it an actually fun race", check for z-fighting and over
 
 Page 2 was edited to ask for other casino games as well. Built automatically on 2026-10-05: a **roulette wheel** and a **blackjack table** with a robot dealer in the Casino, sharing its credits. The server decides every spin and every card. Evidence: `scripts/experiencetest.ts` (desktop and `PHONE=1`), `tests/casino-games.test.ts`.
 
+The Casino was then rebuilt as its own world, **The Golden Paddle**, a riverboat casino (`src/experiences/casino/`): Old Lucky (a giant slot with a paddle wheel bonus and MINI, MAJOR and a growing GRAND), The Spinning Lily roulette, Rivet's Twenty-One blackjack, the River Wheel on the Stern Deck, Lucky Falls and Five Card Cabin video poker in the Moonlight Lounge, and the Captain's Table in the Wheelhouse. Brass automaton staff, a ragtime band, 35 logbook stamps and earned ranks that open the upper rooms, Penny's free top ups and the Captain's Logbook with charts and boards. Balances carried over; old stats and open blackjack hands are migrated. Play credits only, never real money. Evidence: `scripts/casinotest.ts` (desktop, `PHONE=1`, `PAD=1`, `REMOTE=1`), `scripts/experiencetest.ts`, `tests/casino-*.test.ts` (rules, server, blackjack, poker, layout, and a geometry test for coplanar faces).
+
 Room 12 (estevan) asked for a "black hole galaxy" (page 1, with a drawing of a ringed planet, a swirl and streaking comets). Built automatically on 2026-10-05:
 - **Black hole galaxy:** a portal-dimension inner area in its own art style (shader nebula, accretion disk, photon ring, bending light, iridescent glass platform, comet streaks).
 - **Gameplay:** kick orbs into the black hole, plus 60-second feeding frenzies with a board.
