@@ -48,6 +48,8 @@ export interface JackpotOpts {
   /** Camera keys orbiting the machine, built by the caller. */
   orbit: Framing[];
   at: THREE.Vector3;
+  /** The banner, when it is not a jackpot (a royal flush gets the same ceremony). */
+  title?: string;
 }
 
 export class Ceremonies {
@@ -79,7 +81,11 @@ export class Ceremonies {
   win(o: WinOpts): Tier {
     const tier = winTier(o.paid, o.staked);
     const rm = this.ctx.reduceMotion();
-    const pop = (size = 1.4, color = '#ffd24a') => this.kit.pop(`+${formatCredits(o.paid)}`, { x: o.at.x, y: o.at.y + 0.6, z: o.at.z }, { color, size, life: 1.3, rise: 1.6 });
+    const pop = (size = 1.4, color = '#ffd24a') => {
+      this.kit.pop(`+${formatCredits(o.paid)}`, { x: o.at.x, y: o.at.y + 0.6, z: o.at.z }, { color, size, life: 1.3, rise: 1.6 });
+      // Place it now rather than on the next step.
+      this.kit.update(0);
+    };
     switch (tier) {
       case 'loss':
         return tier;
@@ -148,7 +154,7 @@ export class Ceremonies {
   async jackpot(o: JackpotOpts): Promise<void> {
     const rm = this.ctx.reduceMotion();
     this.current = { kind: o.kind, t: 0 };
-    const label = `${o.kind} JACKPOT`;
+    const label = o.title ?? `${o.kind} JACKPOT`;
     if (o.kind === 'MINI') {
       sound.fanfare('big');
       sound.coins(o.credits);

@@ -102,7 +102,7 @@ export const SPOTS = {
   logbook: { x: 7.5, z: 5.0, range: 1.6, yaw: 0 },
   loungeGate: { x: -10.6, z: 0, range: 1.6, yaw: -PI / 2 },
   wheel: { x: 15.9, z: 0, range: 1.8, yaw: PI / 2 },
-  falls: { x: -16.5, z: -4.9, range: 1.8, yaw: PI },
+  falls: { x: -14.4, z: -4.9, range: 1.8, yaw: -2.4 },
   poker0: { x: -14.5, z: 5.3, range: 1.1, yaw: 0 },
   poker1: { x: -16.5, z: 5.3, range: 1.1, yaw: 0 },
   poker2: { x: -18.5, z: 5.3, range: 1.1, yaw: 0 },
@@ -128,7 +128,7 @@ export const SODA = { x0: 8, x1: 11.5, z: -8.45 };
 export const RIVER_WHEEL = { x: 19.6, y: 3.9, z: 0, r: 3.1 };
 export const WHEEL_RAIL = { x: 16.6, z: 0 };
 export const STERNWHEEL = { x: 24.5, y: 0.9, r: 3.4, width: 14 };
-export const FALLS = { x: -16.5, z: -6.6, w: 3.6, h: 5.2 };
+export const FALLS = { x: -16.5, z: -6.6, w: 3.6, h: 4.1 };
 export const POKER_CABINETS: Pt[] = [{ x: -14.5, z: 6.3 }, { x: -16.5, z: 6.3 }, { x: -18.5, z: 6.3 }];
 export const LOUNGE_TABLES: Pt[] = [{ x: -14.2, z: -1.8 }, { x: -18.4, z: -2.6 }, { x: -14.6, z: 2.4 }, { x: -18.6, z: 2.2 }];
 export const CAPTAIN_TABLE = { x: -23.6, z: -1.8, r: 1.8 };

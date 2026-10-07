@@ -1629,3 +1629,205 @@ body[data-device='touch'] .lb-hint {
 .penny-card .lb-tiles {
   margin-top: 6px;
 }
+
+/* ---- Lucky Falls */
+
+.gp-panel.compact .gp-coach {
+  margin-top: 6px !important;
+}
+
+.lf-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lf-risks {
+  display: flex;
+  gap: 6px;
+}
+
+.gp-panel .lf-risk {
+  min-height: 40px;
+  padding: 4px 14px;
+}
+
+.gp-panel .lf-risk.lf-wild.on {
+  background: #4a2a6a;
+}
+
+.gp-panel .lf-risk.lf-lively.on {
+  background: #2a4a6a;
+}
+
+.lf-rail {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: auto;
+  overflow: hidden;
+}
+
+.lf-rail small {
+  font: 700 0.6rem/1 var(--body);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gp-brass);
+  margin-right: 4px;
+}
+
+.lf-pill {
+  padding: 2px 7px;
+  border-radius: 999px;
+  font: 700 0.74rem/1.2 var(--body);
+  background: #1a2430;
+  color: var(--gp-muted);
+}
+
+.lf-pill.even {
+  background: #22394a;
+  color: var(--gp-ivory);
+}
+
+.lf-pill.up {
+  background: #d39a32;
+  color: #1d1408;
+}
+
+.gp-panel[data-panel='falls'] .gp-actions {
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+/* ---- Five Card Cabin */
+
+.vp-wrap {
+  display: grid;
+  grid-template-columns: 1fr 210px;
+  gap: 12px;
+  align-items: start;
+}
+
+.vp-cards {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  padding-top: 12px;
+}
+
+.gp-panel .vp-card {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 2px;
+  height: 120px;
+  min-height: 0;
+  padding: 4px;
+  border-radius: 10px;
+  background: #fffaf0;
+  color: #1d1830;
+  border: 2px solid #c8b898;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.45);
+  transition: transform 0.12s ease;
+}
+
+.gp-panel .vp-card:disabled {
+  opacity: 1;
+}
+
+.gp-panel .vp-card.empty {
+  background: repeating-linear-gradient(45deg, #1d2a5a 0 8px, #24346a 8px 16px);
+  border-color: #e0ac45;
+}
+
+.gp-panel .vp-card.red {
+  color: #c0242c;
+}
+
+.vp-card b {
+  font: 400 2rem/1 var(--display);
+}
+
+.vp-card i {
+  font-style: normal;
+  font-size: 1.7rem;
+  line-height: 1;
+}
+
+.vp-card small {
+  position: absolute;
+  bottom: -20px;
+  left: 0;
+  right: 0;
+  font: 400 0.95rem/1 var(--display);
+  color: #ffd24a;
+  letter-spacing: 0.06em;
+}
+
+.gp-panel .vp-card.held {
+  transform: translateY(-10px);
+  border-color: #ffd24a;
+  box-shadow: 0 0 0 3px #ffd24a, 0 6px 0 rgba(0, 0, 0, 0.45);
+}
+
+.vp-pay {
+  display: grid;
+  gap: 2px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: rgba(12, 20, 48, 0.8);
+  border: 1px solid rgba(159, 183, 232, 0.35);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.vp-pay-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 1px 4px;
+  border-radius: 4px;
+  color: var(--gp-muted);
+}
+
+.vp-pay-row b {
+  color: var(--gp-ivory);
+  font-variant-numeric: tabular-nums;
+}
+
+.vp-pay-row.lit {
+  background: #d39a32;
+  color: #1d1408;
+}
+
+.vp-pay-row.lit b {
+  color: #1d1408;
+}
+
+@media (max-width: 640px) {
+  .vp-wrap {
+    grid-template-columns: 1fr;
+  }
+  .vp-pay {
+    display: none;
+  }
+  .gp-panel .vp-card {
+    height: 92px;
+  }
+  .vp-card b {
+    font-size: 1.5rem;
+  }
+}
+
+.gp-chip-wrap .lf-risk-label {
+  margin-left: auto;
+}
+
+@media (max-width: 640px) {
+  .gp-panel[data-panel='falls'] .gp-chip-wrap {
+    flex-wrap: wrap;
+  }
+  .gp-chip-wrap .lf-risk-label {
+    margin-left: 0;
+  }
+}
