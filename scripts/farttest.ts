@@ -10,8 +10,9 @@ import { openWorld, type World } from './lib/world';
 
 const BUDGET = { low: { draws: 90, tris: 120_000 }, medium: { draws: 160, tris: 300_000 }, high: { draws: 260, tris: 600_000 } } as const;
 
-// Pads and remotes start on the low tier so headless frames keep up with button presses.
-const w0 = await openWorld({ kind: 'fart', areaId: 'puff-challenge', name: 'Fart simulator', quality: process.env.PAD === '1' || process.env.REMOTE === '1' ? 'low' : 'medium' });
+// Phones, pads and remotes start on the low tier so headless frames keep up with presses and taps
+// (every tier is checked at the end).
+const w0 = await openWorld({ kind: 'fart', areaId: 'puff-challenge', name: 'Fart simulator', quality: process.env.PAD === '1' || process.env.REMOTE === '1' || process.env.PHONE === '1' ? 'low' : 'medium' });
 const { page, device } = w0;
 // Headless frames can be slower than the harness's 90 ms pad taps (a real pad is polled 60 times a second),
 // so pad buttons are held a little longer here. Everything else goes straight to the harness.
@@ -53,6 +54,22 @@ const check = (ok: boolean, what: string, extra: unknown = '') => {
 /** A toot the way this device does it: OK on the remote, the Toot (Kick) button elsewhere. */
 // (The harness taps pad buttons for 90 ms; headless frames can be slower than that, so pads hold a little longer.)
 const toot = () => (remote ? w.act('interact') : w.act('kick'));
+/** Holds the Toot button (OK on the remote) until `done` says so, then lets go. */
+async function holdUntil(done: () => Promise<boolean>, ms = 6000): Promise<void> {
+  const end = Date.now() + ms;
+  let touch: Awaited<ReturnType<ReturnType<typeof page.context>['newCDPSession']>> | null = null;
+  if (phone) {
+    touch = await page.context().newCDPSession(page);
+    const box = await page.locator('.tbtn-kick').boundingBox();
+    if (!box) throw new Error('No Toot button');
+    await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: box.x + box.width / 2, y: box.y + box.height / 2, id: 8 }] });
+  } else if (device === 'pad') await page.evaluate(() => ((window as any).__pad.buttons[2] = 1));
+  else await page.keyboard.down(remote ? 'Enter' : 'KeyF');
+  while (Date.now() < end && !(await done())) await wait(50);
+  if (touch) await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  else if (device === 'pad') await page.evaluate(() => ((window as any).__pad.buttons[2] = 0));
+  else await page.keyboard.up(remote ? 'Enter' : 'KeyF');
+}
 /** A quick touch on the phone's Toot button, straight through the touch events (for rhythm, where tap() is too slow). */
 let cdp: Awaited<ReturnType<ReturnType<typeof page.context>['newCDPSession']>> | null = null;
 async function quickToot(): Promise<void> {
@@ -137,8 +154,8 @@ check(e.moves.maxY > 2.5, 'boosted over 2.5 m', e.moves.maxY);
 await w.call('debugGive', 'beans');
 await place(-5, 5.1, Math.PI);
 await w.call('debugResetMoves');
-// Held well past full charge: headless frames can run slower than the clock.
-await tootHold(1800);
+// Hold until the charge is full (headless frames can run slower than the clock), then let go.
+await holdUntil(async () => (await exp()).moves.charge >= 0.99);
 await wait(350);
 await w.shot('05-big-one');
 await wait(1000);
@@ -155,9 +172,10 @@ await w.call('debugTrial', 'debugTestCourse');
 await w.confirm();
 await w.until(async () => (await exp()).trial?.phase === 'run', 'the rally countdown', 12000);
 for (let i = 0; i < 3; i++) {
-  for (let k = 0; k < 12 && (await exp()).trial?.next <= i && !(await w.menuOpen()); k++) {
-    await w.dbg('teleport', 6, (await exp()).player.z, Math.PI);
-    await w.walk('up', 500);
+  for (let k = 0; k < 20 && (await exp()).trial?.next <= i && !(await w.menuOpen()); k++) {
+    const pl = (await exp()).player;
+    if (Math.abs(pl.x - 6) > 0.35) await w.dbg('teleport', 6, pl.z, Math.PI);
+    await w.walk('up', 700);
   }
   if (i === 1) await w.shot('06-rings');
 }
@@ -170,11 +188,11 @@ await w.until(async () => (await exp()).trial?.phase === 'count' || (await w.men
 if (await w.menuOpen()) await w.confirm();
 await w.until(async () => (await exp()).trial?.phase === 'run', 'the second rally', 12000);
 // The full course this time: walk through the first ring (low enough on foot), then give up on the pad.
-for (let k = 0; k < 12 && (await exp()).trial?.next < 1; k++) {
-  // Line up on the ring each time (the follow camera drifts on a phone).
-  const pz = (await exp()).player.z;
-  await w.dbg('teleport', 6, pz, Math.PI);
-  await w.walk('up', 500);
+for (let k = 0; k < 20 && (await exp()).trial?.next < 1; k++) {
+  // Line up on the ring when the walk drifts (the follow camera turns on a phone).
+  const pl = (await exp()).player;
+  if (Math.abs(pl.x - 6) > 0.35) await w.dbg('teleport', 6, pl.z, Math.PI);
+  await w.walk('up', 700);
 }
 e = await exp();
 await w.shot('06b-first-ring');
@@ -244,13 +262,20 @@ for (let i = 0; i < 8; i++) {
 await w.until(async () => (await exp()).trial?.phase === 'play', 'the song starts', 12000);
 await w.shot('11-band');
 {
-  // Schedule every press from the chart against the wall clock (re-reading after each note is too slow headless).
-  const t = (await exp()).trial;
-  const beatMs = 60000 / t.bpm;
-  const t0 = Date.now() - t.beat * beatMs;
-  for (const n of t.chart as { beat: number; kind: string; len: number }[]) {
+  // Schedule every press from the chart against the wall clock, re-syncing to the music before each
+  // note (taking the read-out halfway through the round trip to the page).
+  const sync = async () => {
+    const a = Date.now();
+    const t = (await exp()).trial;
+    const b = Date.now();
+    return { t, t0: (a + b) / 2 - (t.beat * 60000) / t.bpm };
+  };
+  const first = await sync();
+  const beatMs = 60000 / first.t.bpm;
+  for (const n of first.t.chart as { beat: number; kind: string; len: number }[]) {
     if (n.kind === 'rest') continue;
-    const at = t0 + n.beat * beatMs - 20;
+    const { t0 } = await sync();
+    const at = t0 + n.beat * beatMs - 15;
     const ms = at - Date.now();
     if (ms > 0) await wait(ms);
     if (n.kind === 'hold') await tootHold(Math.min(1400, n.len * beatMs - 150));
@@ -260,7 +285,7 @@ await w.shot('11-band');
 await w.until(() => w.menuOpen(), 'the band results', 20000);
 e = await exp();
 const r = e.trial.result;
-check(r.perfect + r.good >= 6, 'at least six notes in time', r);
+check(r.perfect + r.good >= 6, 'at least six notes in time', { r, hits: e.trial.hits, presses: e.trial.presses, offset: e.trial.offset, chart: e.trial.chart.map((n: { beat: number }) => n.beat) });
 await w.shot('12-band-results');
 await choose(w, 'Back to the fete');
 await w.until(async () => (await exp()).mode === 'fete', 'off the bandstand');
