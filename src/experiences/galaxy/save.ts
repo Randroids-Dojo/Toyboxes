@@ -89,6 +89,7 @@ export class Save {
     this.p.update((d) => {
       d.stars = { ...FRESH.stars };
       d.moons = 0;
+      d.goldFed = 0;
       d.reborn = false;
     });
   }

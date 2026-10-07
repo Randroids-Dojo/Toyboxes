@@ -14,6 +14,10 @@ import {
   RING_FINISH_S,
   RING_GAPS,
   STAIR,
+  SIDE_STONE,
+  DOCK_LEDGE,
+  RING_SHELF,
+  MOONS,
   arcAt,
   cinderTiles,
   crossesGate,
@@ -91,8 +95,10 @@ describe('galaxy layout', () => {
       { x: 0, z: 0, r: HUB_R + 0.6, name: 'hub' },
       { x: RING.cx, z: RING.cz, r: RING.outer, name: 'ring' },
       { x: CINDER.x, z: CINDER.z, r: CINDER.r, name: 'cinder' },
-      { x: DOCK.x, z: DOCK.z, r: DOCK.r + 3, name: 'dock' },
+      { x: DOCK.x, z: DOCK.z, r: DOCK.r, name: 'dock' },
       ...STAIR.map((s, i) => ({ ...s, name: `stone ${i}` })),
+      { ...SIDE_STONE, name: 'side stone' },
+      { ...DOCK_LEDGE, name: 'dock ledge' },
     ];
     for (let i = 0; i < tops.length; i++) {
       for (let j = i + 1; j < tops.length; j++) {
@@ -127,6 +133,26 @@ describe('galaxy layout', () => {
     expect(orbSpotOk(HUB.shrine.x, HUB.shrine.z)).toBe(false);
     expect(orbSpotOk(HUB.slings.ring.x, HUB.slings.ring.z)).toBe(false);
     expect(orbSpotOk(0, -6)).toBe(true);
+  });
+});
+
+describe('lost moons', () => {
+  it('there are eight, the ledges are clear, and the shelf joins the ring', () => {
+    expect(MOONS).toHaveLength(8);
+    const shelf = ringPoint(RING_SHELF.s, RING_SHELF.r);
+    // The shelf overlaps the walkway's outer edge a little and nothing else.
+    expect(RING_SHELF.r - RING_SHELF.radius).toBeLessThan(RING.outer + 0.5);
+    expect(Math.hypot(shelf.x - RING.cx, shelf.z - RING.cz)).toBeGreaterThan(RING.outer);
+    // The dock ledge is a short step down (no star net on the way back).
+    expect(DOCK_LEDGE.y - DOCK.top).toBeLessThan(2.5);
+    expect(Math.hypot(DOCK_LEDGE.x - DOCK.x, DOCK_LEDGE.z - DOCK.z)).toBeGreaterThan(DOCK.r + DOCK_LEDGE.r);
+    // The two jump moons are out of reach of a jump from the floor (3.44 m) but in reach from a ledge.
+    const chart = MOONS[1].at!;
+    expect(chart.y - 0.8 - 1.15).toBeGreaterThan(3.44);
+    expect(chart.y - 0.8 - 1.15).toBeLessThan(1.1 + 3.44);
+    const spire = MOONS[2].at!;
+    expect(spire.y - CINDER.top - 0.8 - 1.15).toBeGreaterThan(3.44);
+    expect(spire.y - CINDER.top - 0.8 - 1.15).toBeLessThan(2.4 + 3.44);
   });
 });
 
@@ -259,7 +285,7 @@ describe('comet surf', () => {
       expect(Math.hypot(rr, p.y - RING.planetY), `planet at ${u}`).toBeGreaterThan(RING.planetR + t);
       if (rr > RING.inner - t && rr < RING.outer + t) expect(Math.abs(p.y - (RING.top - 0.5)), `ring at ${u}`).toBeGreaterThan(0.5 + t);
       // Island tops and the stair.
-      for (const isl of [{ x: CINDER.x, z: CINDER.z, r: CINDER.r, y: CINDER.top }, { x: DOCK.x, z: DOCK.z, r: DOCK.r, y: DOCK.top }, ...STAIR]) {
+      for (const isl of [{ x: CINDER.x, z: CINDER.z, r: CINDER.r, y: CINDER.top }, { x: DOCK.x, z: DOCK.z, r: DOCK.r, y: DOCK.top }, ...STAIR, SIDE_STONE, DOCK_LEDGE]) {
         // Over the top, or well under its hanging roots.
         if (Math.hypot(p.x - isl.x, p.z - isl.z) < isl.r + t) expect(p.y - isl.y > t || isl.y - p.y > 14 + t, `island at ${u}`).toBe(true);
       }

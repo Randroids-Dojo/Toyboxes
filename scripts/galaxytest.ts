@@ -10,12 +10,12 @@
 //   PHONE=1 / PAD=1 / REMOTE=1 for the other devices (REMOTE sends only arrows, Enter and Back).
 //   STAGES=wake,ring,... runs a subset (always starts with arrival).
 
-import { HUB, RING, RING_FINISH_S, STAIR, ringGates, ringPoint } from '../src/shared/galaxy-rules';
+import { DOCK, DOCK_LEDGE, HUB, RING, RING_FINISH_S, RING_SHELF, STAIR, ringGates, ringPoint } from '../src/shared/galaxy-rules';
 import { openWorld } from './lib/world';
 
 const w = await openWorld({ kind: 'galaxy', areaId: 'black-hole-galaxy', name: 'Black hole galaxy', quality: 'high' });
 const { page, device } = w;
-const stages = new Set((process.env.STAGES ?? 'wake,ring,net,storm,comet,frenzy,horizon,tiers,leave').split(','));
+const stages = new Set((process.env.STAGES ?? 'wake,ring,net,storm,comet,frenzy,moons,horizon,tiers,leave').split(','));
 let shotN = 0;
 const shot = async (name: string) => {
   shotN++;
@@ -460,6 +460,49 @@ if (stages.has('frenzy')) {
   await closeCard();
   await settle();
   await w.call('debugShortRound', 0);
+}
+
+// ---------------------------------------------------------------------------
+// Lost moons: the shelf off the ring (a walk) and the ledge past the dock (a secret blossom).
+
+if (stages.has('moons')) {
+  await w.call('debugGrant', 6);
+  await w.call('debugWarp', 'ring');
+  await page.waitForTimeout(500);
+  const before = (await exp()).moons ?? 0;
+  const shelf = ringPoint(RING_SHELF.s, RING_SHELF.r);
+  // Walk round the ring to the shelf (it sits past the second gap, so the blossoms carry you).
+  await steer(
+    async () => {
+      const s = await st();
+      const c = Math.atan2(s.z - RING.cz, s.x - RING.cx);
+      const t = Math.atan2(shelf.z - RING.cz, shelf.x - RING.cx);
+      let d = c - t;
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      // Follow the middle of the walkway until close, then step out onto the shelf.
+      if (Math.abs(d) > 0.12) {
+        const p = ringPoint(0, RING.mid);
+        const a0 = Math.atan2(p.z - RING.cz, p.x - RING.cx);
+        const now = (((a0 - c) * 180) / Math.PI + 360) % 360;
+        return ringPoint(now + 12, RING.mid);
+      }
+      return shelf;
+    },
+    async () => ((await exp()).moons ?? 0) > before,
+    'the ring shelf moon',
+    90000,
+    0.1,
+  );
+  await page.waitForTimeout(400);
+  await shot('moon-shelf');
+  await w.call('debugWarp', 'comet');
+  await page.waitForTimeout(500);
+  const dockB = { x: DOCK_LEDGE.x, z: DOCK.z + DOCK.r - 1.4 };
+  await steer(async () => ({ x: dockB.x, z: dockB.z + 2 }), async () => (await exp()).carry === 'hop', 'the dock blossom', 20000, 0);
+  await until(async () => ((await exp()).moons ?? 0) > before + 1, 'the dock ledge moon', 10000);
+  await shot('moon-ledge');
+  log('moons', (await exp()).moons);
 }
 
 // ---------------------------------------------------------------------------

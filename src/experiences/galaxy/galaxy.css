@@ -152,7 +152,20 @@
   }
 }
 
-/* The star chart. */
+/* The star chart. The tiny black hole hides a lost moon. */
+.gx-chart .gx-poke {
+  min-width: 0;
+  width: 2.4rem;
+  height: 2.4rem;
+  padding: 0;
+  border-radius: 50%;
+  margin-left: auto;
+  font-size: 1.2rem;
+  color: #000;
+  background: radial-gradient(circle, #000 45%, #f4b740 50%, rgba(244, 183, 64, 0) 70%);
+  border-color: rgba(244, 183, 64, 0.5);
+}
+
 .gx-chart .gx-chart-list {
   list-style: none;
   margin: 10px 0 6px;

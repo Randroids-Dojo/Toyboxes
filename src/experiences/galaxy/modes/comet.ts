@@ -267,6 +267,9 @@ export class Comet implements Round {
       if (m.taken || Math.abs(m.u - this.u) > 0.012) continue;
       if (m.pos.distanceTo(rider) < reach) this.take(i);
     }
+    // The lost moon at the edge of the loop.
+    const mp = this.g.moons.pos[3];
+    if (mp && !this.g.moons.found(3) && mp.distanceTo(rider) < 1.9) this.g.findMoon(3, mp);
     for (const c of this.clouds) {
       if (c.hit) continue;
       if (c.pos.distanceTo(rider) < 2.7) {

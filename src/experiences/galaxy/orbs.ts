@@ -25,7 +25,7 @@ const MAX = 28;
 const PLAIN = ['#b18cff', '#53f0c0', '#6cc4ff'];
 export const ORB_R: Record<OrbKind, number> = { plain: 0.32, gold: 0.38, moon: 0.55 };
 
-const HALO_VERT = /* glsl */ `
+export const HALO_VERT = /* glsl */ `
 varying vec2 vUv;
 varying vec3 vCol;
 void main() {
@@ -38,7 +38,7 @@ void main() {
   gl_Position = projectionMatrix * mv;
 }`;
 
-const HALO_FRAG = /* glsl */ `
+export const HALO_FRAG = /* glsl */ `
 varying vec2 vUv;
 varying vec3 vCol;
 void main() {

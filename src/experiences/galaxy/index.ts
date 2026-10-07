@@ -42,6 +42,8 @@ import {
   RING_RETURN_S,
   RING_START_S,
   RING_THETA0,
+  DOCK_LEDGE,
+  SIDE_STONE,
   STAIR,
   STAR_GOAL,
   TEASER_AT,
@@ -51,6 +53,7 @@ import {
   ringCoords,
   ringPoint,
   slingArc,
+  MOONS,
   type Challenge,
   type Island,
   type Spot3,
@@ -64,9 +67,10 @@ import { Frenzy, Wake } from './modes/frenzy';
 import { RingRun } from './modes/ring';
 import type { Round } from './modes/round';
 import { Storm } from './modes/storm';
+import { Moons } from './moons';
 import { Orbs, type Orb } from './orbs';
 import { Blossoms, glowSprite } from './props';
-import { Save, moonCount } from './save';
+import { Save, moonCount, moonStars } from './save';
 import * as S from './shaders';
 import { Sky } from './sky';
 import { Spark } from './spark';
@@ -127,6 +131,7 @@ export class Galaxy implements SpaceView {
   readonly dock: Dock;
   readonly stair: Stair;
   readonly orbs: Orbs;
+  readonly moons: Moons;
   readonly trav = new Traverse();
   readonly spark: Spark;
   readonly playerPos = new THREE.Vector3();
@@ -153,6 +158,10 @@ export class Galaxy implements SpaceView {
   private cine: Cine | null = null;
   private stars: FlyingStar[] = [];
   private lastTop = 0;
+  /** Bounce blossoms off the main paths: id, where they fling you, and when they are out. */
+  private hops: { id: number; to: Spot3; apex: number; active: () => boolean }[] = [];
+  private freeSpawns = 0;
+  private pokes = 0;
   /** The round is carrying the player (comet ride, finale): no star net. */
   private roundCarried = false;
   private lastStone = -1;
@@ -187,6 +196,22 @@ export class Galaxy implements SpaceView {
     this.dock = new Dock(s, this.uniforms);
     this.stair = new Stair(s, this.uniforms, this.blossoms);
     this.colliders.push(...this.hub.colliders, ...this.ring.colliders, ...this.cinder.colliders, ...this.dock.colliders);
+    this.moons = new Moons(s, this.save.data.moons);
+    this.colliders.push(...this.moons.colliders);
+    // Secret blossoms: onto the ledge past the dock, and to the stone off the stair and back.
+    const s5 = STAIR[5];
+    const toward = (a: { x: number; z: number; r: number }, b: { x: number; z: number }) => {
+      const yaw = Math.atan2(b.x - a.x, b.z - a.z);
+      return { x: a.x + Math.sin(yaw) * (a.r - 0.7), z: a.z + Math.cos(yaw) * (a.r - 0.7), yaw };
+    };
+    const dockB = this.blossoms.add(DOCK_LEDGE.x, DOCK.top + 0.02, DOCK.z + DOCK.r - 1.4, 0);
+    this.hops.push({ id: dockB, to: { x: DOCK_LEDGE.x, y: DOCK_LEDGE.y, z: DOCK_LEDGE.z }, apex: 2.2, active: () => true });
+    const out = toward(s5, SIDE_STONE);
+    const outB = this.blossoms.add(out.x, s5.y + 0.02, out.z, out.yaw, false);
+    this.hops.push({ id: outB, to: { x: SIDE_STONE.x, y: SIDE_STONE.y, z: SIDE_STONE.z }, apex: 2.2, active: () => this.moons.stairOpen });
+    const back = toward(SIDE_STONE, s5);
+    const backB = this.blossoms.add(back.x, SIDE_STONE.y + 0.02, back.z, back.yaw, false);
+    this.hops.push({ id: backB, to: { x: s5.x, y: s5.y, z: s5.z }, apex: 2.2, active: () => this.moons.stairOpen });
     this.orbs = new Orbs(s, this.uniforms);
     this.orbs.onSwallow = (o) => this.swallowed(o);
     this.orbs.onLaunch = () => sfx.kick(false);
@@ -593,7 +618,7 @@ export class Galaxy implements SpaceView {
     if (rr > RING.planetR && rr < RING.outer + 3) return 'ring';
     if (Math.hypot(x - CINDER.x, z - CINDER.z) < CINDER.r + 3) return 'storm';
     if (Math.hypot(x - DOCK.x, z - DOCK.z) < DOCK.r + 4) return 'comet';
-    if (STAIR.some((s) => Math.hypot(x - s.x, z - s.z) < s.r + 3)) return 'stair';
+    if (STAIR.some((s) => Math.hypot(x - s.x, z - s.z) < s.r + 3) || Math.hypot(x - SIDE_STONE.x, z - SIDE_STONE.z) < SIDE_STONE.r + 3) return 'stair';
     return 'void';
   }
 
@@ -604,7 +629,10 @@ export class Galaxy implements SpaceView {
     this.flare = Math.min(2, this.flare + (o.kind === 'moon' ? 1.2 : 0.7));
     this.hole.heat = Math.min(1, this.hole.heat + 0.08);
     this.sparks.burst({ at: this.hole.centre.clone().addScaledVector(new THREE.Vector3().subVectors(o.pos, this.hole.centre).normalize(), this.hole.radius * 1.05), count: 26, speed: [3, 9], color: [o.color.getHex(), 0xffffff], size: [0.3, 0.7], life: [0.4, 0.8] });
-    if (o.kind === 'gold') this.save.update((d) => (d.goldFed += 1));
+    if (o.kind === 'gold') {
+      this.save.update((d) => (d.goldFed += 1));
+      if (this.save.data.goldFed >= 5) this.findMoon(6, this.playerPos.clone().add(new THREE.Vector3(0, 2, 0)));
+    }
     const handled = this.round && 'swallowed' in this.round ? (this.round as unknown as { swallowed: (o: Orb) => boolean }).swallowed(o) : false;
     if (!handled) gsfx.gulp(null);
   }
@@ -768,7 +796,7 @@ export class Galaxy implements SpaceView {
   }
 
   extraColliders(): Collider[] {
-    return [...this.cinder.tileColliders(), ...this.stair.colliders()];
+    return [...this.cinder.tileColliders(), ...this.stair.colliders(), ...this.moons.extra()];
   }
 
   step(dt: number, p: PlayerState): void {
@@ -806,7 +834,7 @@ export class Galaxy implements SpaceView {
         const x = Math.sin(a * 0.5) * r;
         const z = -Math.cos(a * 0.5) * r;
         if (Math.hypot(x - p.x, z - p.z) > 2.5) {
-          this.orbs.spawn(x, z, 'plain');
+          this.orbs.spawn(x, z, ++this.freeSpawns % 4 === 0 ? 'gold' : 'plain');
           sfxSpace.spawn();
         }
       }
@@ -825,6 +853,13 @@ export class Galaxy implements SpaceView {
         });
       }
     }
+    // Lost moons you walk or jump into.
+    this.moons.stairOpen = this.stair.settled >= STAIR.length;
+    if (!this.cine) {
+      const m = this.moons.touching(this.playerPos);
+      if (m >= 0) this.findMoon(m, this.moons.pos[m]!);
+    }
+    for (const hp of this.hops) this.blossoms.show(hp.id, hp.active());
     // Stair stones fly in and lock.
     const locked = this.stair.update(dt, this.time, this.hole.centre);
     if (locked >= 0) {
@@ -845,6 +880,13 @@ export class Galaxy implements SpaceView {
     const hb = this.blossoms.get(this.hub.horizonBlossom);
     if (hb.visible && this.zone === 'hub' && Math.hypot(p.x - hb.x, p.z - hb.z) < 0.9) {
       this.hop(this.hub.horizonBlossom, { x: STAIR[0].x, y: STAIR[0].y, z: STAIR[0].z }, 4.5);
+      return;
+    }
+    for (const hp of this.hops) {
+      const b = this.blossoms.get(hp.id);
+      if (!hp.active() || Math.abs(p.y - b.y) > 0.3 || Math.hypot(p.x - b.x, p.z - b.z) > 0.8) continue;
+      if (vx * Math.sin(b.yaw) + vz * Math.cos(b.yaw) < 0.3) continue;
+      this.hop(hp.id, hp.to, hp.apex);
       return;
     }
     if (this.zone === 'stair') {
@@ -954,6 +996,20 @@ export class Galaxy implements SpaceView {
         );
     }
     const close = button('Close', () => ui.close(panel), 'primary');
+    const poke = this.moons.found(4)
+      ? null
+      : button(
+          '●',
+          () => {
+            this.poke();
+            if (this.moons.found(4)) {
+              poke?.remove();
+              ui.close(panel);
+            }
+          },
+          'ghost gx-poke',
+        );
+    poke?.setAttribute('aria-label', 'Poke the tiny black hole');
     const again = d.bloomed
       ? button(
           'Start the galaxy again',
@@ -982,8 +1038,8 @@ export class Galaxy implements SpaceView {
           row('Rock rain', d.stars.storm, 3, fmt('storm')),
           row('Comet surf', d.stars.comet, 3, fmt('comet')),
         ),
-        h('p', { class: 'gx-chart-moons' }, `Lost moons found: ${moonCount(d.moons)} of 8`),
-        h('div', { class: 'actions' }, close, ...travel, again),
+        h('p', { class: 'gx-chart-moons' }, `Lost moons found: ${moonCount(d.moons)} of 8${moonCount(d.moons) < 8 ? `. ${MOONS.find((m) => !this.moons.found(m.id))?.hint ?? ''}` : ''}`),
+        h('div', { class: 'actions' }, close, ...travel, again, poke),
       ),
       onBack: () => ui.close(panel),
       initial: () => close,
@@ -993,6 +1049,8 @@ export class Galaxy implements SpaceView {
 
   private restartJourney(): void {
     this.save.restart();
+    this.moons.mask = 0;
+    this.pokes = 0;
     this.shownFed = this.save.total;
     this.hole.setFed(this.holeFed(this.shownFed));
     this.applyConstellations(true);
@@ -1004,6 +1062,29 @@ export class Galaxy implements SpaceView {
     this.orbs.clear();
     this.startRound(new Wake(this));
     this.hud.banner('A new galaxy', { sub: 'Wake the black hole', color: '#f4b740' });
+  }
+
+  /** A lost moon found: it flies off to its constellation; four and eight earn stars. */
+  findMoon(id: number, at: THREE.Vector3): void {
+    if (this.moons.found(id)) return;
+    const before = moonStars(this.save.data.moons);
+    this.save.update((d) => (d.moons |= 1 << id));
+    this.moons.take(id, at);
+    const n = moonCount(this.save.data.moons);
+    gsfx.moon();
+    this.sparks.burst({ at, count: 60, speed: [2, 6], color: [0xe8e4ff, 0xb9a4ff], size: [0.12, 0.28], life: [0.4, 0.9] });
+    this.shock.emit({ x: at.x, y: at.y - 0.6, z: at.z }, { color: 0xc9c2ff, radius: 2.5, life: 0.6 });
+    this.hud.banner(`Lost moon ${n} of 8`, { color: '#e8e4ff', size: 'm', ms: 1800 });
+    const gained = moonStars(this.save.data.moons) - before;
+    if (gained > 0) void this.feedStars(gained, at, 'moons', !this.round);
+    else this.applyConstellations(false);
+  }
+
+  /** The orrery's tiny black hole: poke it three times. */
+  private poke(): void {
+    this.pokes++;
+    gsfx.gulp(this.pokes);
+    if (this.pokes >= 3) this.findMoon(4, new THREE.Vector3(HUB.chart.x, 2, HUB.chart.z));
   }
 
   /** After five orbs: the black hole burps out the first star onto the hub. */
@@ -1094,6 +1175,7 @@ export class Galaxy implements SpaceView {
     for (const p of [this.sparks, this.glows, this.dust]) p.update(dt);
     this.shock.update(dt);
     this.orbs.update(this.time, this.hole);
+    this.moons.update(dt, this.time);
     this.hub.seamMat.uniforms.uCenter.value.set(0, 0, 0);
     const fed = this.shownFed;
     const open = { ring: fed >= UNLOCK.ring, storm: fed >= UNLOCK.storm, comet: fed >= UNLOCK.comet };
@@ -1422,6 +1504,7 @@ export class Galaxy implements SpaceView {
       orbs: this.orbs.live.map((o) => ({ x: o.pos.x, z: o.pos.z, state: o.state, kind: o.kind })),
       spark: this.spark.target ? { x: this.spark.target.x, y: this.spark.target.y, z: this.spark.target.z, label: this.spark.label } : null,
       stair: this.stair.settled,
+      moons: moonCount(this.save.data.moons),
       boards: { frenzy: this.boards.frenzy.length, ring: this.boards.ring.length, storm: this.boards.storm.length, comet: this.boards.comet.length },
       bests: { ...d.best },
       composer: !!this.composer,

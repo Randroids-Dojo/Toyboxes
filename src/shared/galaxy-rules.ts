@@ -55,6 +55,25 @@ export const STAIR: { x: number; y: number; z: number; r: number }[] = [
   { x: 10, y: 12, z: -59, r: 2.3 },
 ];
 
+/** Places for the lost moons' little ledges (tops you can stand on). */
+export const RING_SHELF = { s: 185, r: 29.7, radius: 1.5 } as const;
+export const DOCK_LEDGE = { x: 36, y: 10.2, z: 45.6, r: 1.5 } as const;
+export const SIDE_STONE = { x: 2, y: 7.2, z: -40, r: 1.5 } as const;
+
+/** The eight lost moons. `at` is where it floats; the rest are found by doing something. */
+export const MOONS: { id: number; hint: string; at: Spot3 | null }[] = [
+  { id: 0, hint: 'A shelf on the far side of the ring', at: null },
+  { id: 1, hint: 'High above the star chart', at: { x: 7.5, y: 5.6, z: 3 } },
+  { id: 2, hint: "By the top of Cinder's spire", at: { x: 55.6, y: 8.6, z: -6 } },
+  { id: 3, hint: 'Out at the edge of the comet loop', at: null },
+  { id: 4, hint: 'Poke the tiny black hole on the star chart', at: null },
+  { id: 5, hint: 'A ledge past the Comet dock', at: { x: DOCK_LEDGE.x, y: DOCK_LEDGE.y + 1, z: DOCK_LEDGE.z } },
+  { id: 6, hint: 'Feed the black hole five gold orbs', at: null },
+  { id: 7, hint: 'A stone just off the Horizon stair', at: { x: SIDE_STONE.x, y: SIDE_STONE.y + 1, z: SIDE_STONE.z } },
+];
+/** Where the comet loop's moon hangs (share of the loop and offset across it). */
+export const COMET_MOON = { u: 0.52, ox: -3.4, oy: 2.6 } as const;
+
 /** A point on the ring walkway: `s` is degrees along the run from the start line, `r` the radius. */
 export function ringPoint(s: number, r: number): Spot2 {
   const th = RING_THETA0 - (s * Math.PI) / 180;
