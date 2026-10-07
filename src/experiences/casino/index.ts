@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { chipsFor, type GameId } from '../../shared/casino/progress';
-import { BETS } from '../../shared/slots';
+import { BETS, BONUS_RING } from '../../shared/slots';
 import { disposeTree } from '../../world/kit';
 import { box, circle, type Collider } from '../../world/physics';
 import type { CameraShot, PlayerState, SpaceAction, SpaceView, Spot, Tier } from '../../world/space';
@@ -694,7 +694,6 @@ export class Casino implements SpaceView {
 
   /** Plays the bonus flight and ring for a made-up segment: visuals only, no server, no credits. */
   async debugBonus(segment: number): Promise<void> {
-    const { BONUS_RING } = await import('../../shared/slots');
     const v = BONUS_RING[segment];
     const mult = typeof v === 'number' ? v : v === 'MINI' ? 20 : v === 'MAJOR' ? 100 : this.eco.jackpots.grand;
     await this.wheel.bonus(segment, v, mult, this.lucky.framing(), this.lucky.framing());
