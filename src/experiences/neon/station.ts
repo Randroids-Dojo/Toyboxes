@@ -264,12 +264,16 @@ export function buildStation(scene: THREE.Scene, ownerName: string): StationPart
   const neonLilac = neon(C.lilac, 2.0);
 
   // Halo cards behind neon strips: fake glow on the low tier (no bloom).
-  const haloMat = (color: number) => new THREE.MeshBasicMaterial({ map: barGlowTexture(), color: new THREE.Color(color).multiplyScalar(0.6), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
-  const haloBatch = new Map<number, Batch>();
+  // One additive material for every halo; each card carries its colour per vertex.
+  const haloMat = new THREE.MeshBasicMaterial({ map: barGlowTexture(), vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+  const haloBatch = new Batch();
   const halo = (color: number, w: number, h: number, x: number, y: number, z: number, ry = 0, rx = 0) => {
-    let b = haloBatch.get(color);
-    if (!b) haloBatch.set(color, (b = new Batch()));
-    b.add(new THREE.PlaneGeometry(w, h), haloMat(color), x, y, z, rx, ry, 0);
+    const g = new THREE.PlaneGeometry(w, h);
+    const c = new THREE.Color(color).multiplyScalar(0.6);
+    const col = new Float32Array(g.attributes.position.count * 3);
+    for (let i = 0; i < g.attributes.position.count; i++) col.set([c.r, c.g, c.b], i * 3);
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    haloBatch.add(g, haloMat, x, y, z, rx, ry, 0);
   };
 
   // ---- floors
@@ -490,12 +494,10 @@ export function buildStation(scene: THREE.Scene, ownerName: string): StationPart
     g.shadowBlur = 24;
     g.fill();
   });
-  const starPad = new THREE.Mesh(new THREE.CylinderGeometry(1.25, 1.35, 0.08, 40), [
-    new THREE.MeshStandardMaterial({ color: 0x2a1a4a, roughness: 0.3, metalness: 0.4 }),
-    new THREE.MeshBasicMaterial({ map: starTex, color: 0xffffff }),
-    new THREE.MeshStandardMaterial({ color: 0x2a1a4a }),
-  ]);
-  starPad.position.set(STAR_PAD.x, 0.04, STAR_PAD.z);
+  S.add(new THREE.CylinderGeometry(1.25, 1.35, 0.08, 40), darkMat, STAR_PAD.x, 0.04, STAR_PAD.z);
+  const starPad = new THREE.Mesh(new THREE.CircleGeometry(1.22, 40), new THREE.MeshBasicMaterial({ map: starTex, transparent: true, depthWrite: false }));
+  starPad.rotation.x = -Math.PI / 2;
+  starPad.position.set(STAR_PAD.x, 0.081, STAR_PAD.z);
   scene.add(starPad);
   G.add(new THREE.TorusGeometry(1.32, 0.035, 6, 48), neonGold, STAR_PAD.x, 0.085, STAR_PAD.z, Math.PI / 2);
 
@@ -774,10 +776,8 @@ export function buildStation(scene: THREE.Scene, ownerName: string): StationPart
     S.add(new THREE.BoxGeometry(5, 1.1, 1), panelM, 30, 0.55, 6.4);
     G.add(new THREE.BoxGeometry(5.02, 0.05, 0.05), neonPink, 30, 1.0, 5.88);
     colliders.push(box(30, 6.4, 2.5, 0.5, 0, 1.1, 0.4, false));
-    for (let i = 0; i < 6; i++) {
-      const col = [C.pink, C.cyan, C.lime, C.gold, C.lilac, C.orange][i];
-      G.add(new THREE.CylinderGeometry(0.09, 0.07, 0.26, 10), neon(col, 1.4), 28 + i * 0.8, 1.24, 6.4);
-    }
+    const drinks = [neonPink, neonCyan, neonGold, neonLilac, neonViolet, neonPink];
+    for (let i = 0; i < 6; i++) G.add(new THREE.CylinderGeometry(0.09, 0.07, 0.26, 10), drinks[i], 28 + i * 0.8, 1.24, 6.4);
     // Sofas.
     for (const sx of [23.5, 30.5]) {
       S.add(roundedDesk(3, 0.5, 0.9), panelM, sx, 0, -6.6, 0, 0, 0);
@@ -809,7 +809,7 @@ export function buildStation(scene: THREE.Scene, ownerName: string): StationPart
     S.add(roundedDesk(1.0, 1.0, 0.6), panelM, t.x, 0, t.z, 0, yaw, 0);
     const fx = Math.sin(yaw);
     const fz = Math.cos(yaw);
-    G.add(new THREE.BoxGeometry(1.02, 0.05, 0.05), neon(color, 2), t.x + fx * 0.31, 0.98, t.z + fz * 0.31, 0, yaw, 0);
+    G.add(new THREE.BoxGeometry(1.02, 0.05, 0.05), color === C.cyan ? neonCyan : neonLilac, t.x + fx * 0.31, 0.98, t.z + fz * 0.31, 0, yaw, 0);
     const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.5), new THREE.MeshBasicMaterial({ map: terminalTexture(title, icon, color), color: new THREE.Color(1.1, 1.1, 1.1) }));
     screen.position.set(t.x + fx * 0.05, 1.25, t.z + fz * 0.05);
     screen.rotation.set(-0.35, yaw, 0, 'YXZ');
@@ -818,7 +818,9 @@ export function buildStation(scene: THREE.Scene, ownerName: string): StationPart
     const holo = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.9, 24, 1, true), new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(0.5), transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
     holo.position.set(t.x - fx * 0.15, 2.05, t.z - fz * 0.15);
     holo.rotation.x = Math.PI;
+    holo.userData.fancy = true;
     scene.add(holo);
+    holos.push(holo);
     const iconSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: terminalIcon(icon, color), transparent: true, depthWrite: false }));
     iconSprite.scale.set(0.7, 0.7, 1);
     iconSprite.position.set(t.x - fx * 0.15, 2.45, t.z - fz * 0.15);
@@ -830,7 +832,7 @@ export function buildStation(scene: THREE.Scene, ownerName: string): StationPart
   // Build the batches.
   S.build(scene, { receive: true });
   G.build(scene, { receive: false });
-  for (const [, b] of haloBatch) halos.push(...b.build(scene, { receive: false }));
+  halos.push(...haloBatch.build(scene, { receive: false }));
   for (const h of halos) h.renderOrder = 2;
 
   // Terminal screens and board meshes the world paints.

@@ -4,6 +4,7 @@
 
 import * as THREE from 'three';
 import type { AvatarBones, PoseFn } from '../../world/avatar';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { C, haloTexture } from './util';
 
 // ---------------------------------------------------------------------------
@@ -367,33 +368,44 @@ export function guardRot(d: Dir): [number, number, number] {
 // ---------------------------------------------------------------------------
 // Props
 
-/** A prism blade: hilt, a glowing blade and a halo. Points up its local +y. */
+/** Paints a geometry with one vertex colour (so parts can share one material). */
+function tint(g: THREE.BufferGeometry, color: THREE.Color): THREE.BufferGeometry {
+  const geo = g.index ? g.toNonIndexed() : g;
+  const n = geo.attributes.position.count;
+  const c = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) c.set([color.r, color.g, color.b], i * 3);
+  geo.setAttribute('color', new THREE.BufferAttribute(c, 3));
+  for (const k of Object.keys(geo.attributes)) if (!['position', 'normal', 'color'].includes(k)) geo.deleteAttribute(k);
+  return geo;
+}
+
+
+/** A prism blade: hilt, a glowing blade and a halo. Points up its local +y. Two draws (three with the halo). */
 export function prismBlade(color: number, len = 1.0): THREE.Group {
   const g = new THREE.Group();
-  const hilt = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.04, 0.22, 10), new THREE.MeshStandardMaterial({ color: 0x2a2440, roughness: 0.3, metalness: 0.7 }));
-  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.016, 6, 16), new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(2) }));
-  guard.rotation.x = Math.PI / 2;
-  guard.position.y = 0.11;
-  const blade = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.03, len, 10), new THREE.MeshBasicMaterial({ color: new THREE.Color(color).lerp(new THREE.Color(0xffffff), 0.55).multiplyScalar(2.6) }));
-  blade.position.y = 0.12 + len / 2;
+  const bright = new THREE.Color(color).lerp(new THREE.Color(0xffffff), 0.55).multiplyScalar(2.6);
+  const body = mergeGeometries([
+    tint(new THREE.CylinderGeometry(0.035, 0.04, 0.22, 10), new THREE.Color(0x2a2440)),
+    tint(new THREE.TorusGeometry(0.06, 0.016, 6, 16).rotateX(Math.PI / 2).translate(0, 0.11, 0), new THREE.Color(color).multiplyScalar(2)),
+    tint(new THREE.CylinderGeometry(0.022, 0.03, len, 10).translate(0, 0.12 + len / 2, 0), bright),
+  ])!;
+  const blade = new THREE.Mesh(body, new THREE.MeshBasicMaterial({ vertexColors: true }));
   const glow = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, len + 0.06, 10, 1, true), new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(1.4), transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, depthWrite: false }));
-  glow.position.y = blade.position.y;
+  glow.position.y = 0.12 + len / 2;
   const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTexture(), color, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false }));
   halo.scale.set(0.5, len * 1.3, 1);
-  halo.position.y = blade.position.y;
-  g.add(hilt, guard, blade, glow, halo);
+  halo.position.y = glow.position.y;
+  g.add(blade, glow, halo);
   g.userData.blade = blade;
   g.userData.color = color;
   // The prism blade cycles through the rainbow.
   if (color === 0xffffff) {
-    const bm = blade.material as THREE.MeshBasicMaterial;
     const gm = glow.material as THREE.MeshBasicMaterial;
     const hm = halo.material as THREE.SpriteMaterial;
-    blade.onBeforeRender = () => {
+    glow.onBeforeRender = () => {
       const t = performance.now() / 1000;
-      bm.color.setHSL(t * 0.4 % 1, 1, 0.75).multiplyScalar(2.4);
-      gm.color.setHSL((t * 0.4 + 0.05) % 1, 1, 0.55).multiplyScalar(1.4);
-      hm.color.setHSL(t * 0.4 % 1, 1, 0.6);
+      gm.color.setHSL((t * 0.4) % 1, 1, 0.55).multiplyScalar(1.8);
+      hm.color.setHSL((t * 0.4) % 1, 1, 0.6);
     };
   }
   return g;
@@ -407,19 +419,17 @@ export function inHand(blade: THREE.Object3D): THREE.Object3D {
   return holder;
 }
 
-/** The toy blaster for laser tag. */
-export function blaster(color: number): THREE.Group {
-  const g = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.12, 0.3), new THREE.MeshStandardMaterial({ color: 0x2a2450, roughness: 0.35, metalness: 0.3 }));
-  body.position.set(0, -0.02, 0.1);
-  const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.04, 0.12, 10), new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(2) }));
-  tip.rotation.x = Math.PI / 2;
-  tip.position.set(0, 0, 0.3);
-  const strip = new THREE.Mesh(new THREE.BoxGeometry(0.105, 0.025, 0.24), new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(1.8) }));
-  strip.position.set(0, 0.035, 0.1);
-  g.add(body, tip, strip);
-  g.rotation.x = Math.PI / 2;
-  return g;
+/** The toy blaster for laser tag: one mesh. */
+export function blaster(color: number): THREE.Object3D {
+  const c = new THREE.Color(color).multiplyScalar(2);
+  const geo = mergeGeometries([
+    tint(new THREE.BoxGeometry(0.1, 0.12, 0.3).translate(0, -0.02, 0.1), new THREE.Color(0x2a2450)),
+    tint(new THREE.CylinderGeometry(0.035, 0.04, 0.12, 10).rotateX(Math.PI / 2).translate(0, 0, 0.3), c),
+    tint(new THREE.BoxGeometry(0.105, 0.025, 0.24).translate(0, 0.035, 0.1), c),
+  ])!;
+  const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true }));
+  m.rotation.x = Math.PI / 2;
+  return m;
 }
 
 // ---------------------------------------------------------------------------
@@ -438,77 +448,75 @@ const SUIT_COLORS: Record<SuitId, [number, number]> = {
 };
 
 export class Outfit {
+  /** Lower on the low tier (no bloom). */
+  scale = 1;
   private parts: { obj: THREE.Object3D; parent: THREE.Object3D }[] = [];
-  private mats: THREE.MeshBasicMaterial[] = [];
+  private mat: THREE.MeshBasicMaterial | null = null;
+  private extraMats: THREE.Material[] = [];
   private suit: SuitId = 'starter';
   private glow = 1;
   private helmet = false;
 
   constructor(private bones: () => AvatarBones) {}
 
+  /** Trims are merged per bone into one mesh each (vertex colours, one material). */
   wear(suit: SuitId, helmet = false): void {
     this.remove();
     this.suit = suit;
     this.helmet = helmet;
     const b = this.bones();
     const [c1, c2] = SUIT_COLORS[suit];
-    const m1 = new THREE.MeshBasicMaterial({ color: new THREE.Color(c1).multiplyScalar(2) });
-    const m2 = new THREE.MeshBasicMaterial({ color: new THREE.Color(c2).multiplyScalar(2) });
-    this.mats = [m1, m2];
+    const col1 = new THREE.Color(c1);
+    const col2 = new THREE.Color(c2);
+    this.mat = new THREE.MeshBasicMaterial({ vertexColors: true, color: new THREE.Color(2, 2, 2) });
+    const perBone = new Map<THREE.Object3D, THREE.BufferGeometry[]>();
+    const put = (bone: THREE.Object3D, g: THREE.BufferGeometry, c: THREE.Color) => {
+      const list = perBone.get(bone) ?? [];
+      list.push(tint(g, c));
+      perBone.set(bone, list);
+    };
     const add = (obj: THREE.Object3D, parent: THREE.Object3D) => {
       parent.add(obj);
       this.parts.push({ obj, parent });
     };
-    // Belt and collar around the torso.
-    const belt = new THREE.Mesh(new THREE.TorusGeometry(0.27, 0.02, 6, 28), m1);
-    belt.rotation.x = Math.PI / 2;
-    belt.scale.set(1, 0.68, 1);
-    belt.position.y = -0.2;
-    add(belt, b.torso);
-    const chest = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.4, 0.02), suit === 'retro' ? m2 : m1);
-    chest.position.set(0, 0.02, 0.172);
-    add(chest, b.torso);
+    // Belt and chest line on the torso.
+    put(b.torso, new THREE.TorusGeometry(0.27, 0.02, 6, 28).rotateX(Math.PI / 2).scale(1, 1, 0.68).translate(0, -0.2, 0), col1);
+    put(b.torso, new THREE.BoxGeometry(0.04, 0.4, 0.02).translate(0, 0.02, 0.172), suit === 'retro' ? col2 : col1);
     if (suit === 'retro' || suit === 'circuit' || suit === 'supernova') {
-      for (const s of [-1, 1]) {
-        const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.42, 0.02), m2);
-        stripe.position.set(s * 0.13, 0, 0.17);
-        stripe.rotation.z = suit === 'circuit' ? s * 0.3 : 0;
-        add(stripe, b.torso);
-      }
+      for (const side of [-1, 1]) put(b.torso, new THREE.BoxGeometry(0.03, 0.42, 0.02).rotateZ(suit === 'circuit' ? side * 0.3 : 0).translate(side * 0.13, 0, 0.17), col2);
     }
     // Cuffs on the arms and stripes down the legs.
-    for (const arm of [b.armL, b.armR]) {
-      const cuff = new THREE.Mesh(new THREE.TorusGeometry(0.08, 0.016, 6, 16), m2);
-      cuff.rotation.x = Math.PI / 2;
-      cuff.position.y = -0.34;
-      add(cuff, arm);
-    }
+    for (const arm of [b.armL, b.armR]) put(arm, new THREE.TorusGeometry(0.08, 0.016, 6, 16).rotateX(Math.PI / 2).translate(0, -0.34, 0), col2);
     for (const leg of [b.legL, b.legR]) {
-      const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.42, 0.02), m1);
-      stripe.position.set(0, -0.24, 0.095);
-      add(stripe, leg);
-      const ankle = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.016, 6, 16), m2);
-      ankle.rotation.x = Math.PI / 2;
-      ankle.position.y = -0.44;
-      add(ankle, leg);
+      put(leg, new THREE.BoxGeometry(0.02, 0.42, 0.02).translate(0, -0.24, 0.095), col1);
+      put(leg, new THREE.TorusGeometry(0.1, 0.016, 6, 16).rotateX(Math.PI / 2).translate(0, -0.44, 0), col2);
+    }
+    if (helmet) put(b.head, new THREE.SphereGeometry(0.05, 8, 6).translate(0, 0.36, 0), col2);
+    for (const [bone, list] of perBone) {
+      const m = new THREE.Mesh(mergeGeometries(list)!, this.mat);
+      for (const g of list) g.dispose();
+      add(m, bone);
     }
     if (suit === 'supernova') {
-      const plate = new THREE.Mesh(new THREE.CircleGeometry(0.22, 10), new THREE.MeshBasicMaterial({ color: new THREE.Color(C.gold).multiplyScalar(1.6), side: THREE.DoubleSide }));
+      const pm = new THREE.MeshBasicMaterial({ color: new THREE.Color(C.gold).multiplyScalar(1.6), side: THREE.DoubleSide });
+      this.extraMats.push(pm);
+      const plate = new THREE.Mesh(new THREE.CircleGeometry(0.22, 10), pm);
       plate.position.set(0, 0.06, -0.175);
       add(plate, b.torso);
     }
     if (suit === 'mirror') {
-      const sequins = new THREE.Mesh(new THREE.IcosahedronGeometry(0.05, 0), new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 1, roughness: 0.1, flatShading: true }));
+      const sm = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 1, roughness: 0.1, flatShading: true });
+      this.extraMats.push(sm);
+      const sequins = new THREE.Mesh(new THREE.IcosahedronGeometry(0.05, 0), sm);
       sequins.position.set(0.1, 0.12, 0.17);
       add(sequins, b.torso);
     }
     if (helmet) {
-      const visor = new THREE.Mesh(new THREE.SphereGeometry(0.31, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.62), new THREE.MeshStandardMaterial({ color: 0x8a7cff, transparent: true, opacity: 0.32, roughness: 0.05, metalness: 0.4, depthWrite: false }));
+      const vm = new THREE.MeshStandardMaterial({ color: 0x8a7cff, transparent: true, opacity: 0.32, roughness: 0.05, metalness: 0.4, depthWrite: false });
+      this.extraMats.push(vm);
+      const visor = new THREE.Mesh(new THREE.SphereGeometry(0.31, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.62), vm);
       visor.position.y = 0.02;
       add(visor, b.head);
-      const ant = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), m2);
-      ant.position.set(0, 0.36, 0);
-      add(ant, b.head);
     }
   }
 
@@ -518,18 +526,13 @@ export class Outfit {
   }
 
   update(dt: number, time: number, beat: number): void {
-    const [c1, c2] = SUIT_COLORS[this.suit];
+    if (!this.mat) return;
     const ph = beat - Math.floor(beat);
-    const k = (0.75 + 0.4 * Math.exp(-ph * 5)) * this.glow * 2;
-    void dt;
-    if (this.suit === 'nebula') {
-      const h = (time * 0.15) % 1;
-      this.mats[0]?.color.setHSL(0.72 + Math.sin(time) * 0.08, 1, 0.55).multiplyScalar(k);
-      this.mats[1]?.color.setHSL((h + 0.85) % 1, 1, 0.6).multiplyScalar(k);
-    } else {
-      this.mats[0]?.color.setHex(c1).multiplyScalar(k);
-      this.mats[1]?.color.setHex(c2).multiplyScalar(k);
-    }
+    const k = (0.75 + 0.4 * Math.exp(-ph * 5)) * this.glow * 2 * this.scale;
+    if (this.suit === 'nebula') this.mat.color.setHSL((0.72 + Math.sin(time * 0.8) * 0.12 + 1) % 1, 0.6, 0.6).multiplyScalar(k * 1.6);
+    else this.mat.color.setScalar(k);
+    // A flash eases back to normal (dimming stays until set again).
+    if (this.glow > 1) this.glow = Math.max(1, this.glow - dt * 2);
   }
 
   get current(): { suit: SuitId; helmet: boolean } {
@@ -539,14 +542,12 @@ export class Outfit {
   remove(): void {
     for (const p of this.parts) {
       p.parent.remove(p.obj);
-      p.obj.traverse((o) => {
-        if (o instanceof THREE.Mesh) {
-          o.geometry.dispose();
-        }
-      });
+      if (p.obj instanceof THREE.Mesh) p.obj.geometry.dispose();
     }
-    for (const m of this.mats) m.dispose();
+    this.mat?.dispose();
+    for (const m of this.extraMats) m.dispose();
+    this.mat = null;
+    this.extraMats = [];
     this.parts = [];
-    this.mats = [];
   }
 }

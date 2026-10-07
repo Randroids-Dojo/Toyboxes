@@ -32,6 +32,8 @@ export interface RobotLook {
 // Shared material: vertex colours, and a per-vertex glow mask lit by uGlow.
 
 const materials = new Set<THREE.MeshStandardMaterial>();
+/** Glow strength for every robot (lower on the low tier, where there is no bloom). */
+export const robotGlowScale = { value: 1 };
 
 function robotMaterial(): THREE.MeshStandardMaterial {
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.42, metalness: 0.15 });
@@ -39,10 +41,11 @@ function robotMaterial(): THREE.MeshStandardMaterial {
   m.userData.glow = glow;
   m.onBeforeCompile = (s) => {
     s.uniforms.uGlow = glow;
+    s.uniforms.uGlowScale = robotGlowScale;
     s.vertexShader = s.vertexShader.replace('#include <common>', '#include <common>\nattribute float aGlow;\nvarying float vGlow;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlow = aGlow;');
     s.fragmentShader = s.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform float uGlow;\nvarying float vGlow;')
-      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * vGlow * uGlow * 1.7;\ndiffuseColor.rgb *= 1.0 - min(vGlow, 1.0) * 0.6;');
+      .replace('#include <common>', '#include <common>\nuniform float uGlow;\nuniform float uGlowScale;\nvarying float vGlow;')
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * vGlow * uGlow * 1.7 * uGlowScale;\ndiffuseColor.rgb *= 1.0 - min(vGlow, 1.0) * 0.6;');
   };
   m.customProgramCacheKey = () => 'nova-robot';
   materials.add(m);
@@ -211,6 +214,8 @@ function atlas(): THREE.CanvasTexture {
 // ---------------------------------------------------------------------------
 
 export class Robot {
+  /** Every robot alive, for distance detail levels. */
+  static readonly all = new Set<Robot>();
   readonly root = new THREE.Group();
   /** Bobs and leans; holds everything above the hover pod. */
   readonly rig = new THREE.Group();
@@ -403,8 +408,36 @@ export class Robot {
       this.rig.add(arm);
     }
     this.root.add(this.rig);
+    // A one-draw stand-in for far away: body, head and arms at rest, merged.
+    this.rig.updateMatrixWorld(true);
+    const inv = new THREE.Matrix4().copy(this.rig.matrixWorld).invert();
+    const parts: THREE.BufferGeometry[] = [];
+    for (const m of [torsoMesh, headMesh, ...this.armL.children, ...this.armR.children]) {
+      if (!(m instanceof THREE.Mesh) || (m !== headMesh && m.material !== this.mat)) continue;
+      parts.push(m.geometry.clone().applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, m.matrixWorld)));
+    }
+    if (parts.length) {
+      this.far = new THREE.Mesh(mergeGeometries(parts)!, this.mat);
+      this.far.visible = false;
+      this.rig.add(this.far);
+      for (const g of parts) g.dispose();
+    }
+    this.near = [torsoMesh, this.head, this.armL, this.armR];
     this.root.scale.setScalar(s);
     this.height = 1.8 * s;
+    Robot.all.add(this);
+  }
+
+  private far: THREE.Mesh | null = null;
+  private near: THREE.Object3D[] = [];
+  private isFar = false;
+
+  /** Swap to the one-draw stand-in (far away) or back. */
+  setFar(far: boolean): void {
+    if (far === this.isFar || !this.far) return;
+    this.isFar = far;
+    this.far.visible = far;
+    for (const o of this.near) o.visible = !far;
   }
 
   setFace(f: Face): void {
@@ -445,6 +478,8 @@ export class Robot {
   dispose(): void {
     this.faceTex.dispose();
     materials.delete(this.mat);
+    this.far?.geometry.dispose();
+    Robot.all.delete(this);
   }
 }
 
@@ -476,7 +511,7 @@ export const DUELISTS: DuelistLook[] = [
   { id: 'twinkle', look: { head: 'star', body: 0x5c1f55, trim: C.pink, trim2: C.white, badge: 'star' }, blade: C.pink, twin: true },
   { id: 'brick', look: { head: 'box', body: 0x5a2f1a, trim: C.orange, badge: 'triangle', scale: 1.12, broad: 1.4 }, blade: C.orange },
   { id: 'mirage', look: { head: 'slim', body: 0x2e1d5e, trim: C.violet, trim2: C.lilac, badge: 'star', scale: 1.05 }, blade: C.lilac },
-  { id: 'knight', look: { head: 'crest', body: 0xd8cfae, trim: C.gold, trim2: C.white, badge: 'star', scale: 1.25, broad: 1.15 }, blade: C.white },
+  { id: 'knight', look: { head: 'crest', body: 0x8a7a52, trim: C.gold, trim2: C.white, badge: 'star', scale: 1.25, broad: 1.15 }, blade: C.white },
 ];
 
 export function judgeBot(kind: 'tempo' | 'groove' | 'sparkle'): Robot {

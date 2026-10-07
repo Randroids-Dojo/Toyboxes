@@ -30,7 +30,7 @@ import { tagStars, TAG_DIFF_NAMES, type TagDiff } from '../../shared/neon/tag';
 import type { LayoutId } from '../../shared/neon/arena';
 import { songData } from './music';
 import { RhythmInput } from './rhythm-input';
-import { DUELISTS, judgeBot, orbitBot, Robot } from './robots';
+import { DUELISTS, judgeBot, orbitBot, Robot, robotGlowScale } from './robots';
 import { RING as RING_CENTER } from './station';
 import { NovaProgress } from './save';
 import { Sky } from './sky';
@@ -40,7 +40,7 @@ import { SyncMode, type SyncResult } from './sync';
 import { AttractYard, nearYard, Spar } from './attract';
 import { NightRun } from './night';
 import { Dancer, Fencer, Outfit, type SuitId } from './style';
-import { C } from './util';
+import { C, setNeonScale } from './util';
 import type { Mode, Nova } from './world';
 
 export class NeonParty implements SpaceView, Nova {
@@ -74,6 +74,7 @@ export class NeonParty implements SpaceView, Nova {
 
   private sky: Sky;
   private trail: Ribbon;
+  private tmpV = new THREE.Vector3();
   private attract: AttractYard;
   private spar: Spar;
   private station: StationParts;
@@ -341,6 +342,10 @@ export class NeonParty implements SpaceView, Nova {
     for (const p of [this.fx.sparks, this.fx.glow, this.fx.confetti]) p.setQuality(t);
     stationQuality(this.station, t);
     this.attract.setQuality(t);
+    // No bloom on low: keep neon below white so it keeps its colour.
+    setNeonScale(t === 'low' ? 0.55 : 1);
+    robotGlowScale.value = t === 'low' ? 0.5 : 1;
+    this.outfit.scale = t === 'low' ? 0.5 : 1;
     this.arena.setQuality(t);
     this.sun.shadow.mapSize.set(t === 'high' ? 2048 : 1024, t === 'high' ? 2048 : 1024);
     this.sun.shadow.map?.dispose();
@@ -917,7 +922,7 @@ export class NeonParty implements SpaceView, Nova {
       const m = s.mesh.material as THREE.MeshBasicMaterial;
       m.color.setScalar(signK * (0.92 + 0.08 * Math.exp(-(beat % 1) * 5)));
     }
-    for (const hl of st.holos) hl.position.y = 2.45 + Math.sin(t * 2) * 0.05;
+    for (const hl of st.holos) if (!hl.userData.fancy) hl.position.y = 2.45 + Math.sin(t * 2) * 0.05;
     // The airlock curtain slides open when the yard is free and fades when the camera is near it.
     const cam = this.ctx.camera.position;
     // Seen from inside the yard (or right next to it) the curtain hides.
@@ -929,8 +934,11 @@ export class NeonParty implements SpaceView, Nova {
       mat.uniforms.uFade.value = near * (1 - this.doorOpen);
       mat.uniforms.uTime.value = t;
     }
-    // Robots step out of the way of the camera rather than fill the screen.
+    // Robots step out of the way of the camera rather than fill the screen,
+    // and far ones swap to a one-draw stand-in (sooner on the low tier).
     const camP = this.ctx.camera.position;
+    const farAt = this.tierNow === 'low' ? 14 : this.tierNow === 'medium' ? 26 : 40;
+    for (const r of Robot.all) r.setFar(r.root.getWorldPosition(this.tmpV).distanceTo(camP) > farAt);
     for (const r of [this.orbit, ...this.judges, ...this.extras]) r.root.visible = r.root.position.distanceTo(camP) > 1.4;
     this.fill.position.copy(this.ctx.camera.position).add(new THREE.Vector3(0, 2, 0));
     this.fill.target.position.set(focus.x, 1, focus.z);
@@ -1057,6 +1065,8 @@ export class NeonParty implements SpaceView, Nova {
 
   debugSkipPractice(): void {
     this.save.markSeen('tag-practice');
+    this.save.markSeen('duel-drill');
+    this.save.markSeen('ask-sync');
   }
 
   debugDuel(id: DuelistId = 'sprocket', echo = false): void {

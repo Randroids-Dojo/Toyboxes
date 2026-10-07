@@ -533,12 +533,13 @@ export class DuelMode implements Mode {
     const b = smooth(Math.min(1, this.camT / 0.8));
     const sway = Math.sin(this.camT * 0.4) * 0.25;
     const bind = this.live().judge.binding ? 1 : 0;
-    const dist = (portrait ? 8.4 : 5.4) - bind * 0.8 - this.punch * 2;
+    // Stay inside the ring's rail (radius 7.3).
+    const dist = (portrait ? 6.6 : 5.4) - bind * 0.8 - this.punch * 2;
     if (this.phase === 'end' || this.phase === 'done') {
       const a = this.endT * 0.5;
       return { position: new THREE.Vector3(RING.x + Math.sin(a) * 5, 2.2, Math.cos(a) * 5), target: new THREE.Vector3(RING.x, 1.1, 0), blend: 1, fov: 50 };
     }
-    return { position: new THREE.Vector3(this.center.x + 0.2 + sway, 1.85 - bind * 0.2, dist), target: new THREE.Vector3(this.center.x, 1.2, 0), blend: b, fov: portrait ? 62 : 48 };
+    return { position: new THREE.Vector3(this.center.x + 0.2 + sway, (portrait ? 2.3 : 1.85) - bind * 0.2, dist), target: new THREE.Vector3(this.center.x, 1.15, 0), blend: b, fov: portrait ? 70 : 48 };
   }
 
   info(): Record<string, unknown> {

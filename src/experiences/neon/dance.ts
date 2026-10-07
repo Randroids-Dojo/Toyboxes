@@ -15,6 +15,7 @@ import { Robot } from './robots';
 import { nova as snd } from './sounds';
 import { FREESTYLE } from './style';
 import { C, HEX, rng, smooth } from './util';
+import { JUDGES } from './station';
 import type { Mode, Nova } from './world';
 
 export interface Rival {
@@ -105,7 +106,9 @@ export class DanceMode implements Mode {
 
     // HUD: the beat bar, the rival meter and the combo.
     this.bar = new BeatBar(nova.layer);
-    this.bar.lead = opts.diff === 'easy' ? 2.6 : opts.diff === 'normal' ? 2.2 : 1.8;
+    // Narrow screens show less time so gems keep their spacing.
+    const narrow = Math.max(0.55, Math.min(1, innerWidth / 900));
+    this.bar.lead = (opts.diff === 'easy' ? 2.6 : opts.diff === 'normal' ? 2.2 : 1.8) * narrow;
     this.rivalFill = h('i', '');
     this.rivalMeter = h('div', 'nova-rival', h('span', 'you', 'You'), h('div', 'track', this.rivalFill), h('span', 'them', opts.rival.name));
     this.comboEl = h('div', 'nova-combo');
@@ -456,10 +459,13 @@ export class DanceMode implements Mode {
     let pos: THREE.Vector3;
     let target: THREE.Vector3;
     if (this.phase === 'cards' || this.phase === 'done') {
-      // Pan across the judges.
+      // Pan across the judges from the floor side of their desk.
       const k = smooth(Math.min(1, this.t / 2.5));
-      pos = new THREE.Vector3(1.8 + k * 0.6, 1.9, 2.8 + k * 0.4);
-      target = new THREE.Vector3(6.8, 1.5 - k * 0.1, 6.2);
+      const ux = -JUDGES.x / Math.hypot(JUDGES.x, JUDGES.z);
+      const uz = -JUDGES.z / Math.hypot(JUDGES.x, JUDGES.z);
+      const back = portrait ? 4.6 : 3.4;
+      pos = new THREE.Vector3(JUDGES.x + ux * back - uz * (1 - k * 2) * 1.2, 1.75, JUDGES.z + uz * back + ux * (1 - k * 2) * 1.2);
+      target = new THREE.Vector3(JUDGES.x - ux * 0.7, 1.35, JUDGES.z - uz * 0.7);
     } else if (glow || this.shotCut > 0) {
       // Crane round the floor.
       const a = Math.sin(this.camT * 0.3) * 0.8;

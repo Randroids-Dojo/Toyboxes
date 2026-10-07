@@ -130,15 +130,18 @@
   bottom: max(10vh, calc(30px + var(--safe-b)));
   transform: translateX(-50%);
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 14px;
   align-items: flex-end;
   perspective: 600px;
+  width: min(640px, 94vw);
 }
 
 .nova-card {
   position: relative;
-  width: clamp(76px, 18vw, 120px);
-  height: clamp(100px, 23vw, 150px);
+  width: clamp(72px, 22vw, 120px);
+  height: clamp(96px, 29vw, 150px);
   transform-style: preserve-3d;
   transition: transform 0.45s cubic-bezier(0.3, 1.4, 0.5, 1);
 }

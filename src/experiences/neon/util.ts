@@ -45,7 +45,7 @@ export class Batch {
 
   addMatrix(geo: THREE.BufferGeometry, mat: THREE.Material, m: THREE.Matrix4): void {
     const g = (geo.index ? geo.toNonIndexed() : geo.clone()).applyMatrix4(m);
-    for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(k)) g.deleteAttribute(k);
+    for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv', 'color'].includes(k)) g.deleteAttribute(k);
     if (!g.attributes.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
     const list = this.parts.get(mat) ?? [];
     list.push(g);
@@ -70,9 +70,30 @@ export class Batch {
   }
 }
 
-/** A neon tube colour: unlit, bright enough to bloom on medium and high. */
+const neonCache = new Map<string, THREE.MeshBasicMaterial>();
+let neonScale = 1;
+
+/**
+ * Without bloom (the low tier) colours above white flatten to white, so neon
+ * runs dimmer there to keep its hue.
+ */
+export function setNeonScale(k: number): void {
+  neonScale = k;
+  for (const m of neonCache.values()) m.color.copy(m.userData.base as THREE.Color).multiplyScalar(k);
+}
+
+/** A neon tube colour: unlit, bright enough to bloom on medium and high. Shared per colour, so batches merge. */
 export function neon(color: number, boost = 2.2): THREE.MeshBasicMaterial {
-  return new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(boost) });
+  const key = `${color}:${boost}`;
+  let m = neonCache.get(key);
+  if (!m || (m as unknown as { disposed?: boolean }).disposed) {
+    const base = new THREE.Color(color).multiplyScalar(boost);
+    m = new THREE.MeshBasicMaterial({ color: base.clone().multiplyScalar(neonScale) });
+    m.userData.base = base;
+    m.addEventListener('dispose', () => neonCache.delete(key));
+    neonCache.set(key, m);
+  }
+  return m;
 }
 
 /** A dark plastic with a coloured glow. */
