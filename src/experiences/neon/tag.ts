@@ -15,7 +15,7 @@ import { Robot, tagBot } from './robots';
 import { nova as snd } from './sounds';
 import { blaster, prismBlade } from './style';
 import { TagSim, type Agent, type TagConfig, type TagEvent } from './tag-sim';
-import { C, HEX, haloTexture, smooth } from './util';
+import { C, canvasTexture, HEX, haloTexture, smooth } from './util';
 import type { Mode, Nova } from './world';
 
 export interface TagOpts {
@@ -50,6 +50,7 @@ interface BotView {
   aimLine: THREE.Line | null;
   shield: THREE.Mesh | null;
   mark: number;
+  markSprite: THREE.Sprite | null;
 }
 
 const DT = 1 / 60;
@@ -95,6 +96,7 @@ export class TagMode implements Mode {
   private beatFlash = 0;
   private pendingSwing: { until: number; stamp: number } | null = null;
   private reflects = 0;
+  private tenCalled = false;
   private clickStart: { x: number; y: number; t: number } | null = null;
   private onDown = (e: PointerEvent) => {
     if (e.pointerType === 'mouse' && e.button === 0) this.clickStart = { x: e.clientX, y: e.clientY, t: e.timeStamp };
@@ -193,7 +195,15 @@ export class TagMode implements Mode {
         shield.position.y = 1.0;
         robot.root.add(shield);
       }
-      this.bots.push({ agent: a, robot, gun, stagger: 0, dissolve: 0, tele: 0, aimLine: null, shield, mark: 0 });
+      let markSprite: THREE.Sprite | null = null;
+      if (a.team === 'magenta') {
+        markSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: markTexture(), transparent: true, depthWrite: false, depthTest: false }));
+        markSprite.scale.set(0.5, 0.5, 1);
+        markSprite.visible = false;
+        robot.root.add(markSprite);
+        markSprite.position.y = 2.25;
+      }
+      this.bots.push({ agent: a, robot, gun, stagger: 0, dissolve: 0, tele: 0, aimLine: null, shield, mark: 0, markSprite });
     }
   }
 
@@ -355,7 +365,12 @@ export class TagMode implements Mode {
             b.robot.setFace('surprised');
           }
           n.fx.sparks.burst({ at: { x: v.x, y: 1.1, z: v.z }, count: 14, speed: [2, 5], color: [TEAM_HEX[v.team], C.white], life: [0.2, 0.4], size: [0.05, 0.12] });
-          if (e.by === 0) snd.tag();
+          if (e.by === 0) {
+            snd.tag();
+            this.reticle.classList.remove('hit');
+            void this.reticle.offsetWidth;
+            this.reticle.classList.add('hit');
+          }
         }
         break;
       }
@@ -436,11 +451,14 @@ export class TagMode implements Mode {
         }
         break;
       }
-      case 'overheat':
+      case 'overheat': {
+        const p = sim.player;
+        n.fx.glow.burst({ at: { x: p.x + Math.sin(p.yaw) * 0.5, y: 1.2, z: p.z + Math.cos(p.yaw) * 0.5 }, count: 24, shape: 'up', speed: [0.5, 2], color: [0xffffff, C.orange], life: [0.6, 1.1], size: [0.2, 0.4], gravity: -2, alpha: 0.5 });
         snd.overheat();
         n.hud.judge('Overheated!', HEX.orange);
         n.hint('hint-heat', 'Fire on the beat to stay cool');
         break;
+      }
       case 'mark': {
         const b = bot(e.target);
         if (b) b.mark = 1.5;
@@ -571,6 +589,10 @@ export class TagMode implements Mode {
       r.root.visible = k < 1;
     } else r.root.visible = true;
     b.mark = Math.max(0, b.mark - dt);
+    if (b.markSprite) {
+      b.markSprite.visible = b.mark > 0 && a.outT <= 0;
+      b.markSprite.position.y = 2.25 + Math.sin(performance.now() / 120) * 0.05;
+    }
   }
 
   private drawBolts(sim: TagSim): void {
@@ -683,6 +705,11 @@ export class TagMode implements Mode {
     if (this.sim.suddenGlow && !this.announcedSudden) {
       this.announcedSudden = true;
       n.hud.banner('Sudden glow!', { sub: 'Next tag wins', color: HEX.gold, size: 'l', ms: 1800 });
+      snd.rise();
+    }
+    if (this.phase === 'play' && !this.tenCalled && sim.remaining <= 10 && !this.sim.suddenGlow) {
+      this.tenCalled = true;
+      n.hud.banner('10 seconds!', { color: HEX.gold, size: 'm', ms: 1200 });
       snd.rise();
     }
     // The last ten seconds beep on the beat.
@@ -920,6 +947,26 @@ function el(tag: string, cls = '', ...kids: Node[]): HTMLElement {
   if (cls) e.className = cls;
   e.append(...kids);
   return e;
+}
+
+let markTex: THREE.CanvasTexture | null = null;
+function markTexture(): THREE.CanvasTexture {
+  if (markTex) return markTex;
+  markTex = canvasTexture(64, 64, (g) => {
+    g.fillStyle = '#ffc93c';
+    g.shadowColor = '#ffc93c';
+    g.shadowBlur = 10;
+    g.beginPath();
+    g.arc(32, 32, 24, 0, Math.PI * 2);
+    g.fill();
+    g.shadowBlur = 0;
+    g.fillStyle = '#120b33';
+    g.font = '900 40px system-ui';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText('!', 32, 34);
+  });
+  return markTex;
 }
 
 function fmt(s: number): string {

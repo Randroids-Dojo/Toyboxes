@@ -29,6 +29,7 @@ export interface NightHost extends Nova {
   night: NightRun | null;
   podium(on: boolean): void;
   refreshUnlocks(): void;
+  tuneSync(errors: number[]): void;
 }
 
 const STAGES = ['Laser tag', 'Blade duel', 'Dance off'];
@@ -198,6 +199,7 @@ export class NightRun {
 
   private async danceDone(o: DanceOutcome): Promise<void> {
     if (o.quit) return this.leave();
+    this.host.tuneSync(o.errors);
     const r = o.result;
     await this.afterStage(2, r.score, o.log, nightDanceStars(r), [
       { label: 'Score', value: r.score.toLocaleString('en-US') },
@@ -237,6 +239,10 @@ export class NightRun {
     if (!save.data.sync.wide) {
       const posted = await h.boards.submit('night', total, log, this.save.ticket);
       line = boardLine(posted, false);
+      if (posted.ok) {
+        snd.bell(4);
+        h.ctx.ui.toast(line, 'good', 2800);
+      }
       const b = await h.boards.fetch(['night'], true);
       rows = (b.night?.rows ?? []).slice(0, 5).map((x) => ({ name: x.name, value: x.value.toLocaleString('en-US'), you: x.you }));
     } else line = boardLine(null, true);

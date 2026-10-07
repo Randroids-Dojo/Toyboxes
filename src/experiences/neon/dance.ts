@@ -40,6 +40,8 @@ export interface DanceOutcome {
   /** Ended by leaving rather than finishing the song. */
   quit: boolean;
   wide: boolean;
+  /** Timing errors of every hit, seconds (positive late), for sync tuning. */
+  errors: number[];
 }
 
 const PLAYER = { x: 0, z: 0, yaw: 0 };
@@ -50,8 +52,11 @@ const NOTE_HEX: Record<Note['sub'], number> = { 4: C.pink, 8: C.cyan, 16: C.gold
 
 export class DanceMode implements Mode {
   readonly kind = 'dance';
-  readonly chart: Chart;
-  readonly judge: LiveJudge;
+  chart: Chart;
+  judge: LiveJudge;
+  /** The first-time practice loop, before the song. */
+  private drill: { chart: Chart; judge: LiveJudge; real: { chart: Chart; judge: LiveJudge }; streak: number } | null = null;
+  private ahead: boolean | null = null;
   private bar: BeatBar;
   private rivalBot: Robot;
   private rivalMeter: HTMLElement;
@@ -125,13 +130,49 @@ export class DanceMode implements Mode {
     nova.dancer.beat = () => (nova.clock.running ? nova.clock.drawBeat() : 0);
     nova.ctx.pose(nova.dancer.pose);
     nova.rin.setActive(true);
-    nova.playSong(opts.song, { fadeIn: 0.05 });
     this.phase = 'play';
+    if (!nova.save.seen('dance-drill')) this.startDrill(widen);
+    else nova.playSong(opts.song, { fadeIn: 0.05 });
     this.bar.show(nova.save.data.sync.beatBar);
     if (this.diff === 'easy' || !nova.save.seen('hint-gems')) nova.hint('hint-gems', 'Tap on the gems');
   }
 
   private onDone: (o: DanceOutcome) => void;
+
+  /** First time: the intro loops while four quarter notes come round, until four land in a row. */
+  private startDrill(widen: number): void {
+    const song = this.chart.song;
+    const beats = [4, 5, 6, 7, 12, 13, 14, 15, 20, 21, 22, 23, 28, 29, 30, 31];
+    const notes: Note[] = beats.map((b, i) => ({ i, kind: 'tap', beat: b, t: beatToSec(song, b), endBeat: b, endT: beatToSec(song, b), sub: 4, link: false }));
+    const chart: Chart = { song, diff: 'easy', notes, slots: [], spotBars: [], bars: 8, seconds: beatToSec(song, 34) };
+    const judge = new LiveJudge(chart, { widen: Math.max(widen, EASY_WIDEN) });
+    this.drill = { chart, judge, real: { chart: this.chart, judge: this.judge }, streak: 0 };
+    this.chart = chart;
+    this.judge = judge;
+    this.nova.playSong(this.song, { fadeIn: 0.05, loop: true });
+    music.only('intro');
+    this.nova.hud.banner('Practice', { sub: 'Tap as each gem reaches the ring', color: HEX.lilac, size: 'm', ms: 2400 });
+  }
+
+  private endDrill(nailed: boolean): void {
+    const d = this.drill;
+    if (!d) return;
+    this.drill = null;
+    this.chart = d.real.chart;
+    this.judge = d.real.judge;
+    this.rivalNext = 0;
+    this.rivalScore = 0;
+    this.lastBeatInt = -1;
+    this.nova.save.markSeen('dance-drill');
+    music.only(null);
+    this.nova.playSong(this.song, { fadeIn: 0.05 });
+    this.nova.hud.banner(nailed ? 'Nice!' : "Let's dance!", { sub: 'Here comes the song', color: HEX.lime, size: 'l', ms: 1600 });
+  }
+
+  /** In the practice loop. */
+  get drilling(): boolean {
+    return !!this.drill;
+  }
 
   /** The song is running (not the cards or results). */
   get playing(): boolean {
@@ -208,6 +249,8 @@ export class DanceMode implements Mode {
     this.spotActive = spot;
     n.setEnergy(glow ? 2 : spot ? 0.6 : 1.2, glow);
     this.dim = Math.max(0, this.dim - dt * 1.5);
+    // A held note streams sparkles off the dancer.
+    if (this.judge.holding && !paused) n.fx.glow.burst({ at: { x: PLAYER.x, y: 1.1, z: PLAYER.z }, count: 2, radius: 0.4, speed: [0.5, 1.5], color: [C.gold, C.white], life: [0.3, 0.6], size: [0.08, 0.16], gravity: -1 });
     n.floor.update(dt, now / 1000, beat, { glow, dim: this.dim, spot: spot ? 1 : 0, mood: 1, px: PLAYER.x, pz: PLAYER.z });
     this.floorNotes(draw);
     this.bar.draw(dt, this.chart, {
@@ -268,10 +311,30 @@ export class DanceMode implements Mode {
         n.core.burst(0.7);
         snd.pulse();
       }
-      if (bi === 4) n.hud.banner('3', { size: 'xl', ms: 450 });
-      if (bi === 5) n.hud.banner('2', { size: 'xl', ms: 450 });
-      if (bi === 6) n.hud.banner('1', { size: 'xl', ms: 450 });
-      if (bi === 7) n.hud.banner('Dance!', { size: 'xl', ms: 650, color: HEX.pink });
+      if (this.drill) {
+        // no count-in while practising
+      } else if (bi === 4) n.hud.banner('3', { size: 'xl', ms: 450 });
+      else if (bi === 5) n.hud.banner('2', { size: 'xl', ms: 450 });
+      else if (bi === 6) n.hud.banner('1', { size: 'xl', ms: 450 });
+      else if (bi === 7) n.hud.banner('Dance!', { size: 'xl', ms: 650, color: HEX.pink });
+    }
+    if (this.drill) {
+      const sc = this.judge.score;
+      this.drill.streak = sc.combo;
+      if (sc.combo >= 4) this.endDrill(true);
+      else if (this.judge.done) this.endDrill(false);
+      return;
+    }
+    // The rival meter swings: call it when the lead changes.
+    const you = this.judge.score.score;
+    if (this.judge.next > 12) {
+      const ahead = you >= this.rivalScore;
+      if (this.ahead !== null && ahead !== this.ahead) {
+        n.hud.judge(ahead ? 'You take the lead!' : 'Rival takes the lead', ahead ? HEX.cyan : HEX.pink);
+        snd.cheer();
+        n.crowd.cheerNow(0.8);
+      }
+      this.ahead = ahead;
     }
     const combo = this.judge.score.combo;
     this.comboEl.textContent = combo >= 5 ? `${combo}` : '';
@@ -396,7 +459,7 @@ export class DanceMode implements Mode {
     const r = this.judge.result()!;
     this.result = r;
     this.cardsEl = buildCards(this.nova.layer, r);
-    this.nova.dancer.play('cheer', 1.4);
+    this.nova.dancer.play(this.nova.victoryMove(), 1.6);
   }
 
   private result: DanceResult | null = null;
@@ -433,7 +496,7 @@ export class DanceMode implements Mode {
       el.remove();
       this.cardsEl = null;
       const log = this.judge.log();
-      this.onDone({ result: r, log, stars: danceStars(r.cards.total), quit: this.quit, wide: this.wide });
+      this.onDone({ result: r, log, stars: danceStars(r.cards.total), quit: this.quit, wide: this.wide, errors: this.judge.errors });
     }
   }
 
@@ -488,7 +551,7 @@ export class DanceMode implements Mode {
     const slots = this.chart.slots.filter((s) => s.t > n.clock.secAt(now) - 0.05).slice(0, 8).map((s) => ({ t: s.t, at: n.clock.perfOf(s.t) }));
     const s = this.judge.score;
     return {
-      phase: this.phase,
+      phase: this.drill ? 'drill' : this.phase,
       song: this.song,
       diff: this.diff,
       t: n.clock.running ? n.clock.secAt(now) : null,

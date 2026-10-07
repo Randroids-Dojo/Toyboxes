@@ -276,14 +276,23 @@ await w.until(async () => (await exp()).mode === 'dance', 'dance', 20000);
   const done = new Set<number>();
   const slotsDone = new Set<number>();
   let paused = false;
+  let lastPhase = '';
   let judgedAtPause = 0;
   let shots = 0;
   const t0 = Date.now();
   while (Date.now() - t0 < 150000) {
     const g = await game();
-    if (!g || g.phase !== 'play') break;
+    if (!g || (g.phase !== 'play' && g.phase !== 'drill')) break;
+    if (g.phase !== lastPhase) {
+      lastPhase = g.phase;
+      done.clear();
+    }
+    if (g.phase === 'drill' && !g.next.length) {
+      await sleep(60);
+      continue;
+    }
     // Pause once mid-song with Back, then resume.
-    if (!paused && g.judged > 40) {
+    if (!paused && g.phase === 'play' && g.judged > 40) {
       paused = true;
       judgedAtPause = g.judged;
       await pause();

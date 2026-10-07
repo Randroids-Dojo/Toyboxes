@@ -194,3 +194,17 @@ export class SyncMode implements Mode {
     if (!this.done) music.stop(0.3);
   }
 }
+
+/**
+ * After a song with at least 20 hits: if the middle error is over 15 ms, move
+ * the offset by half of it (at most 25 ms). Returns the new offset or null.
+ */
+export function tuneOffset(offset: number, errorsSec: number[]): number | null {
+  if (errorsSec.length < 20) return null;
+  const s = [...errorsSec].sort((a, b) => a - b);
+  const mid = (s[Math.floor((s.length - 1) / 2)] + s[Math.ceil((s.length - 1) / 2)]) / 2;
+  const ms = mid * 1000;
+  if (Math.abs(ms) <= 15) return null;
+  const step = Math.max(-25, Math.min(25, ms / 2));
+  return Math.max(-60, Math.min(300, Math.round(offset + step)));
+}

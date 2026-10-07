@@ -55,6 +55,8 @@ export interface Nova {
   setEnergy(energy: number, glow: number): void;
   /** Where the player is. */
   player(): PlayerState;
+  /** The equipped victory pose as a dance move. */
+  victoryMove(): 'wave' | 'point' | 'glide';
   /** The equipped prism blade colour. */
   bladeColor(): number;
   /** Shuts the Comet Yard airlock (during a match). */

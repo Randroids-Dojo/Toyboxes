@@ -855,3 +855,17 @@
     grid-template-columns: 1fr;
   }
 }
+
+.nova-reticle.hit i {
+  animation: nova-hit 0.25s ease-out;
+}
+
+@keyframes nova-hit {
+  0% {
+    border-color: #fff4fe;
+    transform: scale(1.4);
+  }
+  100% {
+    transform: scale(1);
+  }
+}

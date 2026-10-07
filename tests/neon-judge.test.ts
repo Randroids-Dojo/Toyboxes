@@ -3,7 +3,7 @@ import { chartFor, parseChart, type Chart } from '../src/shared/neon/charts';
 import { DUEL_PIPS, LiveDuel, scoreDuel, scriptFor, duelStars, duelFlawless } from '../src/shared/neon/duel';
 import { comboMult, danceStars, EASY_WIDEN, gradeFor, LiveJudge, noteLogLength, scoreDance, WINDOW } from '../src/shared/neon/judge';
 import { SONGS } from '../src/shared/neon/songs';
-import { medianOffset } from '../src/experiences/neon/sync';
+import { medianOffset, tuneOffset } from '../src/experiences/neon/sync';
 
 /** A tiny chart on Nova Lights: taps, a double, a hold and a pose, then a spotlight bar. */
 function tiny(): Chart {
@@ -273,5 +273,14 @@ describe('sound check', () => {
     expect(medianOffset([10, 20])).toBeNull();
     expect(medianOffset([500, 500, 500, 500, 500])).toBe(300);
     expect(medianOffset([-100, -100, -100, -100, -100])).toBe(-60);
+  });
+
+  it('tunes the offset by half the middle error after a song, at most 25 ms', () => {
+    const late = Array.from({ length: 30 }, () => 0.03);
+    expect(tuneOffset(10, late)).toBe(25);
+    expect(tuneOffset(10, Array.from({ length: 30 }, () => 0.2))).toBe(35);
+    expect(tuneOffset(10, Array.from({ length: 30 }, () => 0.01))).toBeNull();
+    expect(tuneOffset(10, late.slice(0, 10))).toBeNull();
+    expect(tuneOffset(0, Array.from({ length: 30 }, () => -0.04))).toBe(-20);
   });
 });

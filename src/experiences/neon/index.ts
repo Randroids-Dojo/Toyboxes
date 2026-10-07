@@ -36,7 +36,7 @@ import { NovaProgress } from './save';
 import { Sky } from './sky';
 import { nova as snd } from './sounds';
 import { BOOTH, buildStation, DOOR, DUEL_TERMINAL, JUDGES, JUKEBOX, ORBIT_SPOT, paintBoard, PEDESTALS, STAR_PAD, stationQuality, TAG_TERMINAL, WARDROBE, type StationParts } from './station';
-import { SyncMode, type SyncResult } from './sync';
+import { SyncMode, tuneOffset, type SyncResult } from './sync';
 import { AttractYard, nearYard, Spar } from './attract';
 import { NightRun } from './night';
 import { Dancer, Fencer, Outfit, type SuitId } from './style';
@@ -525,10 +525,12 @@ export class NeonParty implements SpaceView, Nova {
     if (!this.save.data.sync.wide) {
       const posted = await this.boards.submit(duelBoard(id), r.score, o.log, this.ticket);
       line = boardLine(posted, false);
+      if (posted.ok) this.boardChime(line);
       const b = await this.boards.fetch([duelBoard(id)], true);
       rows = (b[duelBoard(id)]?.rows ?? []).slice(0, 5).map((x) => ({ name: x.name, value: x.value.toLocaleString('en-US'), you: x.you }));
     } else line = boardLine(null, true);
     const meta = duelMeta(id);
+    if (newBest) this.celebrateBest();
     const choice = await this.hud.results({
       title: r.outcome === 'ko' ? 'KO!' : won ? 'Bout won!' : 'Good bout!',
       subtitle: `vs ${meta.name} · ${o.echo ? 'Echo' : 'Normal'}`,
@@ -553,6 +555,20 @@ export class NeonParty implements SpaceView, Nova {
     if (choice === 'again') this.startDuel(id, o.echo, true);
     else if (choice === 'pick') this.openDuels();
     else this.ctx.teleport(DUEL_TERMINAL.x + 1.2, DUEL_TERMINAL.z, Math.PI / 2);
+  }
+
+  /** A new personal best: gold confetti and a fanfare. */
+  private celebrateBest(): void {
+    const p = this.player_;
+    this.fx.confetti.burst({ at: { x: p.x, y: 4, z: p.z }, count: 120, shape: 'up', speed: [3, 7], color: [C.gold, 0xffffff], size: [0.12, 0.2], life: [2, 3], gravity: 5, drag: 1.2 });
+    snd.fanfare();
+  }
+
+  /** The server confirmed a board result. */
+  private boardChime(line: string): void {
+    snd.bell(4);
+    setTimeout(() => snd.bell(7), 120);
+    this.ctx.ui.toast(line, 'good', 2800);
   }
 
   duelRing(id: string | null): void {
@@ -681,9 +697,11 @@ export class NeonParty implements SpaceView, Nova {
     if (board && s) {
       const posted = await this.boards.submit('tag', Math.round(total * (diff === 'hard' ? 1.25 : 1)), o.log, this.ticket);
       line = boardLine(posted, false);
+      if (posted.ok) this.boardChime(line);
       const b = await this.boards.fetch(['tag'], true);
       rows = (b.tag?.rows ?? []).slice(0, 5).map((x) => ({ name: x.name, value: x.value.toLocaleString('en-US'), you: x.you }));
     }
+    if (newBest) this.celebrateBest();
     const choice = await this.hud.results({
       title: o.won ? 'Cyan wins!' : o.us === o.them ? 'A draw' : 'Magenta wins',
       subtitle: `${o.us} to ${o.them} · ${TAG_DIFF_NAMES[diff]}`,
@@ -805,7 +823,18 @@ export class NeonParty implements SpaceView, Nova {
 
   private ticket: string | null = null;
 
+  /** Nudges the timing offset after a song that ran consistently early or late. */
+  tuneSync(errors: number[]): void {
+    const next = tuneOffset(this.save.data.sync.offset, errors);
+    if (next === null) return;
+    this.save.data.sync.offset = next;
+    this.clock.inputOffset = next;
+    this.save.save();
+    this.ctx.ui.toast('Sync tuned', 'info', 1800);
+  }
+
   private async danceDone(song: SongId, diff: Diff, o: DanceOutcome): Promise<void> {
+    if (!o.quit) this.tuneSync(o.errors);
     const key = `dance:${song}:${diff}`;
     const r = o.result;
     const newBest = this.save.best(key, r.score);
@@ -818,10 +847,12 @@ export class NeonParty implements SpaceView, Nova {
     if (modeId && !o.wide) {
       const posted = await this.boards.submit(modeId, r.score, o.log, this.ticket);
       line = boardLine(posted, false);
+      if (posted.ok) this.boardChime(line);
       const b = await this.boards.fetch([modeId], true);
       boardRows = (b[modeId]?.rows ?? []).slice(0, 5).map((x) => ({ name: x.name, value: x.value.toLocaleString('en-US'), you: x.you }));
     } else if (o.wide) line = boardLine(null, true);
     const c = r.counts;
+    if (newBest) this.celebrateBest();
     const choice = await this.hud.results({
       title: r.cards.total >= 26 ? 'Superstar!' : r.cards.total >= 21 ? 'Great show!' : 'Nice moves!',
       subtitle: `${SONGS[song].name} · ${DIFF_NAMES[diff]}`,
