@@ -237,7 +237,8 @@ export class Automaton {
 
 interface Bubble {
   el: HTMLElement;
-  who: Automaton;
+  /** An automaton, or a fixed point in the world (a telegraph that talks). */
+  who: Automaton | THREE.Vector3;
   left: number;
 }
 
@@ -293,6 +294,13 @@ export class Staff {
     this.bubbles.push({ el, who, left: seconds });
   }
 
+  /** A bubble over a point in the world, for things that are not staff. */
+  sayAt(at: THREE.Vector3, text: string, seconds = 4): void {
+    const el = h('div', { class: 'gp-bubble', role: 'status' }, text);
+    this.layer.appendChild(el);
+    this.bubbles.push({ el, who: at.clone(), left: seconds });
+  }
+
   update(dt: number, beat: number, look: THREE.Vector3 | null): void {
     for (const a of this.all.values()) {
       if (!a.seated) a.lookAt(look && a.root.position.distanceTo(look) < 6 ? look : null);
@@ -312,7 +320,9 @@ export class Staff {
         b.el.remove();
         return false;
       }
-      b.who.bubbleAt(v).project(this.camera);
+      if (b.who instanceof THREE.Vector3) v.copy(b.who);
+      else b.who.bubbleAt(v);
+      v.project(this.camera);
       const behind = v.z > 1 || Math.abs(v.x) > 1.2 || Math.abs(v.y) > 1.2;
       b.el.style.opacity = behind ? '0' : String(Math.min(1, b.left * 3));
       b.el.style.transform = `translate(${((v.x + 1) / 2) * W}px, ${((1 - v.y) / 2) * H}px) translate(-50%, -100%)`;

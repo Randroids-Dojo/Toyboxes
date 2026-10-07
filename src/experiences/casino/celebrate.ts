@@ -50,6 +50,10 @@ export interface JackpotOpts {
   at: THREE.Vector3;
   /** The banner, when it is not a jackpot (a royal flush gets the same ceremony). */
   title?: string;
+  /** For the GRAND: a view over the stern for the fireworks, cut to after the orbit. */
+  stern?: Framing;
+  /** Called when the GRAND sets the River Wheel spinning by itself. */
+  onGrand?: () => void;
 }
 
 export class Ceremonies {
@@ -175,7 +179,13 @@ export class Ceremonies {
     this.kit.letterbox(true);
     this.kit.banner(label, { sub: `${o.mult}x your bet: ${formatCredits(o.credits)}`, color: '#ffd24a', ms: grand ? 5200 : 3800, size: 'xl' });
     const total = grand ? 12 : 6;
-    const keys = rm || o.orbit.length < 2 ? [{ t: 0, f: o.orbit[0] }, { t: total, f: o.orbit[0] }] : o.orbit.map((f, i) => ({ t: (i / (o.orbit.length - 1)) * total, f }));
+    const orbitT = grand && o.stern ? 7 : total;
+    const keys = rm || o.orbit.length < 2 ? [{ t: 0, f: o.orbit[0] }, { t: orbitT, f: o.orbit[0] }] : o.orbit.map((f, i) => ({ t: (i / (o.orbit.length - 1)) * orbitT, f }));
+    if (grand && o.stern) {
+      // A cut to the stern for the fireworks over the river, then back to the machine.
+      keys.push({ t: orbitT + 0.01, f: o.stern }, { t: total - 1.2, f: o.stern }, { t: total - 1.19, f: o.orbit[o.orbit.length - 1] }, { t: total, f: o.orbit[o.orbit.length - 1] });
+      o.onGrand?.();
+    }
     const timers: number[] = [];
     const every = (ms: number, count: number, f: (i: number) => void) => {
       for (let i = 0; i < count; i++) timers.push(window.setTimeout(() => f(i), i * ms));

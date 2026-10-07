@@ -14,7 +14,7 @@ import { formatCredits, type ExperienceCtx } from '../common';
 import { Ambience, sound } from './audio';
 import { buildBoat, type BoatView } from './boat';
 import { Ceremonies } from './celebrate';
-import { Director } from './director';
+import { Director, frame } from './director';
 import { Economy } from './economy';
 import { Fx } from './fx';
 import { Blackjack } from './games/blackjack';
@@ -25,7 +25,7 @@ import { LuckyFalls } from './games/falls';
 import { FiveCardCabin } from './games/poker';
 import { SAVE_DEFAULTS, type Host, type SaveData } from './host';
 import { CasinoHud } from './hud';
-import { ARRIVAL, BLACKJACK, CAPTAIN_TABLE, COLLIDERS, EXIT, OLD_LUCKY, SPOTS, STAGE, zoneAt, type ColliderDef, type ZoneId } from './layout';
+import { ARRIVAL, BLACKJACK, CAPTAIN_TABLE, COLLIDERS, EXIT, OLD_LUCKY, SPOTS, STAGE, TELEGRAPH, zoneAt, type ColliderDef, type ZoneId } from './layout';
 import { Lights } from './lighting';
 import { Logbook } from './logbook';
 import { Gates } from './gates';
@@ -172,6 +172,11 @@ export class Casino implements SpaceView {
     this.captain = new Blackjack(this.host, this.staff, { table: 'captain', x: CAPTAIN_TABLE.x, z: CAPTAIN_TABLE.z, dealer: 'captain', title: "The Captain's Table", spot: SPOTS.captain, label: "Sit at the Captain's Table", short: 'Captain' });
     this.wheel = new RiverWheel(this.host);
     this.lucky.onBonus = (b) => this.wheel.bonus(b.segment, b.value, b.mult, this.lucky.framing(), this.lucky.framing());
+    this.lucky.onGrand = () => this.wheel.celebrate();
+    this.lucky.tip = () => {
+      this.staff.sayAt(new THREE.Vector3(TELEGRAPH.x, 2.3, TELEGRAPH.z), 'Ring me to change your bet.', 4.5);
+      this.save.update((d) => (d.telegraphTip = true));
+    };
     this.doors = this.buildDoors();
     this.logbook = new Logbook(this.host, this.boat.walls.find((w) => w.def.id === 'port')?.full ?? null);
     this.gates = new Gates(this.host, this.staff);
@@ -235,6 +240,14 @@ export class Casino implements SpaceView {
     }
     if (!this.greeted) {
       this.greeted = true;
+      // A glide down the saloon to behind you as the band plays you aboard (a cut on low and with Reduce motion).
+      sound.fanfare('small');
+      this.staff.get('ivory')?.play('play', 1);
+      void this.director.play([
+        { t: 0, f: frame(-6, 7.4, 13.5, 0, 2.0, -6, 52) },
+        { t: 2.2 / this.scale, f: frame(ARRIVAL.x, 5.3, ARRIVAL.z + 6.0, ARRIVAL.x, 1.2, ARRIVAL.z, 55) },
+      ], { skippableAfter: 0 });
+      await new Promise((r) => setTimeout(r, 900));
       const st = this.eco.stats;
       this.host.say('penny', st && st.spins > 0 ? `Welcome back aboard, ${this.ctx.name()}!` : `Welcome aboard! ${formatCredits(st?.balance ?? 1000)} play credits.`);
     }

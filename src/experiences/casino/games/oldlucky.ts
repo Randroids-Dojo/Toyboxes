@@ -909,6 +909,9 @@ export class OldLucky {
     this.paint();
   }
 
+  /** Set by the casino: a one-time bubble over the telegraph after your first spin. */
+  tip: (() => void) | null = null;
+
   /** Kick at the machine cycles the bet too. */
   kickBet(): void {
     this.ring();
@@ -965,6 +968,7 @@ export class OldLucky {
     }
     this.paint();
     this.spinning = false;
+    if (this.spins === 1 && !host.save.data.telegraphTip) this.tip?.();
   }
 
   /** Three paddles: FULL STEAM on the marquee, then the River Wheel's bonus ring decides. */
@@ -981,13 +985,16 @@ export class OldLucky {
     host.eco.commit(d as never, bet);
     const at = new THREE.Vector3(0, 0.75, OLD_LUCKY.z + FRONT + 0.3);
     if (d.bonus!.jackpot) {
-      await host.cer.jackpot({ kind: d.bonus!.jackpot, mult: d.bonus!.mult, credits: d.win, bet, orbit: this.orbit(), at });
+      await host.cer.jackpot({ kind: d.bonus!.jackpot, mult: d.bonus!.mult, credits: d.win, bet, orbit: this.orbit(), at, stern: frame(9.5, 3.2, 1.2, 34, 13, 0, 58), onGrand: () => this.onGrand() });
       this.celebrate = 5;
     } else {
       const tier = host.cer.win({ paid: d.win, staked: bet, at, dir: { x: 0, z: 1 }, label: `Bonus ${d.bonus!.mult}x`, pile: true });
       this.celebrate = tier === 'mega' ? 4 : 3;
     }
   }
+
+  /** Set by the casino: the GRAND sets the River Wheel spinning by itself. */
+  onGrand: () => void = () => {};
 
   /** Set by the casino: flies to the River Wheel and spins the bonus ring. */
   onBonus: (bonus: NonNullable<SlotResult['bonus']>, bet: number, win: number) => Promise<void> = async () => {};

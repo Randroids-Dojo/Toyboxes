@@ -89,6 +89,32 @@ export class TablePanel {
         o.onClose?.();
       },
       initial: () => o.initial?.() ?? null,
+      // Up from the buttons along the bottom goes to the nearest control in the game above,
+      // never past it to the header (spatial focus alone can jump to Odds).
+      capture: (a) => {
+        const active = document.activeElement as HTMLElement | null;
+        if (a !== 'up' || !active || !this.actions.contains(active)) return false;
+        const from = active.getBoundingClientRect();
+        const pool = [...Array.from(this.body.querySelectorAll<HTMLElement>('button:not([disabled]), [data-nav]')), ...this.chipBtns.filter((b) => !b.disabled)].filter((e) => e.offsetParent !== null && !e.closest('.hidden'));
+        let best: HTMLElement | null = null;
+        let score = Infinity;
+        for (const e of pool) {
+          const r = e.getBoundingClientRect();
+          if (r.bottom > from.top + 4) continue;
+          const dy = from.top - r.bottom;
+          const dx = Math.abs(r.left + r.width / 2 - (from.left + from.width / 2));
+          const sc = dy + dx * 0.6;
+          if (sc < score) {
+            score = sc;
+            best = e;
+          }
+        }
+        if (!best) return false;
+        sound.click();
+        best.focus({ preventScroll: false });
+        best.scrollIntoView({ block: 'nearest' });
+        return true;
+      },
     };
     this.paintCredits();
   }

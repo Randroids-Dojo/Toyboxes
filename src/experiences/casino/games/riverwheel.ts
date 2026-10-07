@@ -684,6 +684,15 @@ export class RiverWheel {
     this.sternSpeed = 0.55;
   }
 
+  /** The GRAND: the wheel spins by itself for a while, lights chasing. */
+  celebrate(): void {
+    if (this.spinning || this.spin) return;
+    this.spin = { ring: 'outer', t: 0, dur: 99, from: this.outerAngle, to: this.outerAngle + 1e9, resolve: () => {} };
+    setTimeout(() => {
+      if (this.spin?.dur === 99 && !this.spinning) void this.settle('outer', Math.round(this.outerAngle / OS) % OUTER_N, 3);
+    }, 6000);
+  }
+
   update(dt: number, opts: { boost: number }): void {
     const sp = this.spin;
     if (sp) {
