@@ -67,6 +67,8 @@ export class Vehicle {
   protected slide = 0;
   /** How fast a drift charges its mini-turbo (1 is normal). */
   driftRate = 1;
+  /** A drift's turn: share of full turn with the stick centred, and how much steering into or out of it adds. */
+  protected driftArc = { base: 0.45, into: 0.55, out: 0.3 };
 
   constructor(
     readonly kind: VehicleKind,
@@ -198,7 +200,8 @@ export class Vehicle {
     if (this.drift) {
       // Steering into the drift tightens it, steering out widens it, but it always turns.
       const into = this.steer * this.drift;
-      rate = this.drift * t.turn * 1.1 * (into >= 0 ? 0.45 + 0.55 * into : 0.45 + 0.3 * into);
+      const a = this.driftArc;
+      rate = this.drift * t.turn * 1.1 * (into >= 0 ? a.base + a.into * into : a.base + a.out * into);
     }
     // Tyres only hold so much in a corner: too fast and the kart runs wide.
     if (this.racing && v > 1) {

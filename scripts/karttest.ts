@@ -15,6 +15,11 @@ const w = await openWorld({ kind: 'kart', areaId: 'kart-track', name: 'Kart trac
 const { page, device } = w;
 const remote = device === 'remote';
 const log = (...a: unknown[]) => console.log(`[${device}]`, ...a);
+/** Touch points held on the phone, sent through one DevTools session. */
+let cdp: Awaited<ReturnType<ReturnType<typeof page.context>['newCDPSession']>> | null = null;
+const touches = new Map<number, { x: number; y: number }>();
+const STICK = 3;
+const BRAKE = 7;
 
 type Exp = any;
 const exp = (): Promise<Exp> => w.exp();
@@ -40,7 +45,7 @@ log('in the kart');
 // First ride offers the warm-up lap: skip it for now (it is tested below).
 await w.until(async () => w.menuOpen(), 'the warm-up question');
 await w.shot('03-warmup-offer');
-await w.back();
+await cancel();
 await w.until(async () => !(await w.menuOpen()), 'warm-up skipped');
 
 // ---- 2. Race menu from the pit box.
@@ -51,25 +56,27 @@ await page.waitForTimeout(400);
 await w.shot('04-race-menu');
 if (remote) {
   // Turn on the remote layout through the Assists page: arrows and OK only.
-  await focusButton(w, 'Assists');
-  await w.confirm();
+  await press('Assists');
   await page.waitForTimeout(300);
-  await focusButton(w, 'Remote layout');
-  await w.confirm();
+  await press('Remote layout');
   await page.waitForTimeout(200);
   await w.back();
   await page.waitForTimeout(300);
   if (!(await exp()).kart.assists.remote) throw new Error('Remote layout did not turn on');
 }
-await focusButton(w, 'Single race');
-await w.confirm();
+await press('Single race');
 await w.until(async () => (await exp()).state !== 'free', 'the race to start');
 await page.waitForTimeout(700);
 await w.shot('05-flyover');
 // Skip the flyover and the grid pan with the device's own Interact.
-for (let i = 0; i < 3; i++) {
+for (let i = 0; i < 12; i++) {
   e = await exp();
-  if (e.state === 'countdown') break;
+  if (e.state === 'countdown' || e.state === 'running') break;
+  // Phones skip with the Action button, which only shows while a shot can be skipped.
+  if (device === 'phone' && !(await page.locator('.tbtn-action').isVisible())) {
+    await page.waitForTimeout(150);
+    continue;
+  }
   await w.act();
   await page.waitForTimeout(250);
 }
@@ -89,10 +96,14 @@ await w.shot('07-racing');
 await gas(false);
 
 // ---- 4. Drift into a mini-turbo on the first corner.
-await w.call('debugTeleportS', 60, 0);
+await w.call('debugTeleportS', 30, 1.5);
 await page.waitForTimeout(200);
 await gas(true);
-await w.until(async () => (await exp()).kart.speed > 10.5, 'speed for a drift', 8000);
+// Up to speed on the straight, then drift as the corner begins.
+await w.until(async () => {
+  const k = (await exp()).kart;
+  return k.speed > 10 && k.s > 78.5;
+}, 'speed for a drift at the corner', 10000);
 await drift();
 await w.until(async () => (await exp()).save.stats.turbos > 0, 'a mini-turbo', 9000);
 log('mini-turbo');
@@ -118,7 +129,7 @@ await gas(false);
 await page.waitForTimeout(1200);
 await w.shot('09-results');
 // "Done" is not the default; Race again is. Leave with Back (Esc, B or the remote's Back).
-await w.back();
+await cancel();
 await w.until(async () => (await exp()).state === 'free', 'back to free drive', 8000);
 log('race finished and left');
 
@@ -140,8 +151,7 @@ if (device === 'pad') {
   if (device === 'phone') await page.locator('.tbtn-menu').tap();
   await w.until(async () => w.menuOpen(), 'the pause menu');
   await w.shot('10-pause');
-  await focusButton(w, 'Leave the race');
-  if (device !== 'phone') await w.confirm();
+  await press('Leave the race');
 }
 await w.until(async () => (await exp()).state === 'free', 'left the race');
 if ((await state()).riding !== 'kart') throw new Error('Leaving a race should keep you in your kart');
@@ -217,13 +227,39 @@ async function focusButton(world: World, text: string): Promise<void> {
   throw new Error(`Could not focus "${text}"`);
 }
 
+/** Presses a menu button the device's way: arrows to it and OK, or a tap. */
+async function press(text: string): Promise<void> {
+  await focusButton(w, text);
+  if (device !== 'phone') await w.confirm();
+  else await page.waitForTimeout(250);
+}
+
+/** Back out of a card: Back on keys, pads and remotes; a tap on its other button on a phone. */
+async function cancel(): Promise<void> {
+  if (device === 'phone') {
+    await page.locator('.modal.in .btn.ghost').last().tap();
+    await page.waitForTimeout(250);
+  } else await w.back();
+}
+
+async function touchSet(id: number, p: { x: number; y: number } | null): Promise<void> {
+  cdp ??= await page.context().newCDPSession(page);
+  const had = touches.has(id);
+  if (!p && !had) return;
+  if (p) touches.set(id, p);
+  else touches.delete(id);
+  const list = [...touches].map(([i, q]) => ({ x: q.x, y: q.y, id: i }));
+  // DevTools works out which points changed: a missing point is a release, a new one a press.
+  const type = !p ? (list.length ? 'touchMove' : 'touchEnd') : had ? 'touchMove' : 'touchStart';
+  await cdp.send('Input.dispatchTouchEvent', { type, touchPoints: list });
+}
+
 async function gas(on: boolean): Promise<void> {
   if (device === 'phone') {
-    const cdp = await page.context().newCDPSession(page);
     if (on) {
-      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 110, y: 640, id: 3 }] });
-      await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 110, y: 590, id: 3 }] });
-    } else await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await touchSet(STICK, { x: 110, y: 640 });
+      await touchSet(STICK, { x: 110, y: 590 });
+    } else await touchSet(STICK, null);
   } else if (device === 'pad') {
     await page.evaluate((v) => ((window as any).__pad.buttons[7] = v), on ? 1 : 0);
   } else {
@@ -241,36 +277,38 @@ async function drift(): Promise<void> {
     await page.waitForTimeout(150);
     await page.keyboard.up('ArrowRight');
     await page.keyboard.press('Enter');
-    await page.keyboard.down('ArrowRight');
     await w.until(async () => (await exp()).kart.stage >= 1, 'a charged drift', 6000);
-    await page.keyboard.up('ArrowRight');
     await page.keyboard.press('Enter');
     return;
   }
+  // Turn in and press drift, then hold the drift with the steering centred
+  // (a drift turns tighter than the corner on its own), and let go for the boost.
   if (device === 'phone') {
-    const cdp = await page.context().newCDPSession(page);
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 160, y: 600, id: 3 }] });
+    await touchSet(STICK, { x: 145, y: 625 });
     const b = await page.locator('.tbtn-kick').boundingBox();
-    const pt = { x: b!.x + b!.width / 2, y: b!.y + b!.height / 2, id: 7 };
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 160, y: 600, id: 3 }, pt] });
+    await touchSet(BRAKE, { x: b!.x + b!.width / 2, y: b!.y + b!.height / 2 });
+    await page.waitForTimeout(80);
+    await touchSet(STICK, { x: 110, y: 610 });
     await w.until(async () => (await exp()).kart.stage >= 1, 'a charged drift', 6000);
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [{ x: 160, y: 600, id: 3 }] });
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 110, y: 590, id: 3 }] });
+    await touchSet(BRAKE, null);
+    await touchSet(STICK, { x: 110, y: 590 });
     return;
   }
   if (device === 'pad') {
-    await page.evaluate(() => ((window as any).__pad.axes[0] = 1));
+    await page.evaluate(() => ((window as any).__pad.axes[0] = 0.8));
     await page.evaluate(() => ((window as any).__pad.buttons[2] = 1));
+    await page.waitForTimeout(80);
+    await page.evaluate(() => ((window as any).__pad.axes[0] = 0));
     await w.until(async () => (await exp()).kart.stage >= 1, 'a charged drift', 6000);
     await page.evaluate(() => ((window as any).__pad.buttons[2] = 0));
-    await page.evaluate(() => ((window as any).__pad.axes[0] = 0));
     return;
   }
   await page.keyboard.down('KeyD');
   await page.keyboard.down('Space');
+  await page.waitForTimeout(80);
+  await page.keyboard.up('KeyD');
   await w.until(async () => (await exp()).kart.stage >= 1, 'a charged drift', 6000);
   await page.keyboard.up('Space');
-  await page.keyboard.up('KeyD');
 }
 
 async function useItem(): Promise<void> {

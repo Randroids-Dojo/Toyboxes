@@ -1979,6 +1979,11 @@ export class KartWorld implements SpaceView {
     return out;
   }
 
+  /** Colliders near a point (playtests). */
+  debugColliders(x: number, z: number, r = 4) {
+    return this.colliders.concat(this.extraColliders()).filter((c) => Math.hypot(c.x - x, c.z - z) < r + (c.kind === 'box' ? Math.max(c.hw, c.hd) : c.r)).map((c) => ({ ...c }));
+  }
+
   /** The heaviest meshes in the scene, for triangle budgets. */
   debugHeavy(): { what: string; tris: number; at: string }[] {
     const out: { what: string; tris: number; at: string }[] = [];

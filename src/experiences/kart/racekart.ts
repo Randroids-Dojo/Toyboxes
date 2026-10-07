@@ -64,6 +64,8 @@ export class RaceKart extends Vehicle {
   private easyOn = false;
   private lastSteer = 0;
   private lastSteerAge = 9;
+  /** The drift button is still held after a drift ended: it never turns into a brake. */
+  private brakeLatch = false;
   /** Signed sideways offset from the centre line, set by the world each step. */
   edgeOff = 0;
   /** Whether the kart is on the road surface (not grass or sand). */
@@ -79,6 +81,8 @@ export class RaceKart extends Vehicle {
     this.paint = paint;
     this.racing = true;
     this.t = { ...this.t };
+    // With the stick centred a drift follows a normal corner; steer in to tighten, out to widen.
+    this.driftArc = { base: 0.3, into: 0.62, out: 0.25 };
     // Swap the town kart's parts for this body.
     this.body.clear();
     this.wheels.length = 0;
@@ -189,6 +193,9 @@ export class RaceKart extends Vehicle {
       this.lastSteerAge = 0;
     } else this.lastSteerAge += dt;
     if (this.player && !this.frozen) {
+      // Still holding drift after the drift ended (off the road, or too slow): ignore it until let go.
+      if (brake < 0.5) this.brakeLatch = false;
+      if (this.brakeLatch) brake = 0;
       const a = this.assists;
       if (a.autoGas && throttle > -0.35) throttle = 1;
       if (a.remote) {
@@ -221,7 +228,9 @@ export class RaceKart extends Vehicle {
       throttle = 0;
       this.drift = 0;
     }
+    const drifting = this.drift !== 0;
     super.drive(dt, throttle, steer, brake, colliders);
+    if (this.player && drifting && !this.drift && brake > 0.5) this.brakeLatch = true;
     if (this.drift && this.driftTime < dt * 1.5 && !this.air) this.hopT = 0.22;
   }
 
