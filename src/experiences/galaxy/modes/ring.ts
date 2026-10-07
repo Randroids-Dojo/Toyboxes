@@ -10,6 +10,8 @@ import type { Carry, PlayerState } from '../../../world/space';
 import { formatLap, ordinal } from '../../common';
 import { gsfx, RING_SONG } from '../audio';
 import type { Galaxy } from '../index';
+import { Ribbon } from '../../kit';
+import { glowSprite } from '../props';
 import type { GateState } from '../islands';
 import type { Round } from './round';
 
@@ -30,6 +32,10 @@ export class RingRun implements Round {
   private flash: number[] = Array(16).fill(0);
   private startSpot: { x: number; y: number; z: number; yaw: number };
   private finishMs = 0;
+  /** This run sampled ten times a second, and the ghost of your best. */
+  private samples: number[] = [];
+  private sampleT = 0;
+  private ghost: { core: THREE.Mesh; trail: Ribbon; path: number[] } | null = null;
 
   constructor(private g: Galaxy) {
     const p = ringPoint(RING_START_S, RING.mid);
@@ -65,6 +71,13 @@ export class RingRun implements Round {
       this.t = 0;
       this.prev = null;
       this.g.playSong(RING_SONG);
+      // Race the ghost of your best run.
+      const path = this.g.save.data.ringGhost;
+      if (path && path.length >= 6) {
+        const core = glowSprite('#bfe8ff', 1.4, 0.9);
+        this.g.scene.add(core);
+        this.ghost = { core, trail: new Ribbon(this.g.scene, { length: 24, width: 0.45, color: 0x6cc4ff, life: 0.6, minStep: 0.1 }), path };
+      }
       this.ticket = api.runStart(this.g.ctx.roomId, this.g.ctx.area.id, this.g.ctx.browserId, 'ring').then((r) => (r.ok ? r.data.ticket : null));
     });
   }
@@ -96,6 +109,11 @@ export class RingRun implements Round {
     for (let i = 0; i < 16; i++) this.flash[i] = Math.max(0, this.flash[i] - dt);
     if (this.state !== 'run') return;
     this.t += dt;
+    this.sampleT += dt;
+    if (this.sampleT >= 0.1) {
+      this.sampleT -= 0.1;
+      this.samples.push(Math.round(p.x * 100), Math.round(p.y * 100), Math.round(p.z * 100));
+    }
     const cur = { x: p.x, z: p.z };
     const onRing = Math.abs(p.y - RING.top) < 3.5;
     if (this.prev && onRing) {
@@ -168,7 +186,7 @@ export class RingRun implements Round {
     const stars = starsFor('ring', total);
     const prevBest = g.save.data.best.ring;
     const isBest = prevBest === null || total < prevBest;
-    if (isBest) g.save.update((d) => ((d.best.ring = total), (d.ringSplits = [...this.splits])));
+    if (isBest) g.save.update((d) => ((d.best.ring = total), (d.ringSplits = [...this.splits]), (d.ringGhost = this.samples.slice(0, 3 * 1200))));
     g.hud.banner('Finish!', { color: '#7dffc8', size: 'l' });
     gsfx.fanfare();
     g.ctx.pose('cheer');
@@ -227,7 +245,31 @@ export class RingRun implements Round {
     return { x: p.x, y: RING.top, z: p.z, yaw: Math.atan2(Math.sin(th), -Math.cos(th)) };
   }
 
-  update(): void {}
+  update(dt: number): void {
+    const gh = this.ghost;
+    if (!gh) return;
+    if (this.state !== 'run') {
+      gh.core.visible = false;
+      gh.trail.update(dt, this.g.ctx.camera);
+      return;
+    }
+    // Where your best run was at this moment.
+    const f = this.t * 10;
+    const n = gh.path.length / 3;
+    const i = Math.min(n - 1, Math.floor(f));
+    const j = Math.min(n - 1, i + 1);
+    const k = Math.min(1, f - i);
+    const at = new THREE.Vector3(
+      (gh.path[i * 3] + (gh.path[j * 3] - gh.path[i * 3]) * k) / 100,
+      (gh.path[i * 3 + 1] + (gh.path[j * 3 + 1] - gh.path[i * 3 + 1]) * k) / 100 + 1.1,
+      (gh.path[i * 3 + 2] + (gh.path[j * 3 + 2] - gh.path[i * 3 + 2]) * k) / 100,
+    );
+    gh.core.visible = f < n;
+    gh.core.position.copy(at);
+    gh.core.quaternion.copy(this.g.ctx.camera.quaternion);
+    if (gh.core.visible) gh.trail.push(at);
+    gh.trail.update(dt, this.g.ctx.camera);
+  }
 
   guide(): { at: THREE.Vector3; label: string } | null {
     if (this.state !== 'run') return null;
@@ -238,9 +280,16 @@ export class RingRun implements Round {
 
   dispose(): void {
     this.g.ring.setGates(0, Array(16).fill('idle'));
+    if (this.ghost) {
+      this.g.scene.remove(this.ghost.core);
+      this.ghost.core.geometry.dispose();
+      (this.ghost.core.material as THREE.Material).dispose();
+      this.ghost.trail.dispose();
+      this.ghost = null;
+    }
   }
 
   debug() {
-    return { state: this.state, t: this.t, next: this.next, hits: this.hits.filter((h) => h).length, misses: this.misses(), finish: this.finishMs };
+    return { state: this.state, t: this.t, next: this.next, hits: this.hits.filter((h) => h).length, misses: this.misses(), finish: this.finishMs, ghost: !!this.ghost };
   }
 }

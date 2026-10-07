@@ -17,6 +17,10 @@ export interface GalaxySave {
   goldFed: number;
   /** Gate times of your best ring run, for the split read-out. */
   ringSplits: number[] | null;
+  /** Your best ring run, sampled ten times a second (x, y, z in centimetres), for the ghost. */
+  ringGhost: number[] | null;
+  /** The sparkle you wear here: none, dust, rainbow, moon or halo. */
+  sparkle: string;
 }
 
 export const FRESH: GalaxySave = {
@@ -28,6 +32,8 @@ export const FRESH: GalaxySave = {
   flyover: false,
   goldFed: 0,
   ringSplits: null,
+  ringGhost: null,
+  sparkle: 'none',
 };
 
 export function moonCount(mask: number): number {
@@ -70,6 +76,8 @@ export class Save {
     d.flyover = !!d.flyover;
     d.reborn = !!d.reborn;
     if (!Array.isArray(d.ringSplits) || !d.ringSplits.every((x) => typeof x === 'number')) d.ringSplits = null;
+    if (!Array.isArray(d.ringGhost) || d.ringGhost.length % 3 !== 0 || !d.ringGhost.every((x) => Number.isFinite(x))) d.ringGhost = null;
+    if (typeof d.sparkle !== 'string') d.sparkle = 'none';
   }
 
   get data(): GalaxySave {

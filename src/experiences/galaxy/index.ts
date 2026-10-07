@@ -74,6 +74,7 @@ import { Save, moonCount, moonStars } from './save';
 import * as S from './shaders';
 import { Sky } from './sky';
 import { Spark } from './spark';
+import { SPARKLE_NAME, Sparkle, unlockedSparkles, type SparkleId } from './sparkle';
 import { Traverse, type Ride } from './traverse';
 
 export type Zone = 'hub' | 'ring' | 'storm' | 'comet' | 'stair' | 'void';
@@ -134,6 +135,7 @@ export class Galaxy implements SpaceView {
   readonly moons: Moons;
   readonly trav = new Traverse();
   readonly spark: Spark;
+  readonly sparkle: Sparkle;
   readonly playerPos = new THREE.Vector3();
   player: PlayerState = { x: 0, z: 6, y: 0, vy: 0, grounded: true, yaw: Math.PI, vx: 0, vz: 0, riding: null };
   round: Round | null = null;
@@ -223,6 +225,9 @@ export class Galaxy implements SpaceView {
     this.dust = new Particles(s, { max: 600, look: 'smoke' });
     this.shock = new Shockwaves(s);
     this.spark = new Spark(s, this.hud.root);
+    this.sparkle = new Sparkle(s, this.glows);
+    const unlocked = unlockedSparkles(this.save.total, moonCount(this.save.data.moons), this.save.data.bloomed > 0);
+    this.sparkle.set(unlocked.includes(this.save.data.sparkle as SparkleId) ? (this.save.data.sparkle as SparkleId) : 'none');
     this.warpEl = h('div', { class: 'gx-warp' }, h('i'), h('i'));
     this.fadeEl = h('div', { class: 'gx-fade' });
     this.hud.root.append(this.warpEl, this.fadeEl);
@@ -469,6 +474,9 @@ export class Galaxy implements SpaceView {
         this.ctx.ui.toast(`Fly from the ${k === 'ring' ? 'green' : k === 'storm' ? 'orange' : 'ice blue'} star pad on the hub`, 'good', 3600);
         if (k === 'comet') this.cometArrival = 0;
       }
+    }
+    for (const [n, what] of [[5, 'a stardust trail'], [10, 'a streak trail']] as const) {
+      if (before < n && after >= n) this.ctx.ui.toast(`New sparkle: ${what}. Wear it from the star chart.`, 'good', 4200);
     }
     if (before < TEASER_AT && after >= TEASER_AT) {
       this.stair.setCount(this.stairCount(after), false);
@@ -1013,6 +1021,16 @@ export class Galaxy implements SpaceView {
         );
     }
     const close = button('Close', () => ui.close(panel), 'primary');
+    const choices = unlockedSparkles(this.save.total, moonCount(d.moons), d.bloomed > 0);
+    const sparkleBtn =
+      choices.length > 1
+        ? button(`Sparkle: ${SPARKLE_NAME[this.sparkle.current]}`, () => {
+            const next = choices[(choices.indexOf(this.sparkle.current) + 1) % choices.length];
+            this.sparkle.set(next);
+            this.save.update((x) => (x.sparkle = next));
+            sparkleBtn!.textContent = `Sparkle: ${SPARKLE_NAME[next]}`;
+          })
+        : null;
     const poke = this.moons.found(4)
       ? null
       : button(
@@ -1056,7 +1074,7 @@ export class Galaxy implements SpaceView {
           row('Comet surf', d.stars.comet, 3, fmt('comet')),
         ),
         h('p', { class: 'gx-chart-moons' }, `Lost moons found: ${moonCount(d.moons)} of 8${moonCount(d.moons) < 8 ? `. ${MOONS.find((m) => !this.moons.found(m.id))?.hint ?? ''}` : ''}`),
-        h('div', { class: 'actions' }, close, ...travel, again, poke),
+        h('div', { class: 'actions' }, close, sparkleBtn, ...travel, again, poke),
       ),
       onBack: () => ui.close(panel),
       initial: () => close,
@@ -1281,6 +1299,7 @@ export class Galaxy implements SpaceView {
     // Spark goes where you should go next.
     this.guide();
     this.spark.update(dt, cam, this.playerPos, !!this.cine);
+    this.sparkle.update(dt, this.playerPos, this.player.yaw, Math.hypot(this.player.vx, this.player.vz) + (this.trav.busy ? 4 : 0), cam, this.round?.id === 'finale' && !!this.cine);
 
     // Shadows follow you.
     this.sun.position.set(focus.x - 12, focus.y + 24, focus.z + 12);
@@ -1489,6 +1508,7 @@ export class Galaxy implements SpaceView {
     music.stop(0.6);
     this.hud.dispose();
     this.spark.dispose();
+    this.sparkle.dispose();
     this.composer?.dispose();
     this.pre?.renderTarget.dispose();
     this.env?.dispose();
