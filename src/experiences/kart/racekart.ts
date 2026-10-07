@@ -66,6 +66,8 @@ export class RaceKart extends Vehicle {
   private lastSteerAge = 9;
   /** The drift button is still held after a drift ended: it never turns into a brake. */
   private brakeLatch = false;
+  /** How long the drift button has been held, for a forgiving drift start. */
+  private brakeHeld = 0;
   /** Playtests: something else drives this kart (the computer drivers' brain). */
   auto: ((dt: number) => { throttle: number; steer: number; brake: number }) | null = null;
   /** Signed sideways offset from the centre line, set by the world each step. */
@@ -199,6 +201,7 @@ export class RaceKart extends Vehicle {
       // Still holding drift after the drift ended (off the road, or too slow): ignore it until let go.
       if (brake < 0.5) this.brakeLatch = false;
       if (this.brakeLatch) brake = 0;
+      this.brakeHeld = brake > 0.5 ? this.brakeHeld + dt : 0;
       const a = this.assists;
       if (a.autoGas && throttle > -0.35) throttle = 1;
       if (a.remote) {
@@ -235,6 +238,17 @@ export class RaceKart extends Vehicle {
     super.drive(dt, throttle, steer, brake, colliders);
     if (this.player && drifting && !this.drift && brake > 0.5) this.brakeLatch = true;
     if (this.drift && this.driftTime < dt * 1.5 && !this.air) this.hopT = 0.22;
+  }
+
+  /**
+   * The player's drift press is forgiving: a turn from just before the press
+   * counts, and a press waits a moment for the turn before it brakes.
+   */
+  protected override driftInput(dt: number, steer: number, brake: number): number {
+    const fresh = this.player && !this.drift && brake > 0.5 && this.brakeHeld < 0.25;
+    if (fresh && Math.abs(steer) <= 0.3 && this.lastSteerAge < 0.25) steer = this.lastSteer;
+    const out = super.driftInput(dt, steer, brake);
+    return fresh && !this.drift && this.brakeHeld < 0.2 && this.speed > 8 ? 0 : out;
   }
 
   /** Vertical motion over the ground height for this step. Returns the landing speed on touchdown, else 0. */
