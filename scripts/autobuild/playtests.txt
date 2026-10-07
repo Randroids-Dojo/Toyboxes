@@ -17,3 +17,8 @@ farttest.ts
 PHONE=1 farttest.ts
 PAD=1 farttest.ts
 REMOTE=1 farttest.ts
+
+casinotest.ts
+PHONE=1 casinotest.ts
+PAD=1 casinotest.ts
+REMOTE=1 casinotest.ts
