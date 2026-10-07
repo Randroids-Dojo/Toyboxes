@@ -259,6 +259,7 @@ export class Galaxy implements SpaceView {
     this.stair.setCount(this.stairCount(total), true);
     this.sky.setPour(total >= STAR_GOAL && !this.save.data.reborn ? 1 : 0);
     this.sky.setBloom(this.save.data.bloomed ? 1 : 0);
+    if (this.save.data.bloomed) this.sky.writeName(ctx.name(), 0);
     this.dock.comet.visible = total >= UNLOCK.comet;
     this.blossoms.show(this.hub.horizonBlossom, total >= STAR_GOAL);
 
@@ -350,6 +351,7 @@ export class Galaxy implements SpaceView {
   /** The bloom's aftermath: a small, hungry black hole and every constellation lit. */
   rebirth(): void {
     this.sky.setPour(0);
+    this.sky.writeName(this.ctx.name(), 3.5);
     this.hole.setFed(this.holeFed(this.shownFed), true);
     this.hole.burp(2);
     this.applyConstellations(true);

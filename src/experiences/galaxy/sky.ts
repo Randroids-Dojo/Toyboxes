@@ -58,6 +58,9 @@ export class Sky {
   private lit = new Map<string, number>();
   private shown = new Map<string, number>();
   private rnd: () => number;
+  private name: THREE.Points | null = null;
+  private nameReveal = { value: 0 };
+  private nameSpeed = 0;
 
   constructor(
     private scene: THREE.Scene,
@@ -261,6 +264,10 @@ export class Sky {
   update(dt: number, camera: THREE.Camera): void {
     this.group.position.set(0, 0, 0);
     this.sphere.position.copy(camera.position);
+    if (this.name) {
+      this.name.position.copy(camera.position);
+      this.nameReveal.value = Math.min(1, this.nameReveal.value + dt * this.nameSpeed);
+    }
     // Grow shown counts toward lit ones, one star at a time.
     for (const [id, n] of this.lit) {
       const s = this.shown.get(id) ?? 0;
@@ -331,6 +338,80 @@ export class Sky {
     const cam = new THREE.CubeCamera(1, 600, this.baked);
     cam.update(renderer, bakeScene);
     this.scene.background = this.baked.texture;
+  }
+
+  /** Your name, written in new stars above the bloomed galaxy (this device only). Draws on over `seconds`. */
+  writeName(name: string, seconds: number): void {
+    if (this.name) {
+      this.group.remove(this.name);
+      this.name.geometry.dispose();
+      (this.name.material as THREE.Material).dispose();
+    }
+    const text = name.slice(0, 16) || 'You';
+    const c = document.createElement('canvas');
+    c.width = 360;
+    c.height = 64;
+    const g = c.getContext('2d')!;
+    g.fillStyle = '#fff';
+    g.font = `52px ${'Lilita One, system-ui, sans-serif'}`;
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText(text, 180, 34);
+    const img = g.getImageData(0, 0, c.width, c.height).data;
+    const pts: number[] = [];
+    const order: number[] = [];
+    const hole = new THREE.Vector3(BH.x, BH.y, BH.z).normalize();
+    const right = new THREE.Vector3().crossVectors(hole, new THREE.Vector3(0, 1, 0)).normalize();
+    const up = new THREE.Vector3().crossVectors(right, hole).normalize();
+    // Above the galaxy: rotate the hole's direction up a little.
+    const centre = hole.clone().applyAxisAngle(right, 0.24).normalize();
+    for (let y = 0; y < c.height; y += 3) {
+      for (let x = 0; x < c.width; x += 3) {
+        if (img[(y * c.width + x) * 4 + 3] < 128) continue;
+        // A little jitter so the letters read as stars, not a grid.
+        const ax = ((x + (this.rnd() - 0.5) * 2.2 - 180) / 360) * 0.9;
+        const ay = ((32 - y + (this.rnd() - 0.5) * 2.2) / 360) * 0.9;
+        const d = centre.clone().addScaledVector(right, ax).addScaledVector(up, ay).normalize().multiplyScalar(210);
+        pts.push(d.x, d.y, d.z);
+        order.push(x / c.width);
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+    geo.setAttribute('aOrder', new THREE.Float32BufferAttribute(order, 1));
+    this.nameReveal = { value: seconds > 0 ? 0 : 1 };
+    this.nameSpeed = seconds > 0 ? 1 / seconds : 0;
+    this.name = new THREE.Points(
+      geo,
+      new THREE.ShaderMaterial({
+        uniforms: { ...this.uniforms, uReveal: this.nameReveal },
+        vertexShader: /* glsl */ `
+          attribute float aOrder; uniform float uTime; uniform float uReveal;
+          varying float vA;
+          void main() {
+            vA = smoothstep(aOrder, aOrder + 0.04, uReveal * 1.05) * (0.7 + 0.3 * sin(uTime * 3.0 + aOrder * 40.0));
+            vec4 mv = modelViewMatrix * vec4(position, 1.0);
+            gl_PointSize = 5.0 + 3.0 * vA;
+            gl_Position = projectionMatrix * mv;
+          }`,
+        fragmentShader: /* glsl */ `
+          varying float vA;
+          void main() {
+            float d = length(gl_PointCoord * 2.0 - 1.0);
+            float a = smoothstep(1.0, 0.0, d) * vA;
+            if (a < 0.01) discard;
+            gl_FragColor = vec4(mix(vec3(0.96, 0.72, 0.25), vec3(1.0), smoothstep(0.5, 0.0, d)) * a, 1.0);
+            gl_FragColor.rgb = pow(max(gl_FragColor.rgb, vec3(0.0)), vec3(2.2));
+            #include <colorspace_fragment>
+          }`,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      }),
+    );
+    this.name.frustumCulled = false;
+    this.name.renderOrder = -7;
+    this.group.add(this.name);
   }
 
   dispose(): void {
