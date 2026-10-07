@@ -75,7 +75,7 @@ interface Kind {
 const KINDS: Record<string, Kind> = {
   box: { key: 'box', w: 1.2, h: 1.5, d: 1.2, mirror: false },
   boxL: { key: 'boxL', w: 1.4, h: 1.5, d: 1.4, mirror: false },
-  screen: { key: 'screen', w: 4, h: 1.6, d: 0.4, mirror: false },
+  screen: { key: 'screen', w: 5, h: 1.6, d: 0.4, mirror: false },
   lane: { key: 'lane', w: 0.4, h: 1.6, d: 3, mirror: false },
   laneS: { key: 'laneS', w: 0.4, h: 1.6, d: 2.4, mirror: false },
   mirror: { key: 'mirror', w: 2.6, h: 2.2, d: 0.3, mirror: true },

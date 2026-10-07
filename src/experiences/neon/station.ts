@@ -37,6 +37,21 @@ export const PEDESTALS = [130, 155, 180, 205, 230].map((d) => {
 
 const SEG = 96;
 
+/**
+ * Heights of everything that lies flat on a floor, kept at least 8 mm apart
+ * where they overlap (tests/neon-layers.test.ts). Markings like base pads,
+ * the duel ring and the light lanes are drawn inside the floor shaders, so
+ * they add no surfaces at all.
+ */
+export const OVERLAY = {
+  floor: 0,
+  /** Seam trims: 2 cm boxes centred just above the floor. */
+  trim: 0.012,
+  /** The star pad's base top is at 0.08; its star disc sits above. */
+  starPadBase: 0.08,
+  starPad: 0.092,
+};
+
 // ---------------------------------------------------------------------------
 // Floor shaders
 
@@ -365,8 +380,8 @@ export function buildStation(scene: THREE.Scene, ownerName: string): StationPart
   );
 
   // Seam trims: raised strips over the joins between floors.
-  S.add(new THREE.BoxGeometry(2 * AIRLOCK_HALF + 0.2, 0.02, 0.24), neonViolet, 0, 0.01, ARENA.z1);
-  S.add(new THREE.BoxGeometry(0.24, 0.02, 6.2), neonGold, LAB.x0, 0.01, 0);
+  S.add(new THREE.BoxGeometry(2 * AIRLOCK_HALF + 0.2, 0.02, 0.24), neonViolet, 0, OVERLAY.trim, ARENA.z1);
+  S.add(new THREE.BoxGeometry(0.24, 0.02, 6.2), neonGold, LAB.x0, OVERLAY.trim, 0);
 
   // ---- atrium: rail ring with gaps for the spokes, glass and a neon top rail
 
@@ -497,9 +512,9 @@ export function buildStation(scene: THREE.Scene, ownerName: string): StationPart
   S.add(new THREE.CylinderGeometry(1.25, 1.35, 0.08, 40), darkMat, STAR_PAD.x, 0.04, STAR_PAD.z);
   const starPad = new THREE.Mesh(new THREE.CircleGeometry(1.22, 40), new THREE.MeshBasicMaterial({ map: starTex, transparent: true, depthWrite: false }));
   starPad.rotation.x = -Math.PI / 2;
-  starPad.position.set(STAR_PAD.x, 0.081, STAR_PAD.z);
+  starPad.position.set(STAR_PAD.x, OVERLAY.starPad, STAR_PAD.z);
   scene.add(starPad);
-  G.add(new THREE.TorusGeometry(1.32, 0.035, 6, 48), neonGold, STAR_PAD.x, 0.085, STAR_PAD.z, Math.PI / 2);
+  G.add(new THREE.TorusGeometry(1.32, 0.035, 6, 48), neonGold, STAR_PAD.x, 0.09, STAR_PAD.z, Math.PI / 2);
 
   // ---- DJ booth (an arc desk) and its equaliser
 
@@ -571,13 +586,13 @@ export function buildStation(scene: THREE.Scene, ownerName: string): StationPart
   {
     const ang = Math.atan2(-JUDGES.x, -JUDGES.z);
     S.add(roundedDesk(3.6, 1.1, 1.0), panelM, JUDGES.x, 0, JUDGES.z, 0, ang, 0);
-    const fx = JUDGES.x + Math.sin(ang) * 0.52;
-    const fz = JUDGES.z + Math.cos(ang) * 0.52;
+    const fx = JUDGES.x + Math.sin(ang) * 0.51;
+    const fz = JUDGES.z + Math.cos(ang) * 0.51;
     G.add(new THREE.BoxGeometry(3.5, 0.06, 0.04), neonGold, fx, 1.0, fz, 0, ang, 0);
     G.add(new THREE.BoxGeometry(3.5, 0.06, 0.04), neonGold, fx, 0.15, fz, 0, ang, 0);
     // Trim round the top and the back too, so it reads from every side.
-    const bx = JUDGES.x - Math.sin(ang) * 0.52;
-    const bz = JUDGES.z - Math.cos(ang) * 0.52;
+    const bx = JUDGES.x - Math.sin(ang) * 0.51;
+    const bz = JUDGES.z - Math.cos(ang) * 0.51;
     G.add(new THREE.BoxGeometry(3.5, 0.05, 0.04), neonPink, bx, 1.0, bz, 0, ang, 0);
     for (const side of [-1, 1]) G.add(new THREE.BoxGeometry(0.04, 0.05, 1.0), neonGold, JUDGES.x + Math.cos(ang) * 1.82 * side, 1.0, JUDGES.z - Math.sin(ang) * 1.82 * side, 0, ang, 0);
     colliders.push(box(JUDGES.x, JUDGES.z, 1.8, 0.5, ang, 1.1, 0.3, false));
@@ -661,15 +676,15 @@ export function buildStation(scene: THREE.Scene, ownerName: string): StationPart
     }
     // Light strips along the inner walls, cyan in our half and pink in theirs.
     for (const side of [-1, 1]) {
-      const x = side * (ARENA.x1 - 0.02);
-      G.add(new THREE.BoxGeometry(0.04, 0.08, 14.6), neonCyan, x, 2.2, -27.5);
-      G.add(new THREE.BoxGeometry(0.04, 0.08, 14.6), neonPink, x, 2.2, -42.5);
-      G.add(new THREE.BoxGeometry(0.04, 0.05, 14.6), neonCyan, x, 0.25, -27.5);
-      G.add(new THREE.BoxGeometry(0.04, 0.05, 14.6), neonPink, x, 0.25, -42.5);
+      const x = side * (ARENA.x1 - 0.01);
+      G.add(new THREE.BoxGeometry(0.03, 0.08, 14.6), neonCyan, x, 2.2, -27.5);
+      G.add(new THREE.BoxGeometry(0.03, 0.08, 14.6), neonPink, x, 2.2, -42.5);
+      G.add(new THREE.BoxGeometry(0.03, 0.05, 14.6), neonCyan, x, 0.25, -27.5);
+      G.add(new THREE.BoxGeometry(0.03, 0.05, 14.6), neonPink, x, 0.25, -42.5);
       halo(C.cyan, 14.6, 0.6, x - side * 0.05, 2.2, -27.5, Math.PI / 2);
       halo(C.pink, 14.6, 0.6, x - side * 0.05, 2.2, -42.5, Math.PI / 2);
     }
-    G.add(new THREE.BoxGeometry(W, 0.08, 0.04), neonPink, 0, 2.2, ARENA.z0 + 0.02);
+    G.add(new THREE.BoxGeometry(W, 0.08, 0.03), neonPink, 0, 2.2, ARENA.z0 + 0.01);
     // Scoreboards above each base (painted by tag.ts).
   }
 

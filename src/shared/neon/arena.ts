@@ -52,7 +52,7 @@ const PILLAR: Piece = { kind: 'pillar', x: 0, z: -35, hw: 1.3, hd: 1.3, rot: 0, 
 export const LAYOUTS: Record<LayoutId, Piece[]> = {
   prism: symmetric([
     PILLAR,
-    boxP('screen', 0, -26, 4, 0.4, 1.6),
+    boxP('screen', 0, -26, 5, 0.4, 1.6),
     boxP('box', -9.5, -25, 1.2, 1.2, 1.5),
     boxP('box', 9.5, -25, 1.2, 1.2, 1.5),
     boxP('box', -4.5, -30, 1.2, 1.2, 1.5),
@@ -65,7 +65,7 @@ export const LAYOUTS: Record<LayoutId, Piece[]> = {
   ]),
   maze: symmetric([
     PILLAR,
-    boxP('screen', 0, -26, 4, 0.4, 1.6),
+    boxP('screen', 0, -26, 5, 0.4, 1.6),
     boxP('box', -9.5, -26, 1.2, 1.2, 1.5),
     boxP('box', 9.5, -26, 1.2, 1.2, 1.5),
     boxP('mirror', -5, -29.5, 2.6, 0.3, 2.2, deg(30)),
@@ -76,7 +76,7 @@ export const LAYOUTS: Record<LayoutId, Piece[]> = {
   ]),
   ring: symmetric([
     PILLAR,
-    boxP('screen', 0, -26, 4, 0.4, 1.6),
+    boxP('screen', 0, -26, 5, 0.4, 1.6),
     boxP('box', -5.2, -32, 1.4, 1.4, 1.5, deg(30)),
     boxP('box', 5.2, -32, 1.4, 1.4, 1.5, deg(-30)),
     boxP('box', 0, -29, 1.4, 1.4, 1.5, deg(45)),
