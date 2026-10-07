@@ -10,7 +10,7 @@ import type { Face } from './textures';
 // ---------------------------------------------------------------------------
 // Part shapes
 
-function lathe(profile: [number, number][], seg = 14): THREE.BufferGeometry {
+function lathe(profile: [number, number][], seg = 12): THREE.BufferGeometry {
   return new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y)), seg);
 }
 
@@ -21,7 +21,7 @@ function capsule(r: number, len: number): THREE.BufferGeometry {
 }
 
 const S = (r: number, ws = 12, hs = 9, ...rest: number[]) => new THREE.SphereGeometry(r, ws, hs, ...rest);
-const Cy = (rt: number, rb: number, h: number, s = 14) => new THREE.CylinderGeometry(rt, rb, h, s);
+const Cy = (rt: number, rb: number, h: number, s = 12) => new THREE.CylinderGeometry(rt, rb, h, s);
 const B = (w: number, h: number, d: number) => new THREE.BoxGeometry(w, h, d);
 const T = (r: number, t: number, s = 10, arc = Math.PI * 2) => new THREE.TorusGeometry(r, t, 6, s, arc);
 
@@ -31,39 +31,39 @@ export function registerParts(f: Figures): void {
   f.geo('torso-tall', () => lathe([[0.001, 0], [0.42, 0.02], [0.44, 0.3], [0.36, 0.7], [0.34, 0.95], [0.001, 1]]));
   f.geo('torso-round', () => lathe([[0.001, 0], [0.42, 0.03], [0.55, 0.35], [0.5, 0.7], [0.32, 0.96], [0.001, 1]]));
   f.geo('skirt', () => lathe([[0.001, 0], [0.62, 0.02], [0.56, 0.25], [0.44, 0.6], [0.38, 0.8], [0.001, 0.82]]));
-  f.geo('head', () => S(1, 18, 13));
+  f.geo('head', () => S(1, 14, 10));
   f.geo('nose', () => S(1, 10, 8));
   f.geo('ear', () => S(1, 8, 6).scale(0.5, 1, 0.35));
   f.geo('arm', () => capsule(0.075, 0.38));
-  f.geo('hand', () => S(0.09, 10, 8));
+  f.geo('hand', () => S(0.09, 7, 5));
   f.geo('leg', () => capsule(0.1, 0.3));
   f.geo('shoe', () => {
-    const g = S(1, 10, 8);
+    const g = S(1, 8, 5);
     g.scale(0.11, 0.075, 0.17);
     g.translate(0, 0, 0.06);
     return g;
   });
   f.geo('boot', () => {
-    const g = S(1, 10, 8);
+    const g = S(1, 8, 5);
     g.scale(0.14, 0.11, 0.22);
     g.translate(0, 0.02, 0.07);
     return g;
   });
   // Hats and hair, around a unit head (centre at 0).
-  f.geo('tophat', () => compound([[Cy(0.62, 0.66, 1.15, 18), C.ink, at(0, 1.35, 0)], [Cy(1.05, 1.05, 0.08, 22), C.ink, at(0, 0.8, 0)], [Cy(0.665, 0.67, 0.2, 18), C.gold, at(0, 0.98, 0)]]));
+  f.geo('tophat', () => compound([[Cy(0.62, 0.66, 1.15, 14), C.ink, at(0, 1.35, 0)], [Cy(1.05, 1.05, 0.08, 14), C.ink, at(0, 0.8, 0)], [Cy(0.665, 0.67, 0.2, 14), C.gold, at(0, 0.98, 0)]]));
   f.geo('feathers', () =>
     compound([
-      [Cy(1.35, 1.4, 0.08, 22), 0x7e4fb0, at(0, 0.62, 0)],
+      [Cy(1.35, 1.4, 0.08, 14), 0x7e4fb0, at(0, 0.62, 0)],
       [S(0.75, 14, 8).scale(1, 0.55, 1), 0x7e4fb0, at(0, 0.78, 0)],
       [S(0.2, 8, 6).scale(1, 3.2, 0.5), 0xd9b8ff, at(0.35, 1.5, -0.3, -0.4, 0, -0.3)],
       [S(0.18, 8, 6).scale(1, 3, 0.5), 0xff8fc8, at(0.05, 1.55, -0.45, -0.5, 0, 0)],
       [S(0.16, 8, 6).scale(1, 2.6, 0.5), 0xffd45c, at(-0.25, 1.4, -0.4, -0.5, 0, 0.35)],
-      [Cy(0.77, 0.77, 0.14, 18), 0xffd45c, at(0, 0.72, 0)],
+      [Cy(0.77, 0.77, 0.14, 14), 0xffd45c, at(0, 0.72, 0)],
     ]),
   );
   f.geo('flowerhat', () => {
     const parts: [THREE.BufferGeometry, number, THREE.Matrix4?][] = [
-      [Cy(1.15, 1.2, 0.07, 22), 0xfff1d6, at(0, 0.62, 0)],
+      [Cy(1.15, 1.2, 0.07, 14), 0xfff1d6, at(0, 0.62, 0)],
       [S(0.72, 14, 8).scale(1, 0.55, 1), 0xfff1d6, at(0, 0.74, 0)],
     ];
     for (let i = 0; i < 6; i++) {
@@ -73,11 +73,11 @@ export function registerParts(f: Figures): void {
     return compound(parts);
   });
   f.geo('cap', () => compound([[S(1.02, 16, 8, ).scale(1, 0.45, 1.05), 0x9a8a6a, at(0, 0.45, -0.02)], [S(0.6, 12, 6).scale(1, 0.15, 0.8), 0x8a7a5a, at(0, 0.5, 0.75)]]));
-  f.geo('boater', () => compound([[Cy(1.2, 1.2, 0.06, 22), 0xf0d48a, at(0, 0.66, 0)], [Cy(0.72, 0.74, 0.42, 18), 0xf0d48a, at(0, 0.86, 0)], [Cy(0.745, 0.745, 0.14, 18), 0xff6fa8, at(0, 0.76, 0)]]));
+  f.geo('boater', () => compound([[Cy(1.2, 1.2, 0.06, 14), 0xf0d48a, at(0, 0.66, 0)], [Cy(0.72, 0.74, 0.42, 14), 0xf0d48a, at(0, 0.86, 0)], [Cy(0.745, 0.745, 0.14, 14), 0xff6fa8, at(0, 0.76, 0)]]));
   f.geo('helmet', () => compound([[S(0.95, 16, 10).scale(1, 1.35, 1), 0x1f2a55, at(0, 0.7, -0.05)], [S(0.18, 8, 6), 0x2f3a6b, at(0, 2.0, -0.05)], [S(0.22, 10, 6).scale(1, 1.2, 0.3), C.brass, at(0, 1.0, 0.85)], [T(0.98, 0.07, 22), 0x1f2a55, at(0, 0.35, -0.05, Math.PI / 2)]]));
   f.geo('beehive', () => compound([[S(0.85, 14, 10).scale(1, 1.6, 1), 0x8a4f2e, at(0, 1.0, -0.1)], [S(1.03, 16, 10, ).scale(1, 0.75, 1), 0x8a4f2e, at(0, 0.25, -0.12)]]));
   f.geo('bun', () => compound([[S(1.04, 16, 10).scale(1, 0.72, 1), 0xd8d8e0, at(0, 0.3, -0.1)], [S(0.45, 12, 8), 0xd8d8e0, at(0, 0.85, -0.55)]]));
-  f.geo('strawhat', () => compound([[Cy(1.6, 1.7, 0.07, 24), 0xe8c66a, at(0, 0.55, 0)], [Cy(0.7, 0.78, 0.55, 18), 0xe8c66a, at(0, 0.82, 0)], [Cy(0.785, 0.785, 0.12, 18), C.tomato, at(0, 0.64, 0)]]));
+  f.geo('strawhat', () => compound([[Cy(1.6, 1.7, 0.07, 14), 0xe8c66a, at(0, 0.55, 0)], [Cy(0.7, 0.78, 0.55, 14), 0xe8c66a, at(0, 0.82, 0)], [Cy(0.785, 0.785, 0.12, 14), C.tomato, at(0, 0.64, 0)]]));
   f.geo('beanie', () =>
     compound([
       [S(1.03, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), C.tomato, at(0, 0.18, 0)],
@@ -94,10 +94,10 @@ export function registerParts(f: Figures): void {
     }
     return compound(parts);
   });
-  f.geo('bandcap', () => compound([[Cy(0.8, 0.86, 0.5, 16), C.tomato, at(0, 0.8, 0)], [Cy(0.82, 0.82, 0.1, 16), C.gold, at(0, 0.62, 0)], [S(0.62, 12, 6).scale(1, 0.12, 0.8), C.ink, at(0, 0.6, 0.7)]]));
+  f.geo('bandcap', () => compound([[Cy(0.8, 0.86, 0.5, 14), C.tomato, at(0, 0.8, 0)], [Cy(0.82, 0.82, 0.1, 14), C.gold, at(0, 0.62, 0)], [S(0.62, 12, 6).scale(1, 0.12, 0.8), C.ink, at(0, 0.6, 0.7)]]));
   f.geo('hairshort', () => S(1.04, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.42).translate(0, 0.08, -0.05));
   f.geo('hairbob', () => compound([[S(1.08, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.62), 0xffffff, at(0, 0.02, -0.06)]]));
-  f.geo('sunhat', () => compound([[Cy(1.5, 1.55, 0.06, 24), 0xffffff, at(0, 0.6, 0)], [S(0.75, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), 0xffffff, at(0, 0.6, 0)]]));
+  f.geo('sunhat', () => compound([[Cy(1.5, 1.55, 0.06, 14), 0xffffff, at(0, 0.6, 0)], [S(0.75, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), 0xffffff, at(0, 0.6, 0)]]));
   // Face extras.
   f.geo('walrus', () => compound([[S(0.38, 10, 6).scale(1.3, 0.55, 0.6), 0x7a5a40, at(-0.32, -0.32, 0.86, 0, 0, 0.35)], [S(0.38, 10, 6).scale(1.3, 0.55, 0.6), 0x7a5a40, at(0.32, -0.32, 0.86, 0, 0, -0.35)]]));
   f.geo('glasses', () => compound([[T(0.3, 0.045, 14), C.ink, at(-0.36, 0.08, 0.98)], [T(0.3, 0.045, 14), C.ink, at(0.36, 0.08, 0.98)], [B(0.18, 0.05, 0.05), C.ink, at(0, 0.12, 1.0)]]));
@@ -140,7 +140,7 @@ export function registerParts(f: Figures): void {
     return compound([[Cy(0.025, 0.025, 0.35, 8), C.brass, at(0, 0, 0.12, Math.PI / 2)], [bell, C.brass, at(0, 0, 0.29, Math.PI / 2)], [B(0.06, 0.12, 0.12), C.brassHi, at(0, -0.06, 0.08)]]);
   });
   f.geo('clarinet', () => compound([[Cy(0.025, 0.05, 0.6, 8), C.ink, at(0, 0, 0.24, Math.PI / 2 - 0.5)]]));
-  f.geo('drum', () => compound([[Cy(0.38, 0.38, 0.3, 18), 0xffffff, at(0, 0, 0, Math.PI / 2)], [T(0.38, 0.03, 18), C.tomato, at(0, 0, 0.15)], [T(0.38, 0.03, 18), C.tomato, at(0, 0, -0.15)]]));
+  f.geo('drum', () => compound([[Cy(0.38, 0.38, 0.3, 14), 0xffffff, at(0, 0, 0, Math.PI / 2)], [T(0.38, 0.03, 18), C.tomato, at(0, 0, 0.15)], [T(0.38, 0.03, 18), C.tomato, at(0, 0, -0.15)]]));
   f.geo('stamp', () => compound([[Cy(0.05, 0.05, 0.14, 8), C.timber, at(0, 0.07, 0)], [B(0.14, 0.04, 0.1), C.ink, at(0, -0.02, 0)]]));
   f.geo('basket', () => compound([[Cy(0.22, 0.18, 0.2, 12), 0xc99a5b, at(0, 0.1, 0)], [T(0.17, 0.02, 12, Math.PI), 0xa57a43, at(0, 0.2, 0)], [B(0.38, 0.02, 0.3), 0xe8574a, at(0, 0.21, 0)]]));
   f.geo('book', () => compound([[B(0.22, 0.3, 0.06), 0xffffff, at(0, 0, 0)], [B(0.2, 0.28, 0.065), 0xfff1d6, at(0.015, 0, 0)]]));

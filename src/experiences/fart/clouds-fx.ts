@@ -116,7 +116,18 @@ export class CloudFx {
 
   setQuality(t: Tier): void {
     this.cap = Math.min(this.max, BUDGET[t]);
+    // Rounder puffs on high; lighter ones elsewhere.
+    const detail = t === 'high' ? 2 : 1;
+    if (this.detail !== detail) {
+      this.detail = detail;
+      const old = this.mesh.geometry;
+      const geo = new THREE.IcosahedronGeometry(1, detail);
+      geo.setAttribute('aAlpha', this.alpha);
+      this.mesh.geometry = geo;
+      old.dispose();
+    }
   }
+  private detail = 2;
 
   /** 0 by day, about 0.6 at night so toots glow. */
   set glow(v: number) {

@@ -964,6 +964,9 @@ export class FartSimulator implements SpaceView {
     this.confetti.setQuality(t);
     this.post.setQuality(t);
     if (this.village.flowers) this.village.flowers.visible = t !== 'low';
+    // The low tier (TVs, older phones) drops the far decoration.
+    this.village.skyPuffs.visible = t !== 'low';
+    this.village.trees.count = t === 'low' ? 14 + 32 : this.village.trees.instanceMatrix.count;
   }
 
   render(renderer: THREE.WebGLRenderer, camera: THREE.PerspectiveCamera): boolean {

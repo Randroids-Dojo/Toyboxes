@@ -148,6 +148,7 @@ export interface Village {
   clockHands: THREE.Object3D[];
   pools: THREE.InstancedMesh;
   boards: Record<'rings' | 'band' | 'library' | 'picnic', THREE.Mesh>;
+  trees: THREE.InstancedMesh;
   closedSign: THREE.Object3D;
   tootomaticHorn: THREE.Object3D;
   sky: THREE.Mesh;
@@ -225,7 +226,7 @@ export function buildVillage(parent: THREE.Object3D, tier: Tier, owner: string):
   sky.frustumCulled = false;
   group.add(sky);
   // Puffy fair-weather clouds high up.
-  const puffGeo = new THREE.IcosahedronGeometry(1, 2);
+  const puffGeo = new THREE.IcosahedronGeometry(1, 1);
   const skyPuffs = new THREE.InstancedMesh(puffGeo, new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0xffeedd, emissiveIntensity: 0.35, fog: false }), 54);
   {
     let i = 0;
@@ -911,20 +912,22 @@ export function buildVillage(parent: THREE.Object3D, tier: Tier, owner: string):
       g.deleteAttribute('uv');
       parts.push(g.index ? g.toNonIndexed() : g);
     };
-    add(new THREE.CylinderGeometry(0.18, 0.28, 2.2, 7), 0x7a5a3a, mtx(0, 1.1, 0));
-    add(new THREE.IcosahedronGeometry(1.5, 1), 0x6fae55, mtx(0, 3.0, 0));
-    add(new THREE.IcosahedronGeometry(1.1, 1), 0x7fbf5f, mtx(0.8, 3.6, 0.3));
-    add(new THREE.IcosahedronGeometry(1.0, 1), 0x5f9a4e, mtx(-0.7, 3.4, -0.4));
-    add(new THREE.IcosahedronGeometry(0.9, 1), 0x86c766, mtx(0.1, 4.2, -0.2));
+    add(new THREE.CylinderGeometry(0.18, 0.28, 2.2, 6, 1, true), 0x7a5a3a, mtx(0, 1.1, 0));
+    add(new THREE.IcosahedronGeometry(1.55, 1), 0x6fae55, mtx(0, 3.0, 0));
+    add(new THREE.IcosahedronGeometry(1.15, 1), 0x7fbf5f, mtx(0.75, 3.7, 0.3));
+    add(new THREE.IcosahedronGeometry(1.0, 1), 0x5f9a4e, mtx(-0.6, 3.9, -0.35));
     return mergeAll(parts);
   })();
+  // Inner trees first, then the ring outside (evens before odds, so the low tier can drop every other one).
   const treeSpots: [number, number, number][] = [];
+  const outerRing: [number, number, number][] = [];
   for (let i = 0; i < 64; i++) {
     const a = (i / 64) * Math.PI * 2;
     const r = 36 + R() * 14;
-    treeSpots.push([Math.cos(a) * r, Math.sin(a) * r, 1.1 + R() * 0.8]);
+    outerRing.push([Math.cos(a) * r, Math.sin(a) * r, 1.1 + R() * 0.8]);
   }
   for (const [x, z] of [[-30, -28], [-29, -6], [-30, 26], [29, 28], [30, -28], [16, -29], [-16, -29], [29, -8], [-25, 26], [11, 28], [-12, 28], [20, 25], [-30, 12], [30, 2.5]]) treeSpots.push([x, z, 0.9 + R() * 0.4]);
+  treeSpots.push(...outerRing.filter((_, i) => i % 2 === 0), ...outerRing.filter((_, i) => i % 2 === 1));
   const trees = new THREE.InstancedMesh(treeGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }), treeSpots.length);
   treeSpots.forEach(([x, z, s], i) => {
     trees.setMatrixAt(i, mtx(x, 0, z, 0, R() * 6, 0, s, s * (0.9 + R() * 0.3), s));
@@ -950,22 +953,14 @@ export function buildVillage(parent: THREE.Object3D, tier: Tier, owner: string):
       const a = R() * Math.PI * 2;
       spots.push([Math.cos(a) * (13.2 + R() * 0.5), Math.sin(a) * (13.2 + R() * 0.5)]);
     }
-    // Blooms: five petals round a centre, on a stem (the stems are a second batch).
-    const petals: THREE.BufferGeometry[] = [];
-    for (let k = 0; k < 5; k++) {
-      const a = (k / 5) * Math.PI * 2;
-      const p = new THREE.SphereGeometry(0.05, 6, 4);
-      p.scale(1, 0.45, 1);
-      p.translate(Math.cos(a) * 0.05, 0, Math.sin(a) * 0.05);
-      petals.push(p);
-    }
-    const bloomGeo = mergeAll(petals);
-    const centreGeo = new THREE.SphereGeometry(0.03, 6, 4);
-    centreGeo.translate(0, 0.02, 0);
-    const stemGeo = new THREE.CylinderGeometry(0.008, 0.012, 1, 4);
+    // Blooms: a flat six-petal disc with a raised centre, on a stem (a second batch).
+    const petals = new THREE.CircleGeometry(0.075, 6).rotateX(-Math.PI / 2);
+    const bloomGeo = mergeAll([petals]);
+    const centreGeo = new THREE.IcosahedronGeometry(0.03, 0);
+    centreGeo.translate(0, 0.015, 0);
+    const stemGeo = new THREE.CylinderGeometry(0.008, 0.012, 1, 3, 1, true);
     stemGeo.translate(0, 0.5, 0);
-    const leaf = new THREE.SphereGeometry(0.04, 5, 3);
-    leaf.scale(1.6, 0.3, 0.7);
+    const leaf = new THREE.CircleGeometry(0.05, 4).rotateX(-Math.PI / 2).scale(1.6, 1, 0.7);
     leaf.translate(0.05, 0.35, 0);
     const stems = new THREE.InstancedMesh(mergeAll([stemGeo, leaf]), new THREE.MeshStandardMaterial({ color: 0x4f8a3a, roughness: 0.9 }), spots.length);
     flowers = new THREE.InstancedMesh(mergeAll([bloomGeo, centreGeo]), new THREE.MeshStandardMaterial({ roughness: 0.7 }), spots.length);
@@ -1041,6 +1036,7 @@ export function buildVillage(parent: THREE.Object3D, tier: Tier, owner: string):
     clockHands,
     pools,
     boards,
+    trees,
     closedSign,
     tootomaticHorn: horn,
     sky,
@@ -1082,6 +1078,9 @@ function roofTrim(P: Painter, M: Mats, x: number, z: number, hw: number, hd: num
   P.box(M.paint, deck, x, h - 0.02, z, hw * 2 - t * 2 - 0.02, 0.04, hd * 2 - t * 2 - 0.02, { base: null });
 }
 
+/** A bunch of flowers for window boxes and planters: one low-poly blob. */
+const FLOWER_CLUMP = new THREE.SphereGeometry(0.12, 6, 4).scale(1.9, 0.85, 1);
+
 interface BuildingOpts {
   x: number;
   z: number;
@@ -1109,7 +1108,7 @@ function building(P: Painter, M: Mats, atlas: SignAtlas, signs: [THREE.BufferGeo
     const px = x - hw + 0.7 + rr() * (hw * 2 - 1.4);
     const pz = z - hd + 0.7 + rr() * (hd * 2 - 1.4);
     P.box(M.wood, 0xc98a52, px, h, pz, 0.6, 0.35, 0.4, { base: null, tile: 1 });
-    for (let k = 0; k < 3; k++) P.add(new THREE.SphereGeometry(0.12, 8, 6), M.paint, [C.flowerP, C.flowerY, 0xffffff][k], mtx(px - 0.18 + k * 0.18, h + 0.42, pz), { base: null });
+    P.add(FLOWER_CLUMP, M.paint, [C.flowerP, C.flowerY, 0xffffff][i % 3], mtx(px, h + 0.42, pz, 0, 0, 0, 1.2), { base: null });
   }
   // Windows on each side, in two rows.
   const sides: { n: [number, number]; cx: number; cz: number; len: number; ry: number }[] = [
@@ -1139,9 +1138,9 @@ function building(P: Painter, M: Mats, atlas: SignAtlas, signs: [THREE.BufferGeo
           P.box(M.wood, [C.tomato, 0x4aa3df, C.bean, 0x8a6bd1][(si + k) % 4], wx + sx + s.n[0] * 0.04, wy - 0.05, wz + sz + s.n[1] * 0.04, across ? 0.4 : 0.05, 1.3, across ? 0.05 : 0.4, { base: null, tile: 0.8 });
         }
         P.box(M.wood, 0xc98a52, wx + s.n[0] * 0.18, wy - 0.3, wz + s.n[1] * 0.18, across ? 1.0 : 0.3, 0.25, across ? 0.3 : 1.0, { base: null, tile: 1 });
-        for (let f = 0; f < 4; f++) {
-          const fo = (f - 1.5) * 0.24;
-          P.add(new THREE.SphereGeometry(0.1, 8, 6), M.paint, [C.flowerP, C.flowerY, 0xffffff, C.tomato][(f + k) % 4], mtx(wx + s.n[0] * 0.2 + (across ? fo : 0), wy - 0.02, wz + s.n[1] * 0.2 + (across ? 0 : fo)), { base: null });
+        for (let f = 0; f < 2; f++) {
+          const fo = (f - 0.5) * 0.44;
+          P.add(FLOWER_CLUMP, M.paint, [C.flowerP, C.flowerY, 0xffffff, C.tomato][(f + k + si) % 4], mtx(wx + s.n[0] * 0.2 + (across ? fo : 0), wy - 0.02, wz + s.n[1] * 0.2 + (across ? 0 : fo), 0, across ? 0 : Math.PI / 2, 0), { base: null });
         }
       }
     }
