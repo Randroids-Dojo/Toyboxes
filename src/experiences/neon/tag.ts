@@ -86,6 +86,8 @@ export class TagMode implements Mode {
   private lastBeat = -1;
   private camPos = new THREE.Vector3();
   private camTarget = new THREE.Vector3();
+  /** Where you stood when the lock-on framing was last placed. */
+  private camFrom = new THREE.Vector3();
   private lockBlend = 0;
   private practiceTags = 0;
   private endT = 0;
@@ -800,16 +802,26 @@ export class TagMode implements Mode {
     }
     if (this.phase === 'end') {
       const a = this.endT * 0.4;
-      return { position: new THREE.Vector3(p.x + Math.sin(a) * 6, 3.2, p.z + Math.cos(a) * 6), target: new THREE.Vector3(p.x, 1.2, p.z), blend: Math.min(1, this.endT * 2) };
+      return { position: new THREE.Vector3(p.x + Math.sin(a) * 6, 3.2, p.z + Math.cos(a) * 6), target: new THREE.Vector3(p.x, 1.2, p.z), blend: Math.min(1, this.endT * 2), pivot: new THREE.Vector3(p.x, p.y + 1.25, p.z) };
     }
     // Lock-on framing: you and your target.
     const sync = n.save.data.sync;
     const device = n.ctx.ui.device;
     const want = this.lock && sync.lockCam ? (device === 'kbm' ? 0.4 : 0.9) : 0;
     this.lockBlend += (want - this.lockBlend) * Math.min(1, dt * 3);
-    if (this.lockBlend < 0.02) return null;
+    if (this.lockBlend < 0.02) {
+      this.camPos.set(0, 0, 0);
+      return null;
+    }
     const t = this.lock ? this.live.agents[this.lock.id] : null;
-    if (t) {
+    if (!t && this.camPos.lengthSq() === 0) return null;
+    if (!t) {
+      // The lock is gone and the framing fades: carry it with you (a respawn or a dash) while it does.
+      this.camPos.x += p.x - this.camFrom.x;
+      this.camPos.z += p.z - this.camFrom.z;
+      this.camTarget.x += p.x - this.camFrom.x;
+      this.camTarget.z += p.z - this.camFrom.z;
+    } else {
       const dx = t.x - p.x;
       const dz = t.z - p.z;
       const l = Math.hypot(dx, dz) || 1;
@@ -823,9 +835,15 @@ export class TagMode implements Mode {
         const cz = p.z - uz * back + ux * 1.1 * k;
         if (inArena(cx, cz, 0.5) && clearLine(p.x, p.z, cx, cz, this.live.pieces, 2)) break;
       }
+      // When no spot passes (a corner), stay inside the walls and look down from higher up.
       const k = back / 5.4;
-      const want3 = new THREE.Vector3(p.x - ux * back - uz * 1.1 * k, 2.4 + 0.9 * k, p.z - uz * back + ux * 1.1 * k);
-      const look = new THREE.Vector3(p.x + ux * Math.min(4, l * 0.4), 1.2, p.z + uz * Math.min(4, l * 0.4));
+      const m = 0.5;
+      const cx = Math.min(ARENA.x1 - m, Math.max(ARENA.x0 + m, p.x - ux * back - uz * 1.1 * k));
+      const cz = Math.min(ARENA.z1 - m, Math.max(ARENA.z0 + m, p.z - uz * back + ux * 1.1 * k));
+      const want3 = new THREE.Vector3(cx, back > 1.6 ? 2.4 + 0.9 * k : 3.6, cz);
+      // Pulled in close, aim nearer too, so you stay in the frame below the target.
+      const ahead = Math.min(4, l * 0.4) * k;
+      const look = new THREE.Vector3(p.x + ux * ahead, 1.2, p.z + uz * ahead);
       if (this.camPos.lengthSq() === 0) {
         this.camPos.copy(want3);
         this.camTarget.copy(look);
@@ -833,7 +851,8 @@ export class TagMode implements Mode {
       this.camPos.lerp(want3, Math.min(1, dt * 4));
       this.camTarget.lerp(look, Math.min(1, dt * 6));
     }
-    return { position: this.camPos.clone(), target: this.camTarget.clone(), blend: this.lockBlend };
+    this.camFrom.set(p.x, 0, p.z);
+    return { position: this.camPos.clone(), target: this.camTarget.clone(), blend: this.lockBlend, pivot: new THREE.Vector3(p.x, p.y + 1.25, p.z) };
   }
 
   private finish(quit: boolean): void {

@@ -210,7 +210,8 @@ export class ArenaView {
       const i = this.worldColliders.indexOf(c);
       if (i >= 0) this.worldColliders.splice(i, 1);
     }
-    this.colliders = pieces.map((p) => (p.kind === 'pillar' ? circle(p.x, p.z, p.hw, p.h, 0.5, true) : box(p.x, p.z, p.hw, p.hd, p.rot, p.h, 0.5, false)));
+    // Cover blocks the camera too, so it lifts over a block rather than hide you behind it.
+    this.colliders = pieces.map((p) => (p.kind === 'pillar' ? circle(p.x, p.z, p.hw, p.h, 0.5, true) : box(p.x, p.z, p.hw, p.hd, p.rot, p.h, 0.5, true)));
     this.worldColliders.push(...this.colliders);
   }
 
