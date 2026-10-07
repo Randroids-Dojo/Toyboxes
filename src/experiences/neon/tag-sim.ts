@@ -71,6 +71,8 @@ export interface Agent {
   /** Damage dealt by the player in the last few seconds (for assists). */
   hurtByPlayerAt: number;
   hitStop: number;
+  /** Held still (playtests). */
+  frozen: boolean;
 }
 
 export interface Bolt {
@@ -225,6 +227,7 @@ export class TagSim {
       firing: 0,
       hurtByPlayerAt: -99,
       hitStop: 0,
+      frozen: false,
     };
   }
 
@@ -424,8 +427,8 @@ export class TagSim {
     return b;
   }
 
-  /** An enemy bolt that will reach the player within the deflect window. */
-  deflectable(): Bolt | null {
+  /** An enemy bolt that will reach the player within `window` seconds. */
+  deflectable(window = DEFLECT_WINDOW + 0.05): Bolt | null {
     const p = this.player;
     if (p.outT > 0) return null;
     let best: Bolt | null = null;
@@ -436,7 +439,7 @@ export class TagSim {
       const rz = p.z - b.z;
       const sp2 = b.vx * b.vx + b.vz * b.vz;
       const t = (rx * b.vx + rz * b.vz) / sp2;
-      if (t < 0 || t > DEFLECT_WINDOW + 0.05) continue;
+      if (t < 0 || t > window) continue;
       const cx = b.x + b.vx * t - p.x;
       const cz = b.z + b.vz * t - p.z;
       if (cx * cx + cz * cz > (p.r + 0.5) ** 2) continue;
@@ -565,7 +568,7 @@ export class TagSim {
         a.pips++;
       }
     } else a.regen = 0;
-    if (a.player) return;
+    if (a.player || a.frozen) return;
     if (a.role === 'dummy') {
       a.x = 4.2 + Math.sin(this.time * 0.7) * 0.9;
       a.z = -28.6;
@@ -1041,6 +1044,21 @@ export class TagSim {
         }
       }
     }
+  }
+
+  /** Playtests: an enemy bolt heading for the player from `dist` metres at `speed`. */
+  debugIncoming(dist = 3, speed = 6): Bolt | null {
+    const p = this.player;
+    const shooter = this.agents.find((a) => a.team !== p.team && a.outT <= 0) ?? this.agents.find((a) => a.team !== p.team);
+    if (!shooter) return null;
+    const dx = shooter.x - p.x;
+    const dz = shooter.z - p.z;
+    const l = Math.hypot(dx, dz) || 1;
+    const b: Bolt = { id: this.boltId++, x: p.x + (dx / l) * dist, z: p.z + (dz / l) * dist, px: p.x, pz: p.z, vx: (-dx / l) * speed, vz: (-dz / l) * speed, team: shooter.team, owner: shooter.id, life: 3, bounces: 0, maxBounces: 1, beat: false, home: null, kind: 'shot', dead: false };
+    b.px = b.x;
+    b.pz = b.z;
+    this.bolts.push(b);
+    return b;
   }
 
   /** Takes and clears the events since the last call. */

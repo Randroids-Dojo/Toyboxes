@@ -1080,6 +1080,13 @@ export class NeonParty implements SpaceView, Nova {
     void new NightRun(this, n, null).begin();
   }
 
+  /** Calls a playtest helper on the current game. */
+  debugGame(method: string, ...args: unknown[]): unknown {
+    const m = this.mode as unknown as Record<string, unknown> | null;
+    const f = m?.[method];
+    return typeof f === 'function' ? (f as (...a: unknown[]) => unknown).apply(m, args) : null;
+  }
+
   /** Ends the current game at once (playtests). */
   debugEnd(): void {
     (this.mode as unknown as { debugEnd?: () => void })?.debugEnd?.();

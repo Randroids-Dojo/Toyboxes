@@ -6,8 +6,8 @@
 
 import * as THREE from 'three';
 import { music } from '../../audio/music';
-import { ARENA, BASES, bankLine, clearLine, LAYOUT_NAMES, spawnPoints, type LayoutId } from '../../shared/neon/arena';
-import { BEAT_WINDOW, pickLock, scoreTag, TAG_DIFF_NAMES, type TagDiff, type TagLog, type TagScore } from '../../shared/neon/tag';
+import { ARENA, BASES, bankLine, circleHitsPiece, clearLine, inArena, LAYOUT_NAMES, spawnPoints, type LayoutId } from '../../shared/neon/arena';
+import { BEAT_WINDOW, DEFLECT_WARN, pickLock, scoreTag, TAG_DIFF_NAMES, type TagDiff, type TagLog, type TagScore } from '../../shared/neon/tag';
 import { box, circle, type Collider } from '../../world/physics';
 import type { CameraShot, CaptureLabels, PlayerState, SpaceAction } from '../../world/space';
 import type { ArenaView } from './arena-view';
@@ -93,6 +93,8 @@ export class TagMode implements Mode {
   private lastScore = { cyan: -1, magenta: -1, time: '' };
   private announcedSudden = false;
   private beatFlash = 0;
+  private pendingSwing: { until: number; stamp: number } | null = null;
+  private reflects = 0;
   private clickStart: { x: number; y: number; t: number } | null = null;
   private onDown = (e: PointerEvent) => {
     if (e.pointerType === 'mouse' && e.button === 0) this.clickStart = { x: e.clientX, y: e.clientY, t: e.timeStamp };
@@ -241,7 +243,9 @@ export class TagMode implements Mode {
     const sim = this.live;
     if (sim.player.outT > 0 || (this.phase !== 'play' && this.phase !== 'practice')) return;
     if (this.canDeflect) {
-      this.swing(stamp);
+      // Pressed on the warning: the blade swings when the bolt is in reach.
+      if (sim.deflectable()) this.swing(stamp);
+      else this.pendingSwing = { until: performance.now() + 700, stamp };
       return;
     }
     const beat = this.onBeat(stamp);
@@ -293,6 +297,14 @@ export class TagMode implements Mode {
       this.acc -= DT;
       sim.beat = n.clock.beatAt();
       if (sim.player.outT <= 0) sim.setPlayer(p.x, p.z, p.y, p.yaw, p.vx, p.vz);
+      if (this.pendingSwing) {
+        if (performance.now() > this.pendingSwing.until) this.pendingSwing = null;
+        else if (sim.deflectable()) {
+          const st = this.pendingSwing.stamp;
+          this.pendingSwing = null;
+          this.swing(st);
+        }
+      }
       sim.step(DT);
       for (const e of sim.take()) this.event(e);
     }
@@ -435,6 +447,7 @@ export class TagMode implements Mode {
         break;
       }
       case 'reflect':
+        this.reflects++;
         break;
     }
   }
@@ -622,7 +635,7 @@ export class TagMode implements Mode {
     } else this.bankLineObj.visible = false;
     // Deflect window.
     const was = this.canDeflect;
-    this.canDeflect = !!sim.deflectable();
+    this.canDeflect = !!sim.deflectable(DEFLECT_WARN);
     if (this.canDeflect && !was) {
       snd.deflectReady();
       this.nova.hint('hint-deflect', 'Now! Deflect it back');
@@ -795,6 +808,53 @@ export class TagMode implements Mode {
     this.opts.onDone({ score: scoreTag(log), log, won: s.cyan > s.magenta, quit, us: s.cyan, them: s.magenta });
   }
 
+  /**
+   * Playtests: set up a moment, then real input plays it. `bank` freezes an
+   * enemy where only a mirror bank reaches it from where you stand; `deflect`
+   * sends a slow bolt at you; `out` leaves you one pip and sends a bolt.
+   */
+  debugSetup(kind: 'bank' | 'deflect' | 'out'): boolean {
+    const sim = this.live;
+    const p = sim.player;
+    if (kind === 'bank') {
+      const enemy = sim.agents.find((a) => a.team !== p.team && a.outT <= 0) ?? sim.agents.find((a) => a.team !== p.team);
+      if (!enemy) return false;
+      enemy.outT = 0;
+      for (let px = -12; px <= 12; px += 1)
+        for (let pz = -24; pz >= -33; pz -= 1)
+          for (let ex = -12; ex <= 12; ex += 1.5)
+            for (let ez = -47; ez <= -36; ez += 1.5) {
+              if (!inArena(px, pz, 0.6) || !inArena(ex, ez, 0.6) || circleHitsPiece(px, pz, 0.6, sim.pieces) || circleHitsPiece(ex, ez, 0.7, sim.pieces)) continue;
+              if (clearLine(px, pz, ex, ez, sim.pieces, 1.2)) continue;
+              const bl = bankLine(px, pz, ex, ez, sim.pieces);
+              if (!bl || bl.length > 20) continue;
+              const yaw = Math.atan2(ex - px, ez - pz);
+              enemy.x = ex;
+              enemy.z = ez;
+              enemy.frozen = true;
+              enemy.pips = 1;
+              enemy.shimmer = 0;
+              for (const a of sim.agents) if (a !== enemy && !a.player) a.frozen = true;
+              this.nova.ctx.teleport(px, pz, yaw);
+              sim.setPlayer(px, pz, 0, yaw, 0, 0);
+              this.lock = null;
+              return true;
+            }
+      return false;
+    }
+    if (kind === 'out') {
+      p.pips = 1;
+      p.shimmer = 0;
+      p.shield = 0;
+    }
+    return !!sim.debugIncoming(kind === 'out' ? 1.5 : 3.2, kind === 'out' ? 10 : 6);
+  }
+
+  /** Playtests: let the frozen bots move again. */
+  debugThaw(): void {
+    for (const a of this.live.agents) a.frozen = false;
+  }
+
   /** Playtests: run the clock out now (the score stands). */
   debugEnd(): void {
     if (this.phase !== 'play') return;
@@ -829,6 +889,7 @@ export class TagMode implements Mode {
       bolts: sim.bolts.length,
       log: sim.log.length,
       practiceTags: this.practiceTags,
+      reflects: this.reflects,
       layout: this.opts.layout,
     };
   }

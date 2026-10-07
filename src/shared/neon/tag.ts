@@ -38,7 +38,10 @@ export const OVERHEAT = 1.4;
 export const PIPS = 3;
 export const OUT_SECONDS = 3;
 export const SHIMMER = 1.5;
-export const DEFLECT_WINDOW = 0.22;
+/** A swing sends back a bolt that would land within this long. */
+export const DEFLECT_WINDOW = 0.3;
+/** The "!" ring shows (and a press is held for the swing) from this far out. */
+export const DEFLECT_WARN = 0.75;
 export const LOCK_RANGE = 24;
 
 export const TAG_POINTS = { tag: 100, bank: 100, reflect: 150, beat: 50, assist: 25, pickup: 25, win: 1000, most: 300 };

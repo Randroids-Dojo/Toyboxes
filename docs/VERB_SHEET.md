@@ -47,9 +47,19 @@ Observed state transition and feedback: each row above passes its listed check.
 Required checks and evidence location: `npm test`, the four playtest scripts (screenshots in `/tmp/toyboxes-*`).
 Remaining human judgment: vehicle handling feel, camera comfort, and play on the Samsung S90H TV browser and a real phone.
 
-## Neon space party
+## Neon space party (Club Nova)
 
-Start on the white pad with Action. Face a moving drone and press Action to laser-tag it; press Kick for a close-range glowing baton tag. A hit removes the drone briefly, flashes a beam and awards 10 or 15 round points. Misses and a firing cooldown prevent repeated automatic hits. After 24 seconds, move to the named, lit dance panel and press Action or Kick during NOW. A correct step awards 20 points once per beat. After 21 seconds compare your round points with the robot dancers' 160-point target, then return to the launch pad to replay. Points belong to this solo round and are not a shared leaderboard. All actions use the common touch, keyboard, controller and remote mappings; Back and the exit portal return to the room.
+Room 11's world: laser tag, prism blade duels and a dance off, all on one beat. Move plus Action plays everything; Kick and Jump are optional extras.
+
+- **Roam:** walk the club; light lanes on the deck lead to each venue. Action on the Nova floor dances on the next beat (the floor bursts and the crowd cheers); footsteps on the floor light its rays and play notes on the beat.
+- **Party night (star pad):** laser tag, a blade duel and a dance off back to back, with a warp between venues, one retry per event, a save to resume within the hour and a podium at the end. Five nights, each opening the next.
+- **Sound check (first rhythm game, or the Glow Lab jukebox):** press with Orbit's claps on eight beats, then hold. Sets the timing offset and turns on Easy holds where a held button is not reported. Party settings nudge timing and toggle hit sounds, the beat bar, Easy holds, Wide timing (bests stay local) and the lock-on camera.
+- **Laser tag (Comet Yard terminal):** Action fires at the locked target (bracket reticle); presses within 90 ms of the beat are beat shots (no heat, +50). A dotted gold line means a bank shot off a mirror. When the "!" ring shows, Action swings the prism blade instead and sends the bolt back (a press during the warning swings at the right moment). Kick also swings, Jump hops over bolts. Three glow pips; tagged out means 3 seconds then back at base. Power-ups: Prism shield, Overdrive, Echo. The lock-on camera frames you and your target so arrows strafe round it.
+- **Blade duels (Blade Ring terminal or a pedestal):** any button parries as the ring closes on the clash point; hold through a crush bind and let go on Push; leave the shimmering feints alone; in strike phrases hit the glowing crests; in Echo bars copy the duelist's rhythm. Five pips; a knockout or the bigger glow share at the end wins.
+- **Dance off (DJ booth):** gems slide into the gate on the beat bar (and run in along the floor rays). Any hit key, a tap anywhere, any face button, bumper, trigger or d-pad, or OK presses; hold the long gems; spotlight bars score presses on the eighth-note grid (arrows pick the move). Combo multiplier, Glow time after enough Perfects, a rival meter and three judges' cards. No fail.
+- **Wardrobe (Glow Lab mirror):** suits, prism blades, victory poses and a helmet, unlocked with stars.
+- **Pause:** Back, Esc, Start or the menu button pauses a game (restart or leave from the menu); the song resumes after a three-beat count-in, and judged notes are never judged again.
+- **Boards:** party nights, laser tag (Normal and Hard), each duelist, and each song's Normal chart. The server scores every result from its log. The Glow Lab wall cycles them.
 
 ### Room 2: Fart simulator
 
