@@ -134,7 +134,7 @@ describe('kart lap ghosts', () => {
   it('sets a board floor below the champion time on every circuit', () => {
     for (const id of CUP) {
       const len = new TrackPath(circuitLine(id)).length;
-      expect(boardMinLapMs(len)).toBeLessThan(CIRCUITS[id].medals[3] * 0.85);
+      expect(boardMinLapMs(len)).toBeLessThan(CIRCUITS[id].medals[3] * 0.82);
     }
     expect(boardMinLapMs(L)).toBeGreaterThan(30000);
   });

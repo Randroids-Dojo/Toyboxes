@@ -120,9 +120,13 @@ export const BOARD_TOP = KART_TOP_SPEED * BODIES.chunky.top * KART_BOOST;
 /** The fastest a kart can go off the road (half grip, boosting), m/s. */
 export const GRASS_TOP = BOARD_TOP * 0.5;
 
-/** The quickest Battery lap the boards accept on a circuit of this length. */
+/**
+ * The quickest Battery lap the boards accept on a circuit of this length: a
+ * whole lap averaging 1.3 times top speed. A loose sanity floor (the computer
+ * brain averages about 1.05); the ghost's speed checks do the real work.
+ */
 export function boardMinLapMs(length: number): number {
-  return Math.floor((length / (KART_TOP_SPEED * 1.2)) * 1000);
+  return Math.floor((length / (KART_TOP_SPEED * 1.3)) * 1000);
 }
 
 /** Medal earned by a lap time: 0 none, 1 bronze, 2 silver, 3 gold, 4 champion. */

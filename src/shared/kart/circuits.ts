@@ -173,7 +173,7 @@ export const CIRCUITS: Record<CircuitId, CircuitDef> = {
       { s: 20, off: 0 },
       { s: 398, off: 2.2 },
     ],
-    medals: [48000, 44000, 41500, 40000],
+    medals: [48000, 43500, 40500, 38400],
     bounds: 30,
   },
   picnic: {
@@ -204,7 +204,7 @@ export const CIRCUITS: Record<CircuitId, CircuitDef> = {
       { s: 134, off: 0, len: 2 },
       { s: 392, off: -2.2 },
     ],
-    medals: [42000, 38500, 36400, 35000],
+    medals: [42000, 38200, 35600, 33900],
     bounds: 30,
   },
   cove: {
@@ -230,7 +230,7 @@ export const CIRCUITS: Record<CircuitId, CircuitDef> = {
       { s: 287, off: 0 },
       { s: 148, off: 0, len: 2 },
     ],
-    medals: [35000, 32000, 30300, 29200],
+    medals: [35000, 31300, 29200, 27800],
     bounds: 28,
   },
   bedroom: {
@@ -259,7 +259,7 @@ export const CIRCUITS: Record<CircuitId, CircuitDef> = {
       { s: 155, off: 0, len: 2 },
       { s: 98, off: 2.2 },
     ],
-    medals: [34800, 31800, 30100, 29000],
+    medals: [34800, 31000, 28900, 27500],
     bounds: 30,
   },
 };
