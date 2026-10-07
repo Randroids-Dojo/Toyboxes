@@ -211,7 +211,7 @@ export type ColliderDef =
   | { kind: 'box'; x: number; z: number; hx: number; hz: number; rot: number; h: number }
   | { kind: 'circle'; x: number; z: number; r: number; h: number };
 
-function wallBoxes(w: WallDef): ColliderDef[] {
+export function wallBoxes(w: WallDef): ColliderDef[] {
   const len = wallLength(w);
   const dx = (w.b.x - w.a.x) / len;
   const dz = (w.b.z - w.a.z) / len;

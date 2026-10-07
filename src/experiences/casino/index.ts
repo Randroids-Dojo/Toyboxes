@@ -17,13 +17,16 @@ import { Ceremonies } from './celebrate';
 import { Director } from './director';
 import { Economy } from './economy';
 import { Fx } from './fx';
+import { Blackjack } from './games/blackjack';
 import { OldLucky } from './games/oldlucky';
+import { Roulette } from './games/roulette';
 import { SAVE_DEFAULTS, type Host, type SaveData } from './host';
 import { CasinoHud } from './hud';
-import { ARRIVAL, COLLIDERS, EXIT, OLD_LUCKY, SPOTS, zoneAt, type ColliderDef, type ZoneId } from './layout';
+import { ARRIVAL, BLACKJACK, CAPTAIN_TABLE, COLLIDERS, EXIT, OLD_LUCKY, SPOTS, STAGE, zoneAt, type ColliderDef, type ZoneId } from './layout';
 import { Lights } from './lighting';
 import { makeMats, tierMats, type Mats } from './materials';
 import { River } from './river';
+import { Staff, type StaffId } from './staff';
 import './casino.css';
 
 function toCollider(c: ColliderDef): Collider {
@@ -64,6 +67,10 @@ export class Casino implements SpaceView {
   private cer: Ceremonies;
   private host: Host;
   private lucky: OldLucky;
+  private roulette: Roulette;
+  private blackjack: Blackjack;
+  private captain: Blackjack;
+  private staff: Staff;
   private ambience = new Ambience();
   private zone: ZoneId | null = null;
   private introShown = false;
@@ -127,9 +134,29 @@ export class Casino implements SpaceView {
       tried: (game: GameId) => {
         if (!self.save.data.tried[game]) self.save.update((d) => (d.tried[game] = true));
       },
-      say: (_who: string, text: string) => ctx.ui.toast(text),
+      say: (who: string, text: string) => self.staff.say(who as StaffId, text),
     };
+    this.staff = new Staff(this.scene, this.mats, ctx.ui.hud, ctx.camera, [
+      ['penny', -5, 8.2, Math.PI],
+      ['rivet', BLACKJACK.x, BLACKJACK.z - 0.65, 0],
+      ['spinner', -6.5, -4.0, 0],
+      ['monty', -11.2, 2.6, Math.PI / 2],
+      ['captain', CAPTAIN_TABLE.x, CAPTAIN_TABLE.z - 0.65, 0],
+      ['ivory', -11.0, -7.7, (-3 * Math.PI) / 4],
+      ['strum', -9.95, -8.35, Math.PI / 5],
+      ['oompa', -11.45, -6.85, Math.PI / 3],
+    ]);
+    for (const id of ['ivory', 'strum', 'oompa'] as StaffId[]) {
+      const a = this.staff.get(id)!;
+      a.root.position.y = STAGE.h;
+      a.seated = true;
+      a.play('play', 1);
+    }
+    this.staff.instruments();
     this.lucky = new OldLucky(this.host);
+    this.roulette = new Roulette(this.host, this.staff);
+    this.blackjack = new Blackjack(this.host, this.staff, { table: 'saloon', x: BLACKJACK.x, z: BLACKJACK.z, dealer: 'rivet', title: "Rivet's Twenty-One", spot: SPOTS.blackjack, label: 'Play blackjack', short: 'Cards' });
+    this.captain = new Blackjack(this.host, this.staff, { table: 'captain', x: CAPTAIN_TABLE.x, z: CAPTAIN_TABLE.z, dealer: 'captain', title: "The Captain's Table", spot: SPOTS.captain, label: "Sit at the Captain's Table", short: 'Captain' });
     this.lucky.onBonus = async (b) => {
       // The River Wheel's bonus ring lands here once it is built; until then the marquee shows it.
       this.kit.banner(typeof b.value === 'number' ? `${b.value}x` : `${b.value}!`, { sub: 'The bonus wheel', color: '#ffd24a', ms: 1800 });
@@ -229,13 +256,8 @@ export class Casino implements SpaceView {
 
   actions(player: PlayerState): SpaceAction[] {
     if (player.riding) return [];
-    const act = (label: string, short: string, run: () => void) => ({ range: 0, label, short, run });
-    const out: SpaceAction[] = [];
-    for (const a of this.lucky.actions(player, (label, short, run) => act(label, short, run) as SpaceAction)) {
-      const def = Object.values(SPOTS).find((s) => s.x === a.x && s.z === a.z);
-      out.push({ ...a, range: def?.range ?? 1.5 });
-    }
-    return out;
+    const act = (label: string, short: string, run: () => void) => ({ label, short, run }) as SpaceAction;
+    return [...this.lucky.actions(player, act), ...this.roulette.actions(player, act), ...this.blackjack.actions(player, act), ...this.captain.actions(player, act)];
   }
 
   kickAction(player: PlayerState): { label: string; run: () => void } | null {
@@ -385,6 +407,10 @@ export class Casino implements SpaceView {
     const p = this.player;
     const near = !!p && Math.hypot(p.x - SPOTS.lever.x, p.z - SPOTS.lever.z) < 3;
     this.lucky.update(dt, { night: this.river.night, near, boost: this.cer.boost });
+    this.roulette.update(dt);
+    this.blackjack.update(dt);
+    this.captain.update(dt);
+    this.staff.update(dt, beat, p ? new THREE.Vector3(p.x, 1.4, p.z) : null);
     // Music and the river bed follow where you are.
     const z = zoneAt(focus.x, focus.z) ?? 'saloon';
     if (z !== this.zone || !music.playing) {
@@ -418,6 +444,10 @@ export class Casino implements SpaceView {
     this.river.dispose();
     this.lights.dispose();
     this.lucky.dispose();
+    this.roulette.dispose();
+    this.blackjack.dispose();
+    this.captain.dispose();
+    this.staff.dispose();
     this.fx.dispose();
     this.boat.dispose();
     for (const m of this.mats.all) m.dispose();
@@ -451,6 +481,9 @@ export class Casino implements SpaceView {
       seated: this.director.seated,
       cinematic: this.director.playing,
       oldLucky: { x: OLD_LUCKY.x, z: OLD_LUCKY.z },
+      roulette: { spinning: this.roulette.spinning, shownPocket: this.roulette.shownPocket, lastPocket: this.roulette.lastPocket, history: this.roulette.history.slice(0, 8) },
+      blackjack: this.blackjack.debug(),
+      captain: this.captain.debug(),
     };
   }
 

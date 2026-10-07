@@ -7,6 +7,8 @@ import * as THREE from 'three';
 import { Batch } from './batch';
 import {
   BAY,
+  colliderGap,
+  wallBoxes,
   CLERESTORY,
   COLUMNS,
   LOGBOOK,
@@ -168,10 +170,39 @@ function solidRuns(len: number, ops: Opening[], inset = 0): [number, number][] {
 }
 
 /** The wainscot, rails, baseboard and crown on one face of a wall (face +1 inside, -1 the far side of a partition). */
-function trimFace(b: Batch, m: Mats, len: number, H: number, ops: Opening[], sc: (typeof SCHEME)[keyof typeof SCHEME], face: 1 | -1): void {
+/**
+ * How far a wall's trim must stop short of each end so it never runs into a
+ * neighbouring wall's solid (walls that close a corner run on into it).
+ */
+function trimInsets(w: WallDef, face: 1 | -1): [number, number] {
+  const len = wallLength(w);
+  const dx = (w.b.x - w.a.x) / len;
+  const dz = (w.b.z - w.a.z) / len;
+  const n = wallNormal(w);
+  const others = WALLS.filter((o) => o !== w).flatMap(wallBoxes);
+  const at = (d: number) => {
+    // A point on the trim, just inside the room, `d` along from a.
+    const x = w.a.x + dx * d + n.x * face * (T / 2 + 0.05);
+    const z = w.a.z + dz * d + n.z * face * (T / 2 + 0.05);
+    return others.some((c) => colliderGap(c, x, z) < 0);
+  };
+  let s = 0.08;
+  while (s < 1.2 && at(s)) s += 0.02;
+  let e = 0.08;
+  while (e < 1.2 && at(len - e)) e += 0.02;
+  // An end that runs into a neighbour stops at the neighbour's trim (0.15 proud of its face), so the two never overlap.
+  return [s > 0.09 ? s + 0.11 : 0.12, e > 0.09 ? e + 0.11 : 0.12];
+}
+
+function trimFace(b: Batch, m: Mats, w: WallDef, ops: Opening[], sc: (typeof SCHEME)[keyof typeof SCHEME], face: 1 | -1): void {
+  const len = wallLength(w);
+  const H = w.height;
   const z0 = (T / 2) * face;
   const f = face;
-  for (const [s0, s1] of solidRuns(len, ops, 0.08)) {
+  // Wall-local x runs from b to a, so the insets swap ends.
+  const [ia, ib] = trimInsets(w, face);
+  const runs = solidRuns(len, ops).map(([s0, s1]) => [Math.max(s0, ib), Math.min(s1, len - ia)] as [number, number]).filter(([s0, s1]) => s1 - s0 > 0.1);
+  for (const [s0, s1] of runs) {
     const rl = s1 - s0;
     const cx = (s0 + s1) / 2;
     b.add(box(rl, 1.1, 0.05), m.trim, cx, 0.552, z0 + 0.03 * f, 0, 0, 0, sc.wains);
@@ -181,7 +212,7 @@ function trimFace(b: Batch, m: Mats, len: number, H: number, ops: Opening[], sc:
     const pw = rl / n;
     for (let i = 0; i < n; i++) b.add(box(pw - 0.2, 0.62, 0.02), m.trim, s0 + pw * (i + 0.5), 0.6, z0 + 0.065 * f, 0, 0, 0, sc.panel);
   }
-  b.add(box(len - 0.16, 0.18, 0.14), m.trim, len / 2, H - 0.09, z0 + 0.07 * f, 0, 0, 0, sc.crown);
+  b.add(box(len - ia - ib, 0.18, 0.14), m.trim, ib + (len - ia - ib) / 2, H - 0.09, z0 + 0.07 * f, 0, 0, 0, sc.crown);
 }
 
 const SCHEME: Record<WallDef['scheme'], { paper: string; ink: string; wains: string; panel: string; crown: string; rail: string; frame: string; outside: string }> = {
@@ -290,24 +321,26 @@ export function buildBoat(m: Mats, texScale: number): BoatView {
     const b = new Batch();
     const shape = wallShape(len, H, ops);
     // Core, painted outside; the wallpaper skin sits just inside it.
-    b.add(new THREE.ExtrudeGeometry(shape, { depth: T, bevelEnabled: false, curveSegments: 10 }).translate(0, 0, -T / 2), m.trim, 0, 0, 0, 0, 0, 0, sc.outside);
+    // Each core sits a hair higher than the last, so cores crossing at a corner never share their base plane.
+    const base = (walls.length + 1) * 0.0012;
+    b.add(new THREE.ExtrudeGeometry(shape, { depth: T, bevelEnabled: false, curveSegments: 10 }).translate(0, 0, -T / 2), m.trim, 0, base, 0, 0, 0, 0, sc.outside);
     const skin = new THREE.ShapeGeometry(shape, 10);
     const skinUv = skin.attributes.uv;
     // Wallpaper starts above the wainscot so the pattern lines up on every wall.
     for (let i = 0; i < skinUv.count; i++) skinUv.setY(i, skinUv.getY(i) - 1.15);
     b.add(skin, papers[w.scheme], 0, 0, T / 2 + 0.008);
     const z0 = T / 2;
-    trimFace(b, m, len, H, ops, sc, 1);
+    trimFace(b, m, w, ops, sc, 1);
     if (w.back) {
       // A partition: the far room's wallpaper, drawn from behind, and its trim.
       const back = new THREE.ShapeGeometry(shape, 10);
       const uv = back.attributes.uv;
       for (let i = 0; i < uv.count; i++) uv.setY(i, uv.getY(i) - 1.15);
       b.add(back, backPapers[w.back], 0, 0, -T / 2 - 0.008);
-      trimFace(b, m, len, H, ops, SCHEME[w.back], -1);
+      trimFace(b, m, w, ops, SCHEME[w.back], -1);
     }
     // Caps sit at slightly different heights so caps meeting at a corner never share a plane.
-    b.add(box(len, 0.1, T + 0.2), m.trim, len / 2, H + walls.length * 0.004, 0, 0, 0, 0, sc.crown);
+    b.add(box(len - 0.02, 0.1, T + 0.2), m.trim, len / 2, H + walls.length * 0.004, 0, 0, 0, 0, sc.crown);
     for (const o of ops) {
       if (o.glass) {
         b.add(new THREE.ExtrudeGeometry(frameShape(o, 0.12), { depth: 0.05, bevelEnabled: false, curveSegments: 10 }), m.trim, 0, 0, z0 + 0.012, 0, 0, 0, sc.frame);
@@ -327,8 +360,8 @@ export function buildBoat(m: Mats, texScale: number): BoatView {
     const sb = new Batch();
     const lift = walls.length * 0.004;
     for (const [s0, s1] of solidRuns(len, ops)) {
-      sb.add(box(s1 - s0, 0.34 + lift * 2, T), m.trim, (s0 + s1) / 2, 0.172 + lift, 0, 0, 0, 0, sc.wains);
-      sb.add(box(s1 - s0, 0.035, T + 0.06), m.trim, (s0 + s1) / 2, 0.36 + lift * 2, 0, 0, 0, 0, '#a8782c');
+      sb.add(box(s1 - s0, 0.34 + lift, T), m.trim, (s0 + s1) / 2, 0.172 + lift * 1.5, 0, 0, 0, 0, sc.wains);
+      sb.add(box(s1 - s0 - 0.08, 0.035, T + 0.06), m.trim, (s0 + s1) / 2, 0.36 + lift * 2, 0, 0, 0, 0, '#a8782c');
     }
     sb.build(stub, { cast: false });
     stub.visible = false;
@@ -434,7 +467,8 @@ export function buildBoat(m: Mats, texScale: number): BoatView {
       const uv = g.attributes.uv;
       for (let k = 0; k < uv.count; k++) uv.setX(k, uv.getX(k) * (len / 4));
       const p = new THREE.Mesh(g, bandMat);
-      p.position.set(mx, yc, mz);
+      // A centimetre into the well, clear of the wall caps below.
+      p.position.set(mx + nx * 0.01, yc, mz + nz * 0.01);
       p.rotation.y = Math.atan2(nx, nz);
       zones.saloon.add(p);
     }
