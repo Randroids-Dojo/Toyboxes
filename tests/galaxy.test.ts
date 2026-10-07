@@ -244,3 +244,37 @@ describe('flights', () => {
     expect(horizonRadius(15)).toBe(12);
   });
 });
+
+describe('comet surf', () => {
+  it('the loop is long enough for a minute and stays clear of every solid', async () => {
+    const { cometCurve, cometMotes, cometClouds, COMET_SECONDS } = await import('../src/shared/galaxy-rules');
+    const c = cometCurve();
+    expect(c.length / COMET_SECONDS).toBeGreaterThan(10);
+    expect(c.length / COMET_SECONDS).toBeLessThan(18);
+    for (let u = 0; u < 1; u += 0.001) {
+      const p = c.at(u);
+      const t = c.tube(u) + 1;
+      const rr = Math.hypot(p.x - RING.cx, p.z - RING.cz);
+      // The planet and its ring walkway.
+      expect(Math.hypot(rr, p.y - RING.planetY), `planet at ${u}`).toBeGreaterThan(RING.planetR + t);
+      if (rr > RING.inner - t && rr < RING.outer + t) expect(Math.abs(p.y - (RING.top - 0.5)), `ring at ${u}`).toBeGreaterThan(0.5 + t);
+      // Island tops and the stair.
+      for (const isl of [{ x: CINDER.x, z: CINDER.z, r: CINDER.r, y: CINDER.top }, { x: DOCK.x, z: DOCK.z, r: DOCK.r, y: DOCK.top }, ...STAIR]) {
+        // Over the top, or well under its hanging roots.
+        if (Math.hypot(p.x - isl.x, p.z - isl.z) < isl.r + t) expect(p.y - isl.y > t || isl.y - p.y > 14 + t, `island at ${u}`).toBe(true);
+      }
+      // The black hole.
+      expect(Math.hypot(p.x - BH.x, p.y - BH.y, p.z - BH.z)).toBeGreaterThan(horizonRadius(12) + t + 2);
+      // The hub's rail.
+      if (Math.hypot(p.x, p.z) < HUB_R + 2) expect(p.y).toBeGreaterThan(t + 2);
+    }
+    const motes = cometMotes();
+    expect(motes).toHaveLength(COMET_MOTES);
+    expect(new Set(motes.map((m) => m.ribbon)).size).toBe(24);
+    for (const m of motes) expect(Math.hypot(m.ox, m.oy)).toBeLessThanOrEqual(c.tube(m.u) + 1e-6);
+    expect(cometClouds()).toHaveLength(8);
+    // It starts and ends at the dock.
+    const start = c.at(0);
+    expect(Math.hypot(start.x - DOCK.x, start.z - DOCK.z)).toBeLessThan(DOCK.r + 3);
+  });
+});

@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { FLOOR_COLORS, ROOM, TRIM_COLORS, WALL_COLORS, areaDoorX, type Area, type Exhibit, type RoomTheme } from '../shared/model';
 import { cached, disposeTree, mesh, plastic, roundBox, sign, signTexture } from './kit';
-import { QUAD_VERT, VORTEX_FRAG } from '../experiences/galaxy-shaders';
+import { QUAD_VERT, VORTEX_FRAG } from '../experiences/galaxy/shaders';
 import { box, circle, type Collider } from './physics';
 import type { SpaceView } from './space';
 

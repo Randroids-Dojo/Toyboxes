@@ -7,7 +7,7 @@
 // Layout (metres; x east, z south, y up)
 
 export const HUB_R = 13;
-export const BH = { x: 24, y: 12, z: -62 } as const;
+export const BH = { x: 24, y: 6, z: -62 } as const;
 /** Stars fed before the Horizon stair opens. */
 export const STAR_GOAL = 12;
 
@@ -95,7 +95,7 @@ export const LANE_SPEED = 14;
 export const BLOSSOM_SPEED = 6.5;
 /** Landing point past a gap, in degrees after its far edge. */
 export const GAP_LAND = 3.5;
-const GATE_S = [6, 16, 26, 100, 110, 120, 130, 140, 150, 190, 200, 210, 280, 290, 300, 310];
+export const RING_GATE_S = [6, 16, 26, 100, 110, 120, 130, 140, 150, 190, 200, 210, 280, 290, 300, 310];
 export const RING_LAPS = 2;
 export const RING_START_S = -6;
 export const RING_RETURN_S = -15;
@@ -115,7 +115,7 @@ export interface Gate {
 export function ringGates(): Gate[] {
   const out: Gate[] = [];
   for (let lap = 0; lap < RING_LAPS; lap++) {
-    GATE_S.forEach((s, i) => {
+    RING_GATE_S.forEach((s, i) => {
       const side = (i + lap) % 2 === 0 ? 'in' : 'out';
       const c = side === 'in' ? RING.inner + 0.2 + GATE_W / 2 : RING.outer - 0.2 - GATE_W / 2;
       out.push({ s: s + lap * 360, lap, side, r0: c - GATE_W / 2, r1: c + GATE_W / 2 });
@@ -345,6 +345,154 @@ export function stormTotal(s = stormSchedule()): number {
 // Comet surf
 
 export const COMET_MOTES = 300;
+export const COMET_SECONDS = 38;
+
+/** The comet's loop through the galaxy, from the dock and back: control points of a closed curve. */
+export const COMET_PATH: [number, number, number][] = [
+  [44, 9.4, 36],
+  [70, 14, 30],
+  [92, 22, 8],
+  [80, 28, -24],
+  [52, 22, -40],
+  [44, 26, -78],
+  [26, 34, -110],
+  [-8, 36, -112],
+  [-34, 28, -92],
+  [-16, 8, -84],
+  [-12, -8, -66],
+  [-17, -6, -54],
+  [-19, 6, -50],
+  [-16, 19, -42],
+  [-6, 21, -20],
+  [2, 18, -2],
+  [18, 16, 24],
+];
+
+export interface CometCurve {
+  length: number;
+  /** Point at a share of the way round (0 to 1, arc length). */
+  at(u: number): Spot3;
+  /** Unit direction of travel at u. */
+  dir(u: number): Spot3;
+  /** How far you may steer from the path at u, metres. */
+  tube(u: number): number;
+}
+
+function catmull(p0: number, p1: number, p2: number, p3: number, t: number): number {
+  const t2 = t * t;
+  return 0.5 * (2 * p1 + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t2 * t);
+}
+
+let curveCache: CometCurve | null = null;
+
+export function cometCurve(): CometCurve {
+  if (curveCache) return curveCache;
+  const P = COMET_PATH;
+  const n = P.length;
+  const raw = (v: number): Spot3 => {
+    const f = (((v % 1) + 1) % 1) * n;
+    const i = Math.floor(f);
+    const t = f - i;
+    const a = P[(i - 1 + n) % n];
+    const b = P[i];
+    const c = P[(i + 1) % n];
+    const d = P[(i + 2) % n];
+    return { x: catmull(a[0], b[0], c[0], d[0], t), y: catmull(a[1], b[1], c[1], d[1], t), z: catmull(a[2], b[2], c[2], d[2], t) };
+  };
+  const N = 4000;
+  const cum = new Float64Array(N + 1);
+  let prev = raw(0);
+  for (let i = 1; i <= N; i++) {
+    const p = raw(i / N);
+    cum[i] = cum[i - 1] + Math.hypot(p.x - prev.x, p.y - prev.y, p.z - prev.z);
+    prev = p;
+  }
+  const length = cum[N];
+  const toRaw = (u: number): number => {
+    const target = (((u % 1) + 1) % 1) * length;
+    let lo = 0;
+    let hi = N;
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      if (cum[mid] < target) lo = mid;
+      else hi = mid;
+    }
+    const f = cum[hi] > cum[lo] ? (target - cum[lo]) / (cum[hi] - cum[lo]) : 0;
+    return (lo + f) / N;
+  };
+  const at = (u: number) => raw(toRaw(u));
+  const dir = (u: number): Spot3 => {
+    const a = at(u - 0.0005);
+    const b = at(u + 0.0005);
+    const l = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z) || 1;
+    return { x: (b.x - a.x) / l, y: (b.y - a.y) / l, z: (b.z - a.z) / l };
+  };
+  const tube = (u: number): number => {
+    const p = at(u);
+    const rr = Math.hypot(p.x - RING.cx, p.z - RING.cz);
+    // Through the gap between the planet and its ring the tube narrows.
+    const nearPlane = 1 - Math.min(1, Math.max(0, (Math.abs(p.y - RING.top) - 4) / 5));
+    const inGap = rr < RING.inner + 2 ? 1 : 0;
+    // Room to steer opens up as you leave the dock and closes as you come home.
+    const w = (((u % 1) + 1) % 1);
+    const ramp = Math.min(1, w / 0.05, (1 - w) / 0.06);
+    return (4.5 - 3.5 * nearPlane * inGap) * Math.max(0, ramp);
+  };
+  curveCache = { length, at, dir, tube };
+  return curveCache;
+}
+
+export interface Mote {
+  u: number;
+  /** Offset across the path (right) and up, metres. */
+  ox: number;
+  oy: number;
+  ribbon: number;
+}
+
+/** Where the 300 stardust motes hang: 24 ribbons of 12 or 13, each a different shape to steer through. */
+export function cometMotes(): Mote[] {
+  const out: Mote[] = [];
+  const rnd = rng(31);
+  const ribbons = 24;
+  for (let i = 0; i < ribbons; i++) {
+    const count = 12 + (i % 2);
+    const u0 = 0.035 + (i / ribbons) * 0.93;
+    const shape = i % 4;
+    const ax = (rnd() - 0.5) * 4;
+    const ay = (rnd() - 0.5) * 3;
+    for (let j = 0; j < count; j++) {
+      const k = j / (count - 1);
+      let ox = ax;
+      let oy = ay;
+      if (shape === 1) ox = Math.sin(k * Math.PI * 2) * 2.6;
+      else if (shape === 2) {
+        ox = Math.cos(k * Math.PI * 2) * 2.4;
+        oy = Math.sin(k * Math.PI * 2) * 2.4;
+      } else if (shape === 3) {
+        ox = -2.6 + k * 5.2;
+        oy = ay * 0.5;
+      }
+      out.push({ u: u0 + j * 0.0016, ox, oy, ribbon: i });
+    }
+  }
+  // Keep every mote inside the tube where it hangs.
+  const c = cometCurve();
+  for (const m of out) {
+    const t = c.tube(m.u) * 0.85;
+    const l = Math.hypot(m.ox, m.oy);
+    if (l > t) {
+      m.ox *= t / l;
+      m.oy *= t / l;
+    }
+  }
+  return out;
+}
+
+/** Dark clouds on the comet's loop: fly through one and five motes shake loose. */
+export function cometClouds(): Mote[] {
+  return [0.11, 0.2, 0.33, 0.45, 0.58, 0.7, 0.83, 0.93].map((u, i) => ({ u, ox: [1.5, -2, 0, 2.2, -1.2, 1.8, -2.4, 0.6][i], oy: [0.5, -1, 1.5, 0, -1.5, 1, 0, -0.8][i], ribbon: -1 }));
+}
 
 // ---------------------------------------------------------------------------
 // Ring run: the split check the server runs
