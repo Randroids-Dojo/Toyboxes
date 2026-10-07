@@ -38,9 +38,13 @@ async function menuGone(): Promise<void> {
 
 /** Presses the pad's alt button (X). */
 async function padButton(i: number): Promise<void> {
-  await page.evaluate((b) => ((window as any).__pad.buttons[b] = 1), i);
+  const set = (v: number) => page.evaluate(([b, v]) => {
+    (window as any).__pad.buttons[b] = v;
+    return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  }, [i, v] as const);
+  await set(1);
   await page.waitForTimeout(110);
-  await page.evaluate((b) => ((window as any).__pad.buttons[b] = 0), i);
+  await set(0);
   await page.waitForTimeout(160);
 }
 
@@ -78,6 +82,24 @@ async function press(selector: string): Promise<void> {
   }
   await reach(selector);
   await w.confirm();
+}
+
+/** The open table's status line, or a note when a rank up has already closed it. */
+async function status(): Promise<string> {
+  const el = page.locator('.modal.in .gp-status').first();
+  return (await el.count()) ? ((await el.textContent()) ?? '') : '(table closed for the rank up)';
+}
+
+/**
+ * Leaves the open card the way this device would: Back, or a tap on Done
+ * (Escape on a phone would switch it to keyboard controls).
+ */
+async function leave(): Promise<void> {
+  // A rank up stands you up from the table by itself.
+  if (!(await w.menuOpen())) return;
+  if (!phone) return w.back();
+  await page.locator('.modal.in button').filter({ hasText: /^(Done|Not now)$/, visible: true }).last().tap();
+  await page.waitForTimeout(200);
 }
 
 /** Walks in a direction until `check` passes (up to `ms`). */
@@ -160,8 +182,8 @@ const rl = (await exp()).roulette;
 if (rl.shownPocket !== rl.lastPocket) throw new Error(`Roulette shows ${rl.shownPocket}, server said ${rl.lastPocket}`);
 await page.waitForTimeout(500);
 await w.shot('07-roulette-result');
-log('roulette', rl.lastPocket, await page.locator('.gp-status').first().textContent());
-await w.back();
+log('roulette', rl.lastPocket, await status());
+await leave();
 await menuGone();
 await invariant('roulette');
 
@@ -194,8 +216,8 @@ for (let i = 0; i < 8; i++) {
 await w.until(async () => (await exp()).blackjack.view?.phase === 'done' && !(await exp()).blackjack.busy, 'the hand to finish', 20000);
 await page.waitForTimeout(400);
 await w.shot('09-blackjack-result');
-log('blackjack', await page.locator('.gp-status').first().textContent());
-await w.back();
+log('blackjack', await status());
+await leave();
 await menuGone();
 await invariant('blackjack');
 
@@ -216,8 +238,8 @@ const wh = (await exp()).wheel;
 if (wh.shownSegment !== wh.lastSegment) throw new Error(`Wheel shows ${wh.shownSegment}, server said ${wh.lastSegment}`);
 await page.waitForTimeout(400);
 await w.shot('11-wheel-result');
-log('wheel', await page.locator('.gp-status').first().textContent());
-await w.back();
+log('wheel', await status());
+await leave();
 await menuGone();
 await invariant('the River Wheel');
 
@@ -248,7 +270,7 @@ for (const [i, risk] of (['calm', 'lively', 'wild'] as const).entries()) {
   if (f.history[0].risk !== risk) throw new Error(`Dropped on ${f.history[0].risk}, wanted ${risk}`);
 }
 await w.shot('13-falls');
-await w.back();
+await leave();
 await menuGone();
 await invariant('Lucky Falls');
 
@@ -270,8 +292,8 @@ await press('.gp-panel .gp-actions .btn.primary');
 await w.until(async () => (await exp()).poker.lastRank !== null, 'the draw');
 await page.waitForTimeout(400);
 await w.shot('15-poker-result');
-log('poker', await page.locator('.gp-status').first().textContent());
-await w.back();
+log('poker', await status());
+await leave();
 await menuGone();
 await invariant('Five Card Cabin');
 
@@ -281,7 +303,7 @@ await w.until(async () => String((await state()).prompt).includes('Wheelhouse'),
 await w.act();
 await page.waitForSelector('.gate-card');
 await w.shot('16-wheelhouse-gate');
-await w.back();
+await leave();
 await menuGone();
 if ((await exp()).gates.wheelhouse) throw new Error('The wheelhouse opened for a Bosun');
 await w.walk('up', 1500);
@@ -316,7 +338,7 @@ for (const [i, t] of tabs.entries()) {
     await press('.lb-toggle');
   } else await w.shot(`2${i}-logbook-${t.toLowerCase().replace(/ /g, '-')}`);
 }
-await w.back();
+await leave();
 await menuGone();
 
 // ---- Draw calls and frame rate on each tier, from the gangway.

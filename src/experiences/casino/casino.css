@@ -1831,3 +1831,31 @@ body[data-device='touch'] .lb-hint {
     margin-left: 0;
   }
 }
+
+/* Phones: the recent strip takes its own row above the buttons, the buttons
+   share the width (wrapping rather than squeezing their labels), and the row
+   stays pinned to the bottom of the panel while the board scrolls. */
+@media (max-width: 640px) {
+  .gp-panel[data-panel] .gp-actions {
+    position: sticky;
+    bottom: -10px;
+    z-index: 2;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 8px -12px -10px;
+    padding: 6px 12px 10px;
+    background: #13212b;
+  }
+  .gp-panel[data-panel] .gp-actions > :not(.btn) {
+    flex: 1 0 100%;
+    margin-right: 0;
+  }
+  .gp-panel[data-panel] .gp-actions .btn {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 44px;
+    padding: 4px 8px;
+    font-size: 0.88rem;
+    white-space: nowrap;
+  }
+}

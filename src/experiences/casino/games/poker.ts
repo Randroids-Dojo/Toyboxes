@@ -127,7 +127,8 @@ export class FiveCardCabin {
 
   framing(): Framing {
     const c = POKER_CABINETS[this.seat];
-    return frame(c.x + 0.4, 2.7, c.z - 3.4, c.x, 0.45, c.z, 50);
+    // Over your shoulder and above your cap, so your head never hides the screen or the deck.
+    return frame(c.x + 0.5, 2.6, c.z - 2.2, c.x, 0.8, c.z, 50);
   }
 
   actions(_p: PlayerState, act: (label: string, short: string, run: () => void) => SpaceAction): SpaceAction[] {
