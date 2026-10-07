@@ -104,6 +104,16 @@ export function registerParts(f: Figures): void {
   f.geo('catglasses', () => compound([[T(0.28, 0.06, 3), 0xe8574a, at(-0.36, 0.08, 0.98, 0, 0, Math.PI / 2 + 0.2)], [T(0.28, 0.06, 3), 0xe8574a, at(0.36, 0.08, 0.98, 0, 0, Math.PI / 2 - 0.2)], [B(0.16, 0.05, 0.05), 0xe8574a, at(0, 0.12, 1.0)]]));
   f.geo('monocle', () => compound([[T(0.28, 0.04, 14), C.gold, at(0.36, 0.08, 0.99)]]));
   f.geo('beard', () => S(0.9, 12, 8).scale(1, 1, 0.75).translate(0, -0.65, 0.35));
+  f.geo('peg', () => compound([[B(0.1, 0.42, 0.12), 0xffd45c, at(-0.07, -0.02, 1.12, 0.2, 0, 0)], [B(0.1, 0.42, 0.12), 0xffd45c, at(0.07, -0.02, 1.12, 0.2, 0, 0)], [T(0.06, 0.025, 8), 0xd8d8e0, at(0, 0.02, 1.1, 0, Math.PI / 2, 0)]]));
+  f.geo('parasol', () => {
+    const parts: [THREE.BufferGeometry, number, THREE.Matrix4?][] = [[Cy(0.04, 0.04, 2.4, 6), 0xfff7e6, at(0, 1.2, 0)]];
+    for (let i = 0; i < 12; i++) {
+      const seg = new THREE.ConeGeometry(1.7, 0.7, 3, 1, true, (i / 12) * Math.PI * 2, Math.PI / 6);
+      parts.push([seg, i % 2 ? 0xffffff : 0x4aa3df, at(0, 2.45, 0)]);
+    }
+    return compound(parts);
+  });
+  f.geo('whiff', () => compound([[S(1, 12, 8), 0xffffff, at(0, 0, 0)], [S(0.35, 8, 6), 0xffffff, at(-0.75, -0.6, 0)]]));
   // Body extras (unit torso space, height 1).
   f.geo('sash', () => T(0.5, 0.05, 18).rotateX(Math.PI / 2).rotateZ(0.7).translate(0, 0.55, 0));
   f.geo('apron', () => compound([[B(0.62, 0.62, 0.04), 0xffd45c, at(0, 0.36, 0.5)], [S(0.06, 6, 4), C.bean, at(-0.12, 0.42, 0.53)], [S(0.06, 6, 4), C.bean, at(0.14, 0.3, 0.53)], [S(0.06, 6, 4), C.bean, at(0.02, 0.18, 0.53)]]));
@@ -152,7 +162,7 @@ export function registerParts(f: Figures): void {
 // The cast
 
 export type Hat = 'tophat' | 'feathers' | 'flowerhat' | 'cap' | 'boater' | 'helmet' | 'beehive' | 'bun' | 'strawhat' | 'beanie' | 'wildhair' | 'bandcap' | 'hairshort' | 'hairbob' | 'sunhat';
-export type Extra = 'walrus' | 'glasses' | 'catglasses' | 'monocle' | 'beard' | 'sash' | 'apron' | 'pearls' | 'bowtie' | 'buttons' | 'stripes';
+export type Extra = 'walrus' | 'glasses' | 'catglasses' | 'monocle' | 'beard' | 'sash' | 'apron' | 'pearls' | 'bowtie' | 'buttons' | 'stripes' | 'peg';
 export type Held = 'teacup' | 'baton' | 'cushion' | 'flag' | 'whistle' | 'tuba' | 'trumpet' | 'clarinet' | 'drum' | 'stamp' | 'basket' | 'book' | null;
 
 export interface PersonSpec {
@@ -197,8 +207,8 @@ export const CAST: Record<string, PersonSpec> = {
   dozer: { id: 'dozer', name: 'Mr. Dozer', height: 1.95, body: 'torso-round', width: 0.95, coat: 0x6b7f6a, legs: 0x4a4a5a, shoes: 0x3b2b20, skin: 0xffd9b8, hat: 'hairshort', hatColor: 0xd8d8e0, extras: ['glasses'], held: null, voice: 115 },
 };
 
-const EXTRA_COLOR: Record<Extra, number> = { walrus: 0xffffff, glasses: 0xffffff, catglasses: 0xffffff, monocle: 0xffffff, beard: 0xe0782f, sash: C.tomato, apron: 0xffffff, pearls: 0xffffff, bowtie: 0xffffff, buttons: 0xffffff, stripes: 0xffffff };
-const FACE_EXTRAS = new Set<Extra>(['walrus', 'glasses', 'catglasses', 'monocle', 'beard']);
+const EXTRA_COLOR: Record<Extra, number> = { peg: 0xffffff, walrus: 0xffffff, glasses: 0xffffff, catglasses: 0xffffff, monocle: 0xffffff, beard: 0xe0782f, sash: C.tomato, apron: 0xffffff, pearls: 0xffffff, bowtie: 0xffffff, buttons: 0xffffff, stripes: 0xffffff };
+const FACE_EXTRAS = new Set<Extra>(['walrus', 'glasses', 'catglasses', 'monocle', 'beard', 'peg']);
 
 /** A random townsperson for crowds (picnickers, readers). */
 export function extra(id: string, r: () => number): PersonSpec {

@@ -36,6 +36,7 @@ import { Boards } from './boards';
 import { RocketRings } from './modes/rings';
 import { LibraryTrial } from './modes/library';
 import { BandBash } from './modes/band';
+import { PicnicPanic } from './modes/picnic';
 
 const DAY = {
   hemiSky: new THREE.Color(0xcfefff),
@@ -60,6 +61,7 @@ export const TRIALS: Partial<Record<TrialId, TrialFactory>> = {
   rings: (w, o) => new RocketRings(w, o),
   library: (w, o) => new LibraryTrial(w, o),
   band: (w, o) => new BandBash(w, o),
+  picnic: (w, o) => new PicnicPanic(w, o),
 };
 
 export class FartSimulator implements SpaceView {
@@ -211,6 +213,8 @@ export class FartSimulator implements SpaceView {
       },
     });
     this.mover.tapMode = this.save.tapMode ?? IS_TV;
+    // A gentle breeze across the fete carries clouds east.
+    this.clouds.wind = { x: 0.35, z: 0.1 };
     this.ph.beans(beanCount(this.save), TOTAL_BEANS);
     this.refreshHint();
     this.village.closedSign.visible = !trialOpen('library', beanCount(this.save));

@@ -161,6 +161,15 @@ export class Village3 {
     for (const b of this.town.people) if (b.spec.id.startsWith('picnic-') && Number(b.spec.id.slice(7)) >= this.picnicCount) b.mood = 'away';
   }
 
+  /** Free-play picnickers step aside while Picnic Panic runs. */
+  showPicnickers(on: boolean): void {
+    for (const b of this.town.people) {
+      if (!b.spec.id.startsWith('picnic-')) continue;
+      if (Number(b.spec.id.slice(7)) >= this.picnicCount) continue;
+      b.mood = on ? 'idle' : 'away';
+    }
+  }
+
   setPlayer(x: number, y: number, z: number): void {
     this.senses.player.x = x;
     this.senses.player.y = y;
