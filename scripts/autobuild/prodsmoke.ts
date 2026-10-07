@@ -27,6 +27,36 @@ type G = { toyboxes: { debug: Record<string, (...a: any[]) => any> } };
 const d = (f: string, ...a: unknown[]) => page.evaluate(([f, a]) => (window as unknown as G).toyboxes.debug[f as string](...(a as unknown[])), [f, a] as const);
 const state = () => d('state') as Promise<{ space: string }>;
 
+/**
+ * Back to the room through the pause menu. Worlds can open an intro card or
+ * fly the camera round on a first visit; Escape closes or skips those first,
+ * then opens the menu. A world may ask to confirm leaving.
+ */
+async function leave(name: string): Promise<void> {
+  const back = page.getByRole('button', { name: /^Back to .*'s room$/ });
+  const confirm = page.getByRole('button', { name: /^(Leave|Yes, leave)/ });
+  for (let i = 0; i < 12; i++) {
+    const s = (await state()) as { space: string; menu: boolean };
+    if (s.space === 'room') {
+      if (s.menu) await page.keyboard.press('Escape');
+      await page.waitForTimeout(400);
+      return;
+    }
+    if (await back.isVisible().catch(() => false)) {
+      await back.click();
+      await page.waitForTimeout(2800);
+    } else if (await confirm.first().isVisible().catch(() => false)) {
+      await confirm.first().click();
+      await page.waitForTimeout(2800);
+    } else {
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(900);
+    }
+  }
+  await page.waitForTimeout(2000);
+  if ((await state()).space !== 'room') throw new Error(`Could not leave ${name}`);
+}
+
 await page.goto(BASE);
 await page.waitForSelector('body.ready', { timeout: 30000 });
 await page.waitForTimeout(2000);
@@ -46,10 +76,7 @@ for (const roomId of rooms) {
     if ((await state()).space !== 'area') throw new Error(`${door.name} in ${roomId} did not open`);
     await page.screenshot({ path: `${out}/${roomId}-${door.name.replace(/\W+/g, '-')}.png` });
     console.log(`opened ${door.name} in ${roomId}`);
-    await page.keyboard.press('Escape');
-    await page.waitForTimeout(300);
-    await page.getByRole('button', { name: /^Back to .*'s room$/ }).click();
-    await page.waitForTimeout(2500);
+    await leave(door.name);
   }
 }
 await browser.close();
