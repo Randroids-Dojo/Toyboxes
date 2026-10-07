@@ -52,6 +52,7 @@ const FRAG = /* glsl */ `
 uniform vec3 uLight;
 uniform vec3 uShade;
 uniform float uGlow;
+uniform float uBubble;
 varying vec3 vN;
 varying vec3 vCol;
 varying float vA;
@@ -69,13 +70,32 @@ void main() {
   vec3 n = normalize(vN);
   float d = dot(n, normalize(uLight));
   float band = d > 0.35 ? 1.0 : d > -0.15 ? 0.78 : 0.58;
+  band = mix(band, 0.92 + 0.08 * band, uBubble);
   vec3 col = vCol * band + uShade * (1.0 - band) * 0.35;
   float rim = pow(1.0 - abs(dot(normalize(vView), n)), 2.5);
-  col += vec3(1.0, 0.98, 0.9) * rim * 0.35;
+  col += vec3(1.0, 0.98, 0.9) * rim * (0.35 + uBubble * 0.35);
+  // Bubbles get a little window highlight.
+  float spec = pow(max(dot(n, normalize(vec3(-0.4, 0.7, 0.5))), 0.0), 40.0);
+  col += vec3(1.0) * spec * uBubble * 0.6;
+  col = mix(col, col * 0.88, uBubble);
   col += vCol * uGlow;
   gl_FragColor = vec4(col, 1.0);
   #include <colorspace_fragment>
 }`;
+
+/** A puffy heart about a unit across. */
+function heartGeometry(detail: number): THREE.BufferGeometry {
+  const s = new THREE.Shape();
+  s.moveTo(0, -0.9);
+  s.bezierCurveTo(-0.2, -0.65, -1, -0.3, -1, 0.25);
+  s.bezierCurveTo(-1, 0.75, -0.45, 0.95, 0, 0.55);
+  s.bezierCurveTo(0.45, 0.95, 1, 0.75, 1, 0.25);
+  s.bezierCurveTo(1, -0.3, 0.2, -0.65, 0, -0.9);
+  const g = new THREE.ExtrudeGeometry(s, { depth: 0.5, bevelEnabled: true, bevelThickness: 0.25, bevelSize: 0.18, bevelSegments: detail >= 1 ? 3 : 1, curveSegments: detail >= 1 ? 10 : 6 });
+  g.center();
+  g.computeVertexNormals();
+  return g;
+}
 
 const RAINBOW = [0xff6f6f, 0xffb35c, 0xffe45c, 0x7fe07f, 0x6fc4ff, 0xb48cff];
 
@@ -86,10 +106,57 @@ export class CloudFx {
   private bursts: Burst[] = [];
   private cap = 400;
   private max: number;
-  style: CloudStyle = 'classic';
+  private style_: CloudStyle = 'classic';
+
+  get style(): CloudStyle {
+    return this.style_;
+  }
+
+  /** Changing style can change the puff shape too (hearts). */
+  set style(s: CloudStyle) {
+    if (s === this.style_) return;
+    const wasHeart = this.style_ === 'hearts';
+    this.style_ = s;
+    this.mat.uniforms.uBubble.value = s === 'bubbles' ? 1 : 0;
+    if (wasHeart || s === 'hearts') this.rebuild();
+  }
   private tmp = new THREE.Matrix4();
   private col = new THREE.Color();
   private q = new THREE.Quaternion();
+  private camQ = new THREE.Quaternion();
+
+  private eye = new THREE.Vector3();
+  private focus = new THREE.Vector3();
+  private seeThrough = false;
+
+  /** Puffs between the camera and the player turn see-through so you never lose yourself in a cloud. */
+  setView(eye: THREE.Vector3, focus: THREE.Vector3 | null): void {
+    this.eye.copy(eye);
+    if (focus) this.focus.copy(focus);
+    this.seeThrough = !!focus;
+  }
+
+  private occludes(x: number, y: number, z: number, r: number): boolean {
+    if (!this.seeThrough) return false;
+    const ex = this.eye.x;
+    const ey = this.eye.y;
+    const ez = this.eye.z;
+    const dx = this.focus.x - ex;
+    const dy = this.focus.y - ey;
+    const dz = this.focus.z - ez;
+    const l2 = dx * dx + dy * dy + dz * dz || 1;
+    const t = ((x - ex) * dx + (y - ey) * dy + (z - ez) * dz) / l2;
+    if (t <= 0 || t >= 1.05) return false;
+    const px = ex + dx * t - x;
+    const py = ey + dy * t - y;
+    const pz = ez + dz * t - z;
+    return px * px + py * py + pz * pz < (r + 0.35) * (r + 0.35);
+  }
+
+  /** Hearts turn to face the camera. */
+  faceCamera(q: THREE.Quaternion): void {
+    this.camQ.copy(q);
+  }
   private v = new THREE.Vector3();
   private s = new THREE.Vector3();
 
@@ -100,7 +167,7 @@ export class CloudFx {
     this.alpha.setUsage(THREE.DynamicDrawUsage);
     geo.setAttribute('aAlpha', this.alpha);
     this.mat = new THREE.ShaderMaterial({
-      uniforms: { uTime: { value: 0 }, uLight: { value: new THREE.Vector3(0.4, 0.8, 0.45) }, uShade: { value: new THREE.Color(0x6e5a9e) }, uGlow: { value: 0 } },
+      uniforms: { uTime: { value: 0 }, uLight: { value: new THREE.Vector3(0.4, 0.8, 0.45) }, uShade: { value: new THREE.Color(0x6e5a9e) }, uGlow: { value: 0 }, uBubble: { value: 0 } },
       vertexShader: VERT,
       fragmentShader: FRAG,
     });
@@ -120,12 +187,16 @@ export class CloudFx {
     const detail = t === 'high' ? 2 : t === 'medium' ? 1 : 0;
     if (this.detail !== detail) {
       this.detail = detail;
-      const old = this.mesh.geometry;
-      const geo = new THREE.IcosahedronGeometry(1, detail);
-      geo.setAttribute('aAlpha', this.alpha);
-      this.mesh.geometry = geo;
-      old.dispose();
+      this.rebuild();
     }
+  }
+
+  private rebuild(): void {
+    const old = this.mesh.geometry;
+    const geo = this.style_ === 'hearts' ? heartGeometry(this.detail) : new THREE.IcosahedronGeometry(1, this.detail);
+    geo.setAttribute('aAlpha', this.alpha);
+    this.mesh.geometry = geo;
+    old.dispose();
   }
   private detail = 2;
 
@@ -209,11 +280,11 @@ export class CloudFx {
         const sc = c.r * (i === 0 ? 0.75 : 0.5 + ((c.seed * (i + 3)) % 7) * 0.03) * (0.9 + Math.sin(time * 1.3 + i + c.seed) * 0.06) * (0.15 + 0.85 * shrink * (1 - (1 - shrink) * (i % 3) * 0.2));
         this.v.set(c.x + ox, c.y + oy, c.z + oz);
         this.s.set(sc, sc * 0.85, sc);
-        this.tmp.compose(this.v, this.q.identity(), this.s);
+        this.tmp.compose(this.v, this.style_ === 'hearts' ? this.camQ : this.q.identity(), this.s);
         this.mesh.setMatrixAt(k, this.tmp);
         this.col.setHex(this.colorFor(c.gas, i + Math.floor(c.seed)));
         this.mesh.setColorAt(k, this.col);
-        this.alpha.array[k] = fade;
+        this.alpha.array[k] = this.occludes(this.v.x, this.v.y, this.v.z, sc) ? Math.min(fade, 0.3) : fade;
         k++;
       }
     }
@@ -234,10 +305,11 @@ export class CloudFx {
         const sc = (b.s0 + (b.s1 - b.s0) * (1 - (1 - t) * (1 - t))) * end;
         this.v.set(b.x, b.y, b.z);
         this.s.setScalar(sc);
-        this.tmp.compose(this.v, this.q.identity(), this.s);
+        this.tmp.compose(this.v, this.style_ === 'hearts' ? this.camQ : this.q.identity(), this.s);
         this.mesh.setMatrixAt(k, this.tmp);
         this.mesh.setColorAt(k, b.color);
-        this.alpha.array[k] = t < 0.9 ? 1 : 1 - (t - 0.9) / 0.1;
+        const a = t < 0.9 ? 1 : 1 - (t - 0.9) / 0.1;
+        this.alpha.array[k] = this.occludes(b.x, b.y, b.z, sc) ? Math.min(a, 0.35) : a;
         k++;
       }
       return true;

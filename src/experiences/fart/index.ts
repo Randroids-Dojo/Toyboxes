@@ -103,6 +103,10 @@ export class FartSimulator implements SpaceView {
   private night = 0;
   private crumbs: { x: number; y: number; z: number; taken: number }[] = CRUMBS.map(([x, y, z]) => ({ x, y, z, taken: -1 }));
   private crumbMesh: THREE.InstancedMesh;
+  private chargeRing: THREE.Mesh;
+  private greeted = false;
+  private lastTins = 0;
+  private lowFlashT = 0;
   private crumbChain = 0;
   private crumbChainT = 0;
   private lastY = 0;
@@ -165,12 +169,37 @@ export class FartSimulator implements SpaceView {
     this.crumbMesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.22, 1), new THREE.MeshToonMaterial({ color: 0xd4f58a, emissive: 0x5e9e2e, emissiveIntensity: 0.35 }), this.crumbs.length);
     this.crumbMesh.frustumCulled = false;
     this.scene.add(this.crumbMesh);
+    // The charge ring at your feet while you hold for a big one.
+    this.chargeRing = new THREE.Mesh(
+      new THREE.RingGeometry(0.55, 0.78, 40, 1),
+      new THREE.ShaderMaterial({
+        transparent: true,
+        depthWrite: false,
+        uniforms: { uFill: { value: 0 }, uTime: { value: 0 } },
+        vertexShader: 'varying vec2 vP; void main(){ vP = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+        fragmentShader: `uniform float uFill; uniform float uTime; varying vec2 vP;
+          void main(){
+            float a = fract(atan(vP.x, vP.y) / 6.28318 + 1.0);
+            vec3 col = uFill >= 1.0 ? vec3(1.0, 0.82, 0.29) * (1.1 + 0.3 * sin(uTime * 18.0)) : vec3(0.56, 0.82, 0.31);
+            float on = a <= uFill ? 1.0 : 0.0;
+            gl_FragColor = vec4(mix(vec3(1.0, 0.97, 0.9), col, on), on > 0.5 ? 0.95 : 0.3);
+          }`,
+      }),
+    );
+    this.chargeRing.rotation.x = -Math.PI / 2;
+    this.chargeRing.renderOrder = 4;
+    this.chargeRing.visible = false;
+    this.scene.add(this.chargeRing);
 
     this.words = new Words(ctx.ui.hud);
     this.vil = new Village3(this.figures, this.words, (x, z) => this.clouds.stinkAt(x, 1.5, z), (x, z) => this.clouds.strongestAt(x, 1.5, z), this.tier);
     this.vil.onEvent = (e) => this.onBrain(e);
     this.props = new Props(this.figures, {
-      tins: (down) => this.mis({ kind: 'tins', down }, { x: 4.6, y: 1.2, z: 21.2 }),
+      tins: (down) => {
+        if (down >= 3 && down > this.lastTins) this.words.word(`${down} tins!`, { x: 4.6, y: 1.8, z: 21.2 }, { color: '#e8574a', size: 0.6 + Math.min(0.8, down * 0.05) });
+        this.lastTins = down;
+        this.mis({ kind: 'tins', down }, { x: 4.6, y: 1.2, z: 21.2 });
+      },
       gnomes: (down) => {
         if (down > 0) this.words.word(`${down}/8`, this.headPoint(), { color: '#ff8f6b', size: 0.7 });
         this.mis({ kind: 'gnomes', down });
@@ -198,7 +227,12 @@ export class FartSimulator implements SpaceView {
     this.post = new PostFX(this.scene, { bloom: { strength: 0.35, radius: 0.5, threshold: 0.86 }, vignette: 0.28, saturation: 1.08, contrast: 1.04, lift: 0.02 });
 
     this.mover = new Mover(ctx, {
-      onToot: (e, kind) => this.onToot(e, kind),
+      onToot: (e, kind) => {
+        if (kind === 'rocket') this.punch(8, 0.35);
+        else if (kind === 'boost') this.punch(3, 0.22);
+        else if (kind === 'scoot') this.punch(2, 0.2);
+        this.onToot(e, kind);
+      },
       onEmpty: () => this.onEmpty(),
       onLand: () => {},
       voice: () => this.voice,
@@ -542,7 +576,31 @@ export class FartSimulator implements SpaceView {
   cameraShot(dt: number): CameraShot | null {
     if (this.intro && !this.intro.done) return this.introShot(dt);
     if (this.cere) return this.ceremonyShot(dt);
-    return this.trial?.cameraShot?.(dt) ?? null;
+    const t = this.trial?.cameraShot?.(dt) ?? null;
+    if (t) return t;
+    return this.punchShot(dt);
+  }
+
+  /** A quick widening of the view on launches (off with Reduce motion). */
+  punch(degrees: number, seconds = 0.3): void {
+    if (this.ctx.reduceMotion()) return;
+    this.fovKick = { deg: Math.max(this.fovKick?.deg ?? 0, degrees), t: 0, dur: seconds };
+  }
+  private fovKick: { deg: number; t: number; dur: number } | null = null;
+
+  private punchShot(dt: number): CameraShot | null {
+    const k = this.fovKick;
+    const p = this.player;
+    if (!k || !p) return null;
+    k.t += dt;
+    if (k.t >= k.dur) {
+      this.fovKick = null;
+      return null;
+    }
+    const e = Math.sin((k.t / k.dur) * Math.PI);
+    const b = 0.25;
+    const base = innerWidth < innerHeight ? 68 : 55;
+    return { position: this.ctx.camera.position.clone(), target: new THREE.Vector3(p.x, p.y + 1.45, p.z), fov: base + (k.deg * e) / b, blend: b };
   }
 
   extraColliders(): Collider[] {
@@ -780,6 +838,11 @@ export class FartSimulator implements SpaceView {
     this.time += h;
     this.vil.setPlayer(p.x, p.y, p.z);
     this.vil.step(h);
+    // Gran calls you over the first time you come up the lane hungry.
+    if (!this.greeted && !this.trial && !(this.intro && !this.intro.done) && !this.mover.tank.gas && Math.hypot(p.x - 4.6, p.z - 18.5) < 9) {
+      this.greeted = true;
+      this.words.bubble('Free beans, dearie!', () => this.vil.head('gran'), { life: 3, tone: 'shout' });
+    }
     this.mover.enabled = this.tooting();
     if (this.tootOnInteract && this.mover.enabled && this.ctx.input.take('kick')) this.press('kick');
     this.mover.step(h, p);
@@ -897,6 +960,8 @@ export class FartSimulator implements SpaceView {
     this.props.update(t);
     if (!this.trial) this.musicLevel(focus);
     this.trial?.update(dt, t);
+    this.cloudFx.faceCamera(this.ctx.camera.quaternion);
+    this.cloudFx.setView(this.ctx.camera.position, this.player ? new THREE.Vector3(this.player.x, this.player.y + 0.9, this.player.z) : null);
     this.cloudFx.update(dt, this.clouds.list, t);
     this.dust.update(dt);
     this.sparks.update(dt);
@@ -905,6 +970,27 @@ export class FartSimulator implements SpaceView {
     this.words.update(dt, this.ctx.camera);
     const tk = this.mover.tank;
     this.ph.gauge(tk.gas, tk.amount, { cost: this.mover.previewCost });
+    // Charge ring under your feet.
+    const p = this.player;
+    const charging = this.mover.btn.charging && !!p;
+    this.chargeRing.visible = charging;
+    if (charging && p) {
+      this.chargeRing.position.set(p.x, p.y + 0.06, p.z);
+      const mat = this.chargeRing.material as THREE.ShaderMaterial;
+      mat.uniforms.uFill.value = this.mover.btn.charge;
+      mat.uniforms.uTime.value = t;
+    }
+    // Running low while hovering: the gauge flashes.
+    this.lowFlashT -= dt;
+    if (this.mover.hovering && tk.amount < 15 && this.lowFlashT <= 0) {
+      this.lowFlashT = 0.9;
+      this.ph.flash();
+    }
+    // Sparkles round glitter and golden clouds.
+    if ((this.cloudFx.style === 'glitter' || this.cloudFx.style === 'golden') && this.clouds.list.length && Math.random() < dt * 10) {
+      const c = this.clouds.list[Math.floor(Math.random() * this.clouds.list.length)];
+      this.sparks.burst({ at: { x: c.x, y: c.y, z: c.z }, count: 2, radius: c.r, speed: [0.2, 0.8], color: this.cloudFx.style === 'golden' ? [0xffd24a, 0xfff3b0] : [0xffffff, 0xd9f4ff], size: [0.06, 0.12], life: [0.4, 0.8], gravity: -0.3 });
+    }
   }
 
   /** The band is heard clearly near the bandstand and muffled across town. */
