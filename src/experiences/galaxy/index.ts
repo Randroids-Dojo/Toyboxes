@@ -152,6 +152,8 @@ export class Galaxy implements SpaceView {
   private cine: Cine | null = null;
   private stars: FlyingStar[] = [];
   private lastTop = 0;
+  /** The round is carrying the player (comet ride, finale): no star net. */
+  private roundCarried = false;
   private lastStone = -1;
   private lastGround = new THREE.Vector3();
   private bubble: THREE.Mesh;
@@ -753,8 +755,13 @@ export class Galaxy implements SpaceView {
 
   carry(h: number, p: PlayerState, move: MoveInput): Carry | null {
     const c = this.trav.carry(h, p, move);
-    if (c) return c;
-    return this.round?.carry?.(h, p, move) ?? null;
+    if (c) {
+      this.roundCarried = false;
+      return c;
+    }
+    const r = this.round?.carry?.(h, p, move) ?? null;
+    this.roundCarried = !!r;
+    return r;
   }
 
   extraColliders(): Collider[] {
@@ -770,7 +777,8 @@ export class Galaxy implements SpaceView {
     this.cinder.step(dt);
 
     // Landing tops and the star net.
-    if (p.grounded && !this.trav.busy) {
+    const carried = this.trav.busy || this.roundCarried;
+    if (p.grounded && !carried) {
       this.lastTop = p.y;
       this.lastGround.set(p.x, p.y, p.z);
       if (zone === 'stair') {
@@ -778,8 +786,10 @@ export class Galaxy implements SpaceView {
         if (i >= 0) this.lastStone = i;
       }
     }
-    if (!this.trav.busy && !this.cine && netTriggered(p.y, p.grounded, this.lastTop, Math.hypot(p.x, p.z) < HUB_R + 1)) this.net(this.checkpoint());
-    if (!this.trav.busy && !this.cine && p.grounded) this.autoRides(p);
+    if (!carried && !this.cine && netTriggered(p.y, p.grounded, this.lastTop, Math.hypot(p.x, p.z) < HUB_R + 1)) this.net(this.checkpoint());
+    if (!carried && !this.cine && p.grounded) this.autoRides(p);
+    // A ride just ended on a top: that is where you stand now.
+    if (this.roundCarried) this.lastTop = p.y;
 
     this.orbs.step(dt, p, this.hole);
     this.round?.step(dt, p);
@@ -1098,7 +1108,7 @@ export class Galaxy implements SpaceView {
       pips: { hub: st.wake + st.frenzy, ring: st.ring, storm: st.storm, comet: st.comet },
     });
     this.cinder.paintTiles(this.time, fed >= UNLOCK.storm ? 1 : 0);
-    this.dock.update(dt, this.time, this.round?.id === 'comet');
+    this.dock.update(dt, this.time, this.round?.id === 'comet', cam);
     this.updateCometArrival(dt);
     for (const pad of [this.ring.start, this.ring.back, this.cinder.start, this.cinder.back, this.dock.back]) {
       pad.holo.rotation.y += dt * 0.8;
@@ -1106,6 +1116,12 @@ export class Galaxy implements SpaceView {
     }
     for (const pad of [this.hub.pads.ring, this.hub.pads.storm, this.hub.pads.comet, this.ring.start, this.ring.back, this.cinder.start, this.cinder.back, this.dock.back]) padNear(pad, cam.position, dt);
     this.hub.fade.update(cam.position, dt);
+    // Rounds keep their island clear of signs and holograms.
+    const quiet = !!this.round?.boarded;
+    for (const pad of [this.ring.start, this.ring.back, this.cinder.start, this.cinder.back, this.dock.back]) {
+      if (quiet) pad.holo.visible = pad.sign.sprite.visible = false;
+      pad.beacon.mesh.visible = !quiet;
+    }
     this.round?.update(dt, this.time);
 
     // Flying stars.

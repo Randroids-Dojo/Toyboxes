@@ -983,7 +983,9 @@ export class Dock {
     const nucleus = new THREE.Mesh(nucleusGeo, new THREE.MeshStandardMaterial({ color: '#eaf8ff', emissive: new THREE.Color('#9fdcff'), emissiveIntensity: 0.9, roughness: 0.3, flatShading: true }));
     nucleus.name = 'nucleus';
     this.comet.add(nucleus);
-    this.comet.add(glowSprite('#bfe8ff', 5, 0.9));
+    const coma = glowSprite('#bfe8ff', 3.6, 0.7);
+    coma.name = 'coma';
+    this.comet.add(coma);
     const colors = ['#8a6bd1', '#3fb68b', '#4aa3df', '#f4b740', '#e8574a', '#fffaf0'];
     colors.forEach((c, i) => {
       const t = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.ShaderMaterial({ vertexShader: S.QUAD_VERT, fragmentShader: S.STREAK_FRAG.replace('varying vec3 vColor;', 'uniform vec3 vColor;'), uniforms: { vColor: { value: new THREE.Color(c) } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
@@ -1008,10 +1010,16 @@ export class Dock {
     scene.add(g);
   }
 
-  update(dt: number, time: number, riding: boolean): void {
+  update(dt: number, time: number, riding: boolean, camera: THREE.Camera): void {
     const n = this.comet.getObjectByName('nucleus')!;
     n.rotation.y += dt * 0.6;
     n.rotation.x += dt * 0.25;
+    // Riding: a small board of ice under your feet; the long tail becomes ribbons.
+    n.scale.setScalar(riding ? 0.62 : 1);
+    const coma = this.comet.getObjectByName('coma')!;
+    coma.quaternion.copy(camera.quaternion);
+    coma.scale.setScalar(riding ? 1.8 : 3.6);
+    for (const t of this.tail) t.visible = !riding;
     if (!riding) {
       this.comet.position.set(this.mooring.x, this.mooring.y + Math.sin(time * 1.1) * 0.25, this.mooring.z);
       this.comet.rotation.set(0, 0, 0);

@@ -318,7 +318,7 @@ export function stormSchedule(seed = 7): { meteors: Meteor[]; shards: Shard[] } 
       b += 4;
     } else {
       const p = spot(2.4, CINDER.r - 1.5);
-      meteors.push({ t, dx: p.x, dz: p.z, r: t < 15 ? 1.6 : 1.8, aim: k % 3 === 1 });
+      meteors.push({ t, dx: p.x, dz: p.z, r: t < 15 ? 1.5 : 1.75, aim: k % 4 === 1 });
       // Eases off for the first 15 s, then climbs to two a second.
       b += t < 15 ? 3 : t < 30 ? 2 : t < 40 ? 1.5 : 1;
     }
@@ -465,15 +465,20 @@ export function cometMotes(): Mote[] {
       const k = j / (count - 1);
       let ox = ax;
       let oy = ay;
-      if (shape === 1) ox = Math.sin(k * Math.PI * 2) * 2.6;
-      else if (shape === 2) {
-        ox = Math.cos(k * Math.PI * 2) * 2.4;
-        oy = Math.sin(k * Math.PI * 2) * 2.4;
-      } else if (shape === 3) {
-        ox = -2.6 + k * 5.2;
+      if (shape === 1) {
+        // A wave across the path.
+        ox = Math.sin(k * Math.PI * 2) * 1.8;
         oy = ay * 0.5;
+      } else if (shape === 2) {
+        // A ring to fly straight through the middle of.
+        ox = ax * 0.5 + Math.cos(k * Math.PI * 2) * 1.2;
+        oy = ay * 0.5 + Math.sin(k * Math.PI * 2) * 1.2;
+      } else if (shape === 3) {
+        // A diagonal sweep.
+        ox = -2 + k * 4;
+        oy = ay * (1 - 2 * k);
       }
-      out.push({ u: u0 + j * 0.0016, ox, oy, ribbon: i });
+      out.push({ u: u0 + j * 0.0025, ox, oy, ribbon: i });
     }
   }
   // Keep every mote inside the tube where it hangs.

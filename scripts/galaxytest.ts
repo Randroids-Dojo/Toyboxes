@@ -286,7 +286,19 @@ if (stages.has('storm')) {
   await shot('rock-rain');
   let warnShot = false;
   await steer(
-    async () => (await exp()).spark,
+    async () => {
+      // Step out of any ring about to be hit; otherwise go for the shard Spark points at.
+      const x = await exp();
+      const s = await st();
+      const danger = (x.round?.warnings ?? []).find((m: any) => m.left < 1.0 && Math.hypot(s.x - m.x, s.z - m.z) < m.r + 0.6);
+      if (danger) {
+        const dx = s.x - danger.x;
+        const dz = s.z - danger.z;
+        const l = Math.hypot(dx, dz) || 1;
+        return { x: s.x + (dx / l) * 3, z: s.z + (dz / l) * 3 };
+      }
+      return x.spark;
+    },
     async () => {
       const r = (await exp()).round;
       if (r?.meteors > 1 && !warnShot) {

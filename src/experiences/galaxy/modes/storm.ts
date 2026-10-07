@@ -225,8 +225,8 @@ export class Storm implements Round {
     const fell = g.cinder.impact(lm.x, lm.z, lm.m.r);
     if (fell.length) gsfx.tileDrop();
     // Hit: knocked over and a shield gone (once per meteor, with a short grace).
-    if (d < lm.m.r + 0.3 && Math.abs(p.y - CINDER.top) < 2.2 && this.hitCooldown <= 0 && !g.trav.busy) {
-      this.hitCooldown = 1;
+    if (d < lm.m.r + 0.1 && Math.abs(p.y - CINDER.top) < 2.2 && this.hitCooldown <= 0 && !g.trav.busy) {
+      this.hitCooldown = 1.6;
       this.loseShield('hit');
       const dx = d > 0.01 ? (p.x - lm.x) / d : 1;
       const dz = d > 0.01 ? (p.z - lm.z) / d : 0;
@@ -393,6 +393,6 @@ export class Storm implements Round {
   }
 
   debug() {
-    return { state: this.state, t: this.t, score: this.score, shields: this.shields, meteors: this.meteors.length, shards: this.shards.map((s) => ({ x: s.x, z: s.z, big: s.s.big })) };
+    return { state: this.state, t: this.t, score: this.score, shields: this.shields, meteors: this.meteors.length, warnings: this.meteors.filter((m) => !m.landed).map((m) => ({ x: m.x, z: m.z, r: m.m.r, left: m.m.t - this.t })), shards: this.shards.map((s) => ({ x: s.x, z: s.z, big: s.s.big })) };
   }
 }

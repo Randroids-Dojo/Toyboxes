@@ -260,7 +260,7 @@ export class Comet implements Round {
     this.t += dt;
     this.g.hud.set('spin', this.cooldown > 0 ? `${Math.ceil(this.cooldown)}` : 'Ready', { bump: false, tone: this.cooldown > 0 ? null : 'good' });
     this.g.hud.bar('ride', this.u, '#bfe8ff');
-    const reach = this.magnet > 0 ? 3.2 : 1.35;
+    const reach = this.magnet > 0 ? 3.4 : 1.6;
     const rider = this.pos.clone().addScaledVector(UP, 0.8);
     for (let i = 0; i < this.motes.length; i++) {
       const m = this.motes[i];
@@ -399,7 +399,8 @@ export class Comet implements Round {
 
   debug() {
     // The next stardust ahead, for scripted steering.
-    const next = this.motes.find((m) => !m.taken && m.u > this.u + 0.001);
-    return { state: this.state, t: this.t, u: this.u, score: this.score, ox: this.ox, oy: this.oy, ribbons: this.ribbonsDone, cooldown: this.cooldown, next: next ? { u: next.u, ox: next.ox, oy: next.oy } : null };
+    const ahead = this.motes.filter((m) => !m.taken && m.u > this.u + 0.001).slice(0, 4);
+    const next = ahead.length ? { u: ahead[0].u, ox: ahead.reduce((a, m) => a + m.ox, 0) / ahead.length, oy: ahead.reduce((a, m) => a + m.oy, 0) / ahead.length } : null;
+    return { state: this.state, t: this.t, u: this.u, score: this.score, ox: this.ox, oy: this.oy, ribbons: this.ribbonsDone, cooldown: this.cooldown, next };
   }
 }
