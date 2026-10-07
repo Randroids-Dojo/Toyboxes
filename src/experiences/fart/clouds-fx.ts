@@ -63,7 +63,9 @@ float bayer(vec2 p) {
   return fract(sin(i * 12.9898 + q.y * 3.1) * 43758.5453);
 }
 void main() {
-  if (vA < bayer(gl_FragCoord.xy) * 0.98 + 0.01) discard;
+  // Fade puffs right in front of the camera so they never fill the view.
+  float near = smoothstep(1.4, 3.4, length(vView));
+  if (vA * near < bayer(gl_FragCoord.xy) * 0.98 + 0.01) discard;
   vec3 n = normalize(vN);
   float d = dot(n, normalize(uLight));
   float band = d > 0.35 ? 1.0 : d > -0.15 ? 0.78 : 0.58;

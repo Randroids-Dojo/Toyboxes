@@ -210,10 +210,10 @@
 
 .pf-note {
   position: absolute;
-  top: calc(110px + var(--safe-t));
-  left: 50%;
-  width: min(360px, calc(100vw - 32px));
-  transform: translate(-50%, -30px) rotate(-2deg);
+  top: calc(112px + var(--safe-t));
+  left: calc(14px + var(--safe-l));
+  width: min(320px, calc(100vw - 32px));
+  transform: translate(-30px, 0) rotate(-2deg);
   opacity: 0;
   padding: 14px 18px 12px 44px;
   background:
@@ -236,7 +236,7 @@
 }
 
 .pf-note.in {
-  transform: translate(-50%, 0) rotate(-2deg);
+  transform: translate(0, 0) rotate(-2deg);
   opacity: 1;
 }
 
@@ -281,6 +281,25 @@
 
 .pf-note.in .tick {
   transform: scale(1);
+}
+
+/* A golden bean flying to the jar. */
+.pf-flybean {
+  position: absolute;
+  width: 26px;
+  height: 18px;
+  margin: -9px 0 0 -13px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff3b0, #ffd24a 55%, #d9a03f);
+  border: 2.5px solid var(--pf-ink);
+  rotate: -25deg;
+  transition: left 0.85s cubic-bezier(0.5, -0.4, 0.6, 1), top 0.85s cubic-bezier(0.2, 0.8, 0.4, 1), scale 0.85s;
+  scale: 1.6;
+  box-shadow: 0 0 18px rgba(255, 210, 74, 0.9);
+}
+
+.pf-flybean.go {
+  scale: 0.8;
 }
 
 /* ---- comic words and bubbles */
@@ -603,6 +622,35 @@
   border-radius: 12px;
   background: #fffdf5;
   font-weight: 650;
+}
+
+.pf-list li:focus-visible,
+.pf-list li:focus {
+  outline: 3px solid #e8574a;
+  outline-offset: 1px;
+}
+
+.pf-beans {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.pf-beans i {
+  width: 20px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid #2b1d3a;
+  background: #efe6d4;
+  rotate: -20deg;
+}
+
+.pf-beans i.on {
+  background: radial-gradient(circle at 35% 30%, #fff3b0, #ffd24a 55%, #d9a03f);
+}
+
+.pf-card h3 {
+  margin: 12px 0 6px;
+  font: 1.1rem var(--display);
 }
 
 .pf-list li.done {

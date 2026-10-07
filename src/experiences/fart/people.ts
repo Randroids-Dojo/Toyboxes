@@ -421,11 +421,9 @@ export class Person {
     f.set(this.ids.earL, m2);
     m2.multiplyMatrices(HEAD, trs(m1, 0.98, 0, 0, 0, 0, -0.1, 0.32 * es));
     f.set(this.ids.earR, m2);
-    if (this.ids.hat !== undefined) {
-      f.set(this.ids.hat, HEAD);
-      this.hatPos.setFromMatrixPosition(HEAD);
-      this.hatPos.y += hr * 1.2;
-    }
+    if (this.ids.hat !== undefined) f.set(this.ids.hat, HEAD);
+    this.hatPos.setFromMatrixPosition(HEAD);
+    this.hatPos.y += hr * 1.2;
     for (const [e, id] of this.extraIds) if (FACE_EXTRAS.has(e)) f.set(id, HEAD);
     f.setBlob(this.blob, p.x, 0, p.z, spec.height * 0.55 * Math.max(0.4, 1 - p.y * 0.15));
   }

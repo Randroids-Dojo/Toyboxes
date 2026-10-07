@@ -112,6 +112,24 @@ export class PuffHud {
     this.noteTimer = 2.6;
   }
 
+  /** A golden bean flies from a screen point into the jar. */
+  flyBean(sx: number, sy: number, done: () => void): void {
+    const el = h('div', { class: 'pf-flybean' });
+    el.style.left = `${sx}px`;
+    el.style.top = `${sy}px`;
+    this.root.appendChild(el);
+    const jr = this.jar.getBoundingClientRect();
+    requestAnimationFrame(() => {
+      el.classList.add('go');
+      el.style.left = `${jr.left + 18}px`;
+      el.style.top = `${jr.top + 18}px`;
+    });
+    setTimeout(() => {
+      el.remove();
+      done();
+    }, 900);
+  }
+
   trial(on: boolean): void {
     this.root.classList.toggle('trial', on);
   }

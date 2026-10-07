@@ -242,11 +242,13 @@ export class Town {
     }
   }
 
-  /** Something naughty near the constable. */
+  /** Something naughty near the constable (one per toot, however many people jumped). */
   private incident(b: Brain): void {
     const c = this.get('bobbins');
     if (!c || this.chase.on) return;
     if (Math.hypot(c.x - b.x, c.z - b.z) > 16 && b !== c) return;
+    const last = this.chase.incidents[this.chase.incidents.length - 1];
+    if (last !== undefined && this.time - last < 1.5) return;
     this.chase.incidents = this.chase.incidents.filter((t) => this.time - t < 60);
     this.chase.incidents.push(this.time);
     if (this.chase.incidents.length >= 3) this.startChase(c);
