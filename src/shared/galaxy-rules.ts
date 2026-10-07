@@ -169,7 +169,7 @@ export const TEASER_AT = 9;
 
 /** Star thresholds per challenge (three stars), and the nova medal after the bloom. */
 export const THRESHOLDS: Record<Exclude<Challenge, 'wake'>, { better: 'higher' | 'lower'; stars: [number, number, number]; nova: number }> = {
-  frenzy: { better: 'higher', stars: [10, 20, 30], nova: 45 },
+  frenzy: { better: 'higher', stars: [20, 40, 65], nova: 90 },
   ring: { better: 'lower', stars: [10 * 60_000, 62_000, 54_000], nova: 49_000 },
   storm: { better: 'higher', stars: [10, 20, 30], nova: 40 },
   comet: { better: 'higher', stars: [120, 210, 270], nova: 300 },

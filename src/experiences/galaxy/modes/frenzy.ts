@@ -5,7 +5,7 @@
 
 import * as THREE from 'three';
 import { api } from '../../../net/api';
-import { FRENZY_SECONDS, HUB, ORB_POINTS, frenzySchedule, novaFor, starsFor, type FrenzyOrb } from '../../../shared/galaxy-rules';
+import { FRENZY_SECONDS, HUB, ORB_POINTS, THRESHOLDS, frenzySchedule, novaFor, starsFor, type FrenzyOrb } from '../../../shared/galaxy-rules';
 import type { PlayerState } from '../../../world/space';
 import { gsfx, FRENZY_SONG } from '../audio';
 import { shortRound, type Galaxy } from '../index';
@@ -219,14 +219,14 @@ export class Frenzy implements Round {
     if (isBest && score > 0) badges.push('New best!');
     if (g.save.data.bloomed && novaFor('frenzy', score)) badges.push('Nova!');
     const choice = await g.hud.results({
-      title: score >= 30 ? 'What a feast' : score >= 10 ? 'Well fed' : 'Still hungry',
+      title: stars >= 3 ? 'What a feast' : stars >= 1 ? 'Well fed' : 'Still hungry',
       subtitle: `${this.fedOrbs} orbs, ${score} points`,
       stars,
       badges,
       rows: [
         { label: 'Points', value: String(score), best: isBest },
         { label: 'Your best', value: String(Math.max(score, prevBest ?? 0)) },
-        { label: 'Next star', value: stars >= 3 ? 'All three!' : `${[10, 20, 30][stars]} points` },
+        { label: 'Next star', value: stars >= 3 ? 'All three!' : `${THRESHOLDS.frenzy.stars[stars]} points` },
       ],
       board: { title: 'Best feeds here', rows: g.boards.frenzy.slice(0, 5).map((r) => ({ name: r.name, value: String(r.value), you: r.you })) },
       buttons: [

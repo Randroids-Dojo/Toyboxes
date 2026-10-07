@@ -1359,7 +1359,9 @@ export class Galaxy implements SpaceView {
       this.lens.uniforms.uCenter.value.set(scr.x, scr.y);
       this.lens.uniforms.uRadius.value = scr.r;
       this.lens.uniforms.uAspect.value = aspect;
-      this.lens.uniforms.uStrength.value = scr.visible ? 0.9 : 0;
+      // Near the black hole the bend would double up the things in front of it.
+      const away = camera.position.distanceTo(this.hole.centre) - this.hole.radius;
+      this.lens.uniforms.uStrength.value = scr.visible ? 0.9 * Math.min(1, Math.max(0, (away - 15) / 30)) : 0;
     }
     this.composer!.render();
     return true;
