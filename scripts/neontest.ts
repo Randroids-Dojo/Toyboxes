@@ -81,8 +81,14 @@ async function closeCard(): Promise<void> {
 /** OK on a card: Enter, A, OK or a tap on its primary button. */
 async function ok(): Promise<void> {
   if (device === 'pad') {
-    await padTap(0);
-    await sleep(150);
+    // The page reads the pad once a frame; a long software-rendered frame can
+    // swallow a press, so press again while the same card is still up.
+    await page.evaluate(() => document.querySelector('.modal.in')?.setAttribute('data-ok', '1'));
+    for (let i = 0; i < 3; i++) {
+      await padTap(0);
+      await sleep(400);
+      if (!(await page.evaluate(() => !!document.querySelector('.modal.in[data-ok]')))) break;
+    }
   } else await w.confirm();
 }
 
