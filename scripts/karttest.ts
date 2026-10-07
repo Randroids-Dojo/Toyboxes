@@ -173,8 +173,10 @@ if (process.env.QUICK !== '1') {
       await page.waitForTimeout(400);
       const r = await w.call('debugRender');
       const budget = { low: 160, medium: 300, high: 450 }[tier];
+      const tris = { low: 150_000, medium: 400_000, high: 900_000 }[tier];
       log(c, tier, 'calls', r.calls, 'triangles', r.triangles);
       if (r.calls > budget) throw new Error(`${c} ${tier}: ${r.calls} draw calls (budget ${budget})`);
+      if (r.triangles > tris) throw new Error(`${c} ${tier}: ${r.triangles} triangles (budget ${tris})`);
     }
     await w.dbg('setQuality', 'medium');
     await w.shot(`12-${c}`);

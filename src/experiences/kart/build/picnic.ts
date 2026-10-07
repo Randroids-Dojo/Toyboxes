@@ -24,10 +24,11 @@ function picket(d: Dresser, x0: number, z0: number, x1: number, z1: number): voi
   // The last picket would sit on the next run's first: leave it out.
   for (let i = 0; i < n; i++) {
     const t = i / n - 0.5;
-    s.at(rbox(0.32, 1.5, 0.12, 0.04), '#fbf8f0', 0, 0.75, t * len);
+    // Plain boxes: a rounded one costs nine times the triangles, and there are hundreds.
+    s.at(rbox(0.32, 1.5, 0.12, 0), '#fbf8f0', 0, 0.75, t * len);
     s.at(cone(0.23, 0.32, 4), '#fbf8f0', 0, 1.6, t * len, 0, Math.PI / 4, 0);
   }
-  for (const y of [0.45, 1.15]) s.at(rbox(0.1, 0.14, len - 0.5, 0.03), '#f0ebe0', -0.1, y, 0);
+  for (const y of [0.45, 1.15]) s.at(rbox(0.1, 0.14, len - 0.5, 0), '#f0ebe0', -0.1, y, 0);
   d.batch.shape(s, xform((x0 + x1) / 2, 0, (z0 + z1) / 2, 0, yaw, 0), 'plastic', { cast: false });
 }
 
@@ -59,7 +60,7 @@ export function dressPicnic(d: Dresser, scene: CircuitScene, tex: TexCache): The
   hedgeAlong(x1 + 5, z0 - 5, x1 + 5, z1 + 5);
   hedgeAlong(x1 + 5, z1 + 5, x0 - 5, z1 + 5);
   hedgeAlong(x0 - 5, z1 + 5, x0 - 5, z0 - 5);
-  batch.shape(hedge, new THREE.Matrix4(), 'matte', { cast: false });
+  batch.shape(hedge, new THREE.Matrix4(), 'matte', { cast: false, detail: true });
   const giant = new Shape();
   let k = 0;
   for (const [x, z] of [
@@ -75,7 +76,7 @@ export function dressPicnic(d: Dresser, scene: CircuitScene, tex: TexCache): The
     giant.put(flower(16 + (k % 3) * 4, [PAL.gum, PAL.sun, PAL.tomato, '#fffaf0', PAL.grape][k % 5], k % 2 ? 'daisy' : 'tulip'), xform(x, 0, z, 0, k, 0));
     k++;
   }
-  batch.shape(giant, new THREE.Matrix4(), 'plastic', { cast: true });
+  batch.shape(giant, new THREE.Matrix4(), 'plastic', { cast: true, detail: true });
 
   // ---- The lemonade stand behind the paddock.
   {
@@ -324,15 +325,15 @@ export function dressPicnic(d: Dresser, scene: CircuitScene, tex: TexCache): The
       if (n > 26) break;
       if (!d.free(sp.x, sp.z, 3, 5)) continue;
       const kind = n % 5;
-      if (kind === 0 || kind === 3) d.place(lollipopTree(8 + (n % 3) * 2, ['#4fae5a', '#5cbf63', '#3f9e55'][n % 3]), sp.x, sp.z, n, 3, { collide: 0.8 });
-      else if (kind === 1) d.place(flower(6 + (n % 2) * 2, TOY_COLORS[n % 7], n % 2 ? 'daisy' : 'tulip'), sp.x, sp.z, n, 1.5, { collide: 0.5 });
+      if (kind === 0 || kind === 3) d.place(lollipopTree(8 + (n % 3) * 2, ['#4fae5a', '#5cbf63', '#3f9e55'][n % 3]), sp.x, sp.z, n, 3, { collide: 0.8, detail: n > 8 });
+      else if (kind === 1) d.place(flower(6 + (n % 2) * 2, TOY_COLORS[n % 7], n % 2 ? 'daisy' : 'tulip'), sp.x, sp.z, n, 1.5, { collide: 0.5, detail: true });
       else if (kind === 2) {
         // A strawberry.
         const s = new Shape();
         s.at(ball(1.5, 12, 9), '#e8574a', 0, 1.4, 0, 0, 0, 0, 1, 1.2, 1);
         for (let i = 0; i < 5; i++) s.at(cone(0.5, 0.5, 4), '#3fb68b', Math.cos(i * 1.26) * 0.6, 3.1, Math.sin(i * 1.26) * 0.6, Math.cos(i * 1.26) * 0.8, 0, Math.sin(i * 1.26) * 0.8);
         for (let i = 0; i < 10; i++) s.at(ball(0.08, 4, 3), '#ffe46b', Math.cos(i * 2.4) * 1.45, 0.9 + (i % 4) * 0.45, Math.sin(i * 2.4) * 1.45);
-        d.place(s, sp.x, sp.z, n, 1.7, { collide: 1.4 });
+        d.place(s, sp.x, sp.z, n, 1.7, { collide: 1.4, detail: true });
       } else {
         // A paper plate with a cupcake.
         const s = new Shape();
@@ -340,7 +341,7 @@ export function dressPicnic(d: Dresser, scene: CircuitScene, tex: TexCache): The
         s.at(cyl(1.0, 0.8, 1.0, 14), '#4aa3df', 0, 0.7, 0);
         s.at(ball(1.15, 14, 10), '#ffd1e0', 0, 1.35, 0, 0, 0, 0, 1, 0.75, 1);
         s.at(ball(0.3, 8, 6), '#e8574a', 0, 2.2, 0);
-        d.place(s, sp.x, sp.z, n, 2.5, { collide: 1.2 });
+        d.place(s, sp.x, sp.z, n, 2.5, { collide: 1.2, detail: true });
       }
       n++;
     }

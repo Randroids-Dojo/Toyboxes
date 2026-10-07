@@ -363,13 +363,14 @@ export class WheelPool {
 
   constructor(parent: THREE.Object3D, max = 40) {
     const s = new Shape();
-    s.at(cyl(1, 1, 1, 16), '#24212e', 0, 0, 0, 0, 0, Math.PI / 2);
-    s.at(cyl(0.55, 0.55, 1.04, 12), '#d8d4e0', 0, 0, 0, 0, 0, Math.PI / 2);
-    s.at(cyl(0.2, 0.2, 1.08, 8), '#8a86a0', 0, 0, 0, 0, 0, Math.PI / 2);
+    s.at(cyl(1, 1, 1, 14), '#24212e', 0, 0, 0, 0, 0, Math.PI / 2);
+    s.at(cyl(0.55, 0.55, 1.04, 10), '#d8d4e0', 0, 0, 0, 0, 0, Math.PI / 2);
+    s.at(cyl(0.2, 0.2, 1.08, 6), '#8a86a0', 0, 0, 0, 0, 0, Math.PI / 2);
     // Tread blocks.
     for (let i = 0; i < 10; i++) {
       const a = (i / 10) * Math.PI * 2;
-      s.at(rbox(0.9, 0.2, 0.22, 0.02), '#1a1824', 0, Math.cos(a) * 0.96, Math.sin(a) * 0.96, a, 0, 0);
+      // Plain boxes: rounded ones would cost a thousand triangles per wheel.
+      s.at(rbox(0.9, 0.2, 0.22, 0), '#1a1824', 0, Math.cos(a) * 0.96, Math.sin(a) * 0.96, a, 0, 0);
     }
     const geo = s.geometry();
     this.mesh = new THREE.InstancedMesh(geo, finish('plastic'), max);

@@ -148,6 +148,8 @@ interface Bucket {
   mat: THREE.Material;
   cast: boolean;
   receive: boolean;
+  /** Decoration the low tier leaves out. */
+  detail: boolean;
   geos: THREE.BufferGeometry[];
   tris: number;
 }
@@ -162,25 +164,25 @@ export class Batch {
 
   constructor(private cell = 48) {}
 
-  private bucket(mat: THREE.Material, x: number, z: number, cast: boolean, receive: boolean): Bucket {
+  private bucket(mat: THREE.Material, x: number, z: number, cast: boolean, receive: boolean, detail = false): Bucket {
     let id = this.matIds.get(mat);
     if (id === undefined) {
       id = this.matIds.size;
       this.matIds.set(mat, id);
     }
-    const key = `${id}|${Math.floor(x / this.cell)}|${Math.floor(z / this.cell)}|${cast ? 1 : 0}|${receive ? 1 : 0}`;
+    const key = `${id}|${Math.floor(x / this.cell)}|${Math.floor(z / this.cell)}|${cast ? 1 : 0}|${receive ? 1 : 0}|${detail ? 1 : 0}`;
     let b = this.buckets.get(key);
     if (!b) {
-      b = { mat, cast, receive, geos: [], tris: 0 };
+      b = { mat, cast, receive, detail, geos: [], tris: 0 };
       this.buckets.set(key, b);
     }
     return b;
   }
 
   /** A shape placed in the world with vertex colours. */
-  shape(s: Shape, m: THREE.Matrix4, f: Finish = 'plastic', opts: { cast?: boolean; receive?: boolean } = {}): void {
+  shape(s: Shape, m: THREE.Matrix4, f: Finish = 'plastic', opts: { cast?: boolean; receive?: boolean; detail?: boolean } = {}): void {
     const pos = new THREE.Vector3().setFromMatrixPosition(m);
-    const b = this.bucket(finish(f), pos.x, pos.z, opts.cast ?? true, opts.receive ?? true);
+    const b = this.bucket(finish(f), pos.x, pos.z, opts.cast ?? true, opts.receive ?? true, opts.detail);
     for (const p of s.parts) {
       const g = bake(p.geo, m.clone().multiply(p.m), p.color);
       b.tris += g.getAttribute('position').count / 3;
@@ -226,6 +228,7 @@ export class Batch {
       m.matrixAutoUpdate = false;
       m.updateMatrix();
       m.userData.batch = true;
+      m.userData.detail = b.detail;
       parent.add(m);
       out.push(m);
     }

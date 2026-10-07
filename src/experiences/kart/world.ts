@@ -1979,6 +1979,23 @@ export class KartWorld implements SpaceView {
     return out;
   }
 
+  /** The heaviest meshes in the scene, for triangle budgets. */
+  debugHeavy(): { what: string; tris: number; at: string }[] {
+    const out: { what: string; tris: number; at: string }[] = [];
+    this.scene.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh || !m.visible) return;
+      const g = m.geometry as THREE.BufferGeometry;
+      const n = (g.index ? g.index.count : g.getAttribute('position').count) / 3;
+      const inst = (m as unknown as THREE.InstancedMesh).isInstancedMesh ? (m as unknown as THREE.InstancedMesh).count : 1;
+      g.computeBoundingSphere();
+      const c = g.boundingSphere!.center.clone().applyMatrix4(m.matrixWorld);
+      const mat = (Array.isArray(m.material) ? m.material[0] : m.material) as THREE.MeshStandardMaterial;
+      out.push({ what: `${m.userData.batch ? 'batch' : m.type}:${mat.vertexColors ? 'vc' : mat.map ? 'tex' : mat.color?.getHexString()}`, tris: n * inst, at: `${c.x.toFixed(0)},${c.y.toFixed(0)},${c.z.toFixed(0)} r${g.boundingSphere!.radius.toFixed(0)}` });
+    });
+    return out.sort((a, b) => b.tris - a.tris).slice(0, 18);
+  }
+
   debugLoadCircuit(id: HomeId): boolean {
     if (this.session) this.endSession(false);
     this.load(id);

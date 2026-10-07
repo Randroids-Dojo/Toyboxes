@@ -376,7 +376,7 @@ export function dressCove(d: Dresser, scene: CircuitScene, tex: TexCache): Theme
         const x = ax + (bx - ax) * k;
         const z = az + (bz - az) * k;
         if (seaDist(x, z) > -2) continue;
-        s.at(rbox(0.25, 1.4, 0.25, 0.06), '#b98a5e', x, 0.7, z, 0, 0, (t % 4.4 < 2.2 ? 1 : -1) * 0.06);
+        s.at(rbox(0.25, 1.4, 0.25, 0), '#b98a5e', x, 0.7, z, 0, 0, (t % 4.4 < 2.2 ? 1 : -1) * 0.06);
         if (t % 6.6 < 2.2) s.at(cone(0.9, 1.6, 5), '#9ac46a', x + 1.2, 0.8, z + 0.6);
       }
     };
@@ -384,7 +384,7 @@ export function dressCove(d: Dresser, scene: CircuitScene, tex: TexCache): Theme
     along(x1, z0, x1, z1);
     along(x1, z1, x0, z1);
     along(x0, z1, x0, z0);
-    batch.shape(s, new THREE.Matrix4(), 'plastic', { cast: false });
+    batch.shape(s, new THREE.Matrix4(), 'plastic', { cast: false, detail: true });
   }
 
   // ---- Beach balls bouncing across the boardwalk: the hazard.

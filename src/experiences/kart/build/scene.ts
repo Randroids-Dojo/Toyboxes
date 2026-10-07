@@ -305,6 +305,8 @@ export function buildScene(c: Circuit, opts: SceneOpts, dress: (d: Dresser, s: C
 /** Shadow casting by tier: off on low (blob shadows), big things only on medium. */
 export function setTier(s: CircuitScene, t: Tier): void {
   for (const m of s.meshes) {
+    // Far-off decoration is left out on the low tier.
+    if (m.userData.detail) m.visible = t !== 'low';
     if (m.userData.castWanted === undefined) m.userData.castWanted = m.castShadow;
     m.castShadow = t !== 'low' && (m.userData.castWanted as boolean);
   }

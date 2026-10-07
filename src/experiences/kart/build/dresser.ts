@@ -62,11 +62,11 @@ export class Dresser {
   }
 
   /** Places a shape with a collider of radius r (or none), if it fits. */
-  place(shape: Shape, x: number, z: number, yaw: number, r: number, opts: { road?: number; collide?: number; finish?: Finish; cast?: boolean; scale?: number; force?: boolean } = {}): boolean {
+  place(shape: Shape, x: number, z: number, yaw: number, r: number, opts: { road?: number; collide?: number; finish?: Finish; cast?: boolean; scale?: number; force?: boolean; detail?: boolean } = {}): boolean {
     if (!opts.force && !this.free(x, z, r, opts.road ?? 4)) return false;
     this.claim(x, z, r);
     const sc = opts.scale ?? 1;
-    this.batch.shape(shape, xform(x, 0, z, 0, yaw, 0, sc, sc, sc), opts.finish ?? 'plastic', { cast: opts.cast ?? true });
+    this.batch.shape(shape, xform(x, 0, z, 0, yaw, 0, sc, sc, sc), opts.finish ?? 'plastic', { cast: opts.cast ?? true, detail: opts.detail });
     if (opts.collide !== 0) this.colliders.push(circle(x, z, opts.collide ?? r * 0.8, 3, 0.4, (opts.collide ?? r) > 1.5));
     return true;
   }
