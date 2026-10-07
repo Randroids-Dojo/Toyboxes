@@ -109,6 +109,8 @@ export interface SpaceView {
   step?(h: number, player: PlayerState): void;
   /** Interact while riding. Return true when the space handled it. */
   rideAction?(player: PlayerState): { label: string; short: string; run: () => void } | null;
+  /** Back while riding. Return true when the space handled it (e.g. no getting out mid-race); otherwise you get off. */
+  rideBack?(player: PlayerState): boolean;
   /** The kick button on foot. Return a label when the space uses it here. */
   kickAction?(player: PlayerState): { label: string; run: () => void } | null;
   /** Something that pauses with the menu, like a race. */

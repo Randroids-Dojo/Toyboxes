@@ -1065,7 +1065,7 @@ export class Game {
     return {
       x: v ? v.pos.x : this.pos.x,
       z: v ? v.pos.z : this.pos.z,
-      height: v ? 1.35 : 1.25 + this.pos.y,
+      height: v ? 1.35 + v.pos.y : 1.25 + this.pos.y,
       heading: v ? v.yaw : this.yaw,
       speed: v ? Math.abs(v.speed) : this.carrying ? this.carrying.speed : this.vel.length(),
       riding: !!v,
@@ -1261,7 +1261,7 @@ export class Game {
         this.current.run();
       }
     }
-    if (steer && this.riding && this.input.take('back')) this.dismount();
+    if (steer && this.riding && this.input.take('back') && !sv?.rideBack?.(this.playerState())) this.dismount();
 
     // ---- avatar, vehicles and the camera
     if (!this.riding) {
