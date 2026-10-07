@@ -423,6 +423,7 @@ export function dressBedroom(d: Dresser, scene: CircuitScene, tex: TexCache): Th
 
   // ---- Grandstand of board-game boxes beside the main straight.
   let fans: { bob(t: number, cheer: number): void } | null = null;
+  let standAt: { x: number; z: number } | undefined;
   {
     const inSide = -c.paddock.side;
     const s = c.length - 18;
@@ -438,6 +439,7 @@ export function dressBedroom(d: Dresser, scene: CircuitScene, tex: TexCache): Th
     d.wallBox(q.x - Math.sin(yaw) * 2, q.z - Math.cos(yaw) * 2, 11.5, 4.2, yaw, 5, true);
     d.claim(q.x, q.z, 13);
     fans = crowd(d.group, gs.seats, mm, 72);
+    standAt = { x: q.x, z: q.z };
   }
 
   // ---- Toys on the carpet.
@@ -494,6 +496,7 @@ export function dressBedroom(d: Dresser, scene: CircuitScene, tex: TexCache): Th
 
   for (const g of [clock, tail, rocket, mobile, ...catEars]) g.userData.dynamic = true;
   return {
+    stand: standAt,
     hero: moonAt.clone(),
     dust: 0x8a7ad8,
     hazards: [hazard],

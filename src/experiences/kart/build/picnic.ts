@@ -288,6 +288,7 @@ export function dressPicnic(d: Dresser, scene: CircuitScene, tex: TexCache): The
 
   // ---- Grandstand on a cake stand, facing the main straight.
   let fans: { bob(t: number, cheer: number): void } | null = null;
+  let standAt: { x: number; z: number } | undefined;
   {
     const inSide = -c.paddock.side;
     const s = c.length - 20;
@@ -308,6 +309,7 @@ export function dressPicnic(d: Dresser, scene: CircuitScene, tex: TexCache): The
     d.wallBox(q.x - Math.sin(yaw) * 1.6, q.z - Math.cos(yaw) * 1.6, 15, 6, yaw, 8, true);
     d.claim(q.x, q.z, 16);
     fans = crowd(d.group, gs.seats.map((v) => v.clone().add(new THREE.Vector3(0, 1.9, 0))), mm, 80);
+    standAt = { x: q.x, z: q.z };
     // A cherry on the roof.
     batch.part(ball(1.4, 12, 9), '#e8574a', xform(q.x - Math.sin(yaw) * 2, 0.7 + 4 * 0.75 + 3.2 + 1.9 + 1.4, q.z - Math.cos(yaw) * 2));
   }
@@ -367,6 +369,7 @@ export function dressPicnic(d: Dresser, scene: CircuitScene, tex: TexCache): The
   const am = new THREE.Matrix4();
   const blinkAt = { t: 3 };
   return {
+    stand: standAt,
     hero: new THREE.Vector3(gnomeEyes.position.x, 10, gnomeEyes.position.z),
     dust: 0x9a7a52,
     update(dt: number, t: number, night: number, info: SceneInfo) {

@@ -553,7 +553,7 @@ export async function showResults(w: KartWorld, order: Racer[]): Promise<string>
     rows,
     board: {
       title: 'Finishing order',
-      rows: order.map((r) => ({ name: `${ordinal(r.place)} ${r.you ? 'You' : r.name}`, value: r.finishedAt !== null ? formatLap(r.finishedAt * 1000) : gap(w, r), you: r.you })),
+      rows: order.map((r) => ({ name: r.you ? 'You' : r.name, value: r.finishedAt !== null ? formatLap(r.finishedAt * 1000) : gap(w, r), you: r.you })),
     },
     buttons: cup ? [{ id: 'next', label: last ? 'See the standings' : 'Next race', primary: true }, ...(last ? [] : [{ id: 'leave', label: 'Leave the cup' }])] : [{ id: 'again', label: 'Race again', primary: true }, { id: 'trial', label: 'Time trial' }, { id: 'leave', label: 'Done' }],
   });
@@ -575,7 +575,7 @@ export async function showStandings(w: KartWorld, cup: { index: number; circuits
   await w.hud.results({
     title: done ? 'Final standings' : 'Cup standings',
     subtitle: next ? `Next: ${CIRCUIT_NAME(w, next)}` : `${CLASSES[w.session!.opts.cls].name} class`,
-    board: { title: 'Points', rows: rows.map((x, i) => ({ name: `${i + 1}. ${x.r.you ? 'You' : x.r.name}`, value: String(x.points), you: x.r.you })) },
+    board: { title: 'Points', rows: rows.map((x) => ({ name: x.r.you ? 'You' : x.r.name, value: String(x.points), you: x.r.you })) },
     buttons: [{ id: 'ok', label: next ? 'Next race' : 'Continue', primary: true }],
   });
 }

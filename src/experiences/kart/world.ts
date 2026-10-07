@@ -36,7 +36,7 @@ import { RaceKart, WheelPool } from './racekart';
 import { newRacer, progress, type Racer } from './racer';
 import { FLAMES, KartSave, PAINTS } from './save';
 import { SONGS } from './songs';
-import { kartSfx } from './sounds';
+import { PackDrone, kartSfx } from './sounds';
 import { DRESSERS } from './themes';
 import { zAudit } from './zaudit';
 
@@ -131,6 +131,10 @@ export class KartWorld implements SpaceView {
   private grabber: THREE.Group;
   private tips: TipBoards | null = null;
   private bubble = new Bubble();
+  private drone = new PackDrone();
+  private trophy: THREE.Group | null = null;
+  private ghostAhead = false;
+  private fireworksAt = 0;
   private track: number[];
   private sketchLaps: number;
   session: Session | null = null;
@@ -743,6 +747,9 @@ export class KartWorld implements SpaceView {
     this.race.show(true);
     this.hud.letterbox(this.session.shotLen > 0);
     music.play(SONGS[opts.circuit], { fadeIn: 1.5 });
+    const what = opts.kind === 'cup' ? `Toybox Cup, race ${(cup?.index ?? 0) + 1} of ${cup?.circuits.length ?? 4}` : opts.kind === 'trial' ? 'Time trial' : opts.kind === 'warmup' ? 'Warm-up lap with Bolt' : `${CLASSES[opts.cls].name} class`;
+    this.hud.title(this.c.name, `${what} · ${laps} ${laps === 1 ? 'lap' : 'laps'}`, 2600);
+    kartSfx.fanfare(false);
     this.loading = false;
     if (this.session.shotLen <= 0) this.toGrid(true);
   }
@@ -856,6 +863,12 @@ export class KartWorld implements SpaceView {
     this.items.reset();
     this.podiumAt = null;
     this.shot = null;
+    if (this.trophy) {
+      this.scene.remove(this.trophy);
+      disposeTree(this.trophy);
+      this.trophy = null;
+    }
+    this.fireworksAt = 0;
     for (const r of this.racers) {
       r.kart.frozen = false;
       r.kart.applyClass(CLASSES.battery);
@@ -1193,6 +1206,12 @@ export class KartWorld implements SpaceView {
       this.kart.bumped = 0;
     }
     this.contextTips(riding, h);
+    if (riding && !this.kart.onRoad && !this.kart.air && Math.abs(this.kart.speed) > 3 && !this.cs.paddock.inside(this.kart.pos.x, this.kart.pos.z)) kartSfx.rumble();
+    // The crowd cheers as you go past a grandstand at speed.
+    if (riding && s?.state === 'running' && this.kart.speed > 10) {
+      const stand = this.cs.parts.stand;
+      if (stand && Math.hypot(stand.x - this.kart.pos.x, stand.z - this.kart.pos.z) < 22) kartSfx.crowd();
+    }
     // Lift the boom gate for karts.
     const arm = this.cs.paddock.gateArm;
     const want = this.kart.ridden ? 1.35 : 0;
@@ -1407,8 +1426,12 @@ export class KartWorld implements SpaceView {
     if (this.you.finishedAt !== null && s.state === 'running') this.finish();
     // Your place changes.
     if (s.state === 'running' && this.lastPlace && this.you.place !== this.lastPlace && s.opts.kind !== 'trial' && s.opts.kind !== 'warmup') {
-      if (this.you.place < this.lastPlace) kartSfx.passUp();
-      else kartSfx.passDown();
+      if (this.you.place < this.lastPlace) {
+        kartSfx.passUp();
+        // Whoever you just passed has something to say about it.
+        const passed = field.find((r) => r.place === this.you.place + 1 && r.def);
+        if (passed?.def && this.near(passed.kart.pos, 15)) kartSfx.voice(passed.def.kind, 'hey');
+      } else kartSfx.passDown();
     }
     this.lastPlace = this.you.place;
     // Results once everyone is in, or a few seconds after you.
@@ -1432,8 +1455,13 @@ export class KartWorld implements SpaceView {
     else if (trial) this.hud.banner('Finished!', { color: '#7ef0ff', size: 'xl', ms: 2000 });
     else this.hud.banner(place === 1 ? 'YOU WIN!' : ordinal(place), { color: place === 1 ? '#ffd24a' : place <= 3 ? '#7ef0ff' : '#fffaf0', size: 'xl', ms: 2400, sub: place <= 3 ? 'On the podium!' : undefined });
     kartSfx.fanfare(place === 1 || trial || warm);
+    if ((this.c.theme === 'garden' || this.c.theme === 'beach') && this.env.night > 0.5) this.fireworksAt = this.clock + 4;
     music.duck(0.5, 2);
     const p = this.kart.pos;
+    // Confetti cannons on both sides of the line.
+    const f0 = this.c.frame(0);
+    for (const sd of [1, -1]) this.confetti.burst({ at: { x: f0.x + f0.nx * sd * (EDGE + 1.1), y: 6, z: f0.z + f0.nz * sd * (EDGE + 1.1) }, count: 120, shape: 'cone', dir: { x: -f0.nx * sd, y: 1.4, z: -f0.nz * sd }, spread: 0.5, speed: [6, 12], color: [0xffd24a, 0x4aa3df], life: [1.8, 3], size: [0.14, 0.24], gravity: 5, drag: 1.1, sizeEnd: 1 });
+    kartSfx.confetti();
     this.confetti.burst({ at: { x: p.x, y: p.y + 4, z: p.z }, count: place <= 3 || trial || warm ? 220 : 80, shape: 'up', speed: [3, 9], color: [0xffd24a, 0xe8574a], life: [2, 3.2], size: [0.14, 0.24], gravity: 5, drag: 1.2, sizeEnd: 1 });
     for (const r of this.cpus)
       if (r.finishedAt === null) {
@@ -1693,6 +1721,21 @@ export class KartWorld implements SpaceView {
         r.moodUntil = this.clock + 10;
       }
     this.podiumAt = { racers: top, center: new THREE.Vector3(p.x, 1.6, p.z) };
+    // The cup comes down from above, gold for a win.
+    const cls = s.opts.cls;
+    const tcol = top[0].you ? '#f5c542' : top[1]?.you ? '#d6dbe6' : '#d9905a';
+    const ts = new Shape();
+    ts.at(cyl(0.7, 0.85, 0.35, 18), '#3a3448', 0, 0.17, 0);
+    ts.at(cyl(0.18, 0.26, 0.9, 12), tcol, 0, 0.8, 0);
+    ts.at(cyl(0.95, 0.35, 1.3, 20), tcol, 0, 1.9, 0);
+    for (const sx of [-1, 1]) ts.at(new THREE.TorusGeometry(0.36, 0.08, 6, 14, Math.PI), tcol, sx * 0.95, 2.0, 0, 0, 0, sx > 0 ? -Math.PI / 2 : Math.PI / 2);
+    ts.at(new THREE.OctahedronGeometry(0.3, 0), '#7ef0ff', 0, 2.9, 0);
+    this.trophy = new THREE.Group();
+    this.trophy.add(ts.mesh('gloss'));
+    this.trophy.scale.setScalar(0.62);
+    this.trophy.position.set(p.x, 14, p.z);
+    this.scene.add(this.trophy);
+    void cls;
     kartSfx.fanfare(true);
     music.duck(0.6, 3);
     const c = this.podiumAt.center;
@@ -1710,6 +1753,7 @@ export class KartWorld implements SpaceView {
 
   private onMount(): void {
     kartSfx.horn('you');
+    this.drone.start();
     this.race.mode(this.session ? 'race' : 'free');
     this.race.show(true);
     this.kart.assists = { ...this.save.d.assists };
@@ -1729,6 +1773,7 @@ export class KartWorld implements SpaceView {
   }
 
   private onDismount(): void {
+    this.drone.stop();
     this.race.show(false);
     this.kart.remoteDrift = false;
     this.save.save();
@@ -1780,6 +1825,43 @@ export class KartWorld implements SpaceView {
     if (this.ghostKart.root.visible) (this.ghostKart.bodyMesh.material as THREE.MeshStandardMaterial).opacity = 0.32 + Math.sin(t * 6) * 0.06;
     this.kartFx(dt);
     this.wheels.update();
+    // The pack's engines: one hum, loudest when a kart is close.
+    let nearest = Infinity;
+    let nearSpeed = 0;
+    for (const r of this.cpus) {
+      if (!r.kart.root.visible) continue;
+      const dd = Math.hypot(r.kart.pos.x - this.kart.pos.x, r.kart.pos.z - this.kart.pos.z);
+      if (dd < nearest) {
+        nearest = dd;
+        nearSpeed = Math.abs(r.kart.speed);
+      }
+    }
+    this.drone.set(this.kart.ridden ? Math.max(0, 1 - nearest / 40) : 0, Math.min(1, nearSpeed / 16));
+    // Passing your ghost: it bursts into sparkles.
+    if (s?.opts.kind === 'trial' && this.ghostKart.root.visible) {
+      const n = this.c.path.nearest(this.ghostKart.pos.x, this.ghostKart.pos.z, this.c.idx(this.you.s), 20);
+      const ahead = this.c.path.delta(this.you.s, n.s) > 0;
+      if (this.ghostAhead && !ahead) {
+        const gp = this.ghostKart.pos;
+        this.sparks.burst({ at: { x: gp.x, y: gp.y + 0.8, z: gp.z }, count: 50, speed: [1, 4], color: [0x7ef0ff, 0xffffff], life: [0.4, 0.9], size: [0.12, 0.22] });
+        sfx.ding(false);
+      }
+      this.ghostAhead = ahead;
+    }
+    // Fireworks over the line after dark outdoors, once you finish.
+    if (this.fireworksAt > 0 && this.clock < this.fireworksAt) {
+      if (Math.random() < dt * 2.5) {
+        const f0 = this.c.frame(Math.random() * 40 - 20);
+        const col = [0xffd24a, 0xff7ad9, 0x7ef0ff, 0xb6ff8a][Math.floor(Math.random() * 4)];
+        this.glow.burst({ at: { x: f0.x + (Math.random() - 0.5) * 30, y: 26 + Math.random() * 10, z: f0.z + (Math.random() - 0.5) * 30 }, count: 70, speed: [6, 11], color: col, colorEnd: 0x1d1830, life: [0.9, 1.6], size: [0.4, 0.7], gravity: 4, drag: 1.2 });
+        sfx.bounce(0.2);
+      }
+    }
+    // The trophy comes down over the podium, turning.
+    if (this.trophy) {
+      this.trophy.position.y += (3.3 - this.trophy.position.y) * Math.min(1, dt * 1.6);
+      this.trophy.rotation.y += dt * 1.4;
+    }
     this.sparks.update(dt);
     this.smoke.update(dt);
     this.glow.update(dt);
@@ -1945,6 +2027,7 @@ export class KartWorld implements SpaceView {
       cam.far = this.base.far;
       cam.updateProjectionMatrix();
     }
+    this.drone.stop();
     disposeTree(this.scene);
   }
 

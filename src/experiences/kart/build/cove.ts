@@ -282,6 +282,7 @@ export function dressCove(d: Dresser, scene: CircuitScene, tex: TexCache): Theme
 
   // ---- Grandstand of beach towels on a dune by the main straight.
   let fans: { bob(t: number, cheer: number): void } | null = null;
+  let standAt: { x: number; z: number } | undefined;
   {
     const inSide = -c.paddock.side;
     const s = c.length - 16;
@@ -299,6 +300,7 @@ export function dressCove(d: Dresser, scene: CircuitScene, tex: TexCache): Theme
     d.wallBox(q.x - Math.sin(yaw) * 2, q.z - Math.cos(yaw) * 2, 12, 5, yaw, 6, true);
     d.claim(q.x, q.z, 14);
     fans = crowd(d.group, gs.seats, mm, 72);
+    standAt = { x: q.x, z: q.z };
   }
 
   // ---- Umbrellas, towels, palms and sandcastles on the open sand.
@@ -429,6 +431,7 @@ export function dressCove(d: Dresser, scene: CircuitScene, tex: TexCache): Theme
   };
 
   return {
+    stand: standAt,
     hero: new THREE.Vector3(c.frame(287).x, 10, c.frame(287).z),
     dust: 0xe3c58a,
     hazards: [hazard],

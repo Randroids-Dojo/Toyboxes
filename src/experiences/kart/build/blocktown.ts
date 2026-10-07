@@ -277,6 +277,7 @@ export function dressBlockTown(d: Dresser, scene: CircuitScene, tex: TexCache): 
   }
 
   // ---- Grandstand in the infield facing the main straight.
+  let standAt: { x: number; z: number } | undefined;
   {
     const inSide = -c.paddock.side;
     const s = 44;
@@ -289,6 +290,7 @@ export function dressBlockTown(d: Dresser, scene: CircuitScene, tex: TexCache): 
     d.wallBox(q.x - Math.sin(yaw) * 2, q.z - Math.cos(yaw) * 2, 13.5, 4.2, yaw, 5, true);
     d.claim(q.x - Math.sin(yaw) * 2, q.z - Math.cos(yaw) * 2, 14);
     const fans = crowd(d.group, gs.seats, m, 96);
+    standAt = { x: q.x, z: q.z };
     // A sign on the roof edge.
     const signTex = tex.make(1024, 128, (g, w, h) => {
       g.fillStyle = '#1d1830';
@@ -606,6 +608,7 @@ export function dressBlockTown(d: Dresser, scene: CircuitScene, tex: TexCache): 
   let lastLeader = -1;
   for (const g of [horse, top, train]) g.userData.dynamic = true;
   return {
+    stand: standAt,
     hero: new THREE.Vector3(horse.position.x, 8, horse.position.z),
     dust: 0xd9a066,
     update(dt: number, t: number, night: number, info: SceneInfo) {

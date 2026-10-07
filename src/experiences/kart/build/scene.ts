@@ -28,6 +28,8 @@ export interface ThemeParts {
   dust?: number;
   /** A huge landmark for flyovers to frame. */
   hero?: THREE.Vector3;
+  /** The grandstand, for the crowd's cheer. */
+  stand?: { x: number; z: number };
   dispose?(): void;
 }
 

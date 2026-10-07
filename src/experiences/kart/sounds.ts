@@ -2,7 +2,7 @@
 // words), item effects, the Grabber's jingle, springs, landings, crowd
 // swells and the timing tower's clatter. Every cue has a visual twin.
 
-import { noise, tone } from '../../audio/sfx';
+import { audioGraph, noise, tone } from '../../audio/sfx';
 import type { DriverKind } from './drivers';
 
 let lastVoice = 0;
@@ -182,3 +182,50 @@ export const kartSfx = {
     noise(0.2, { gain: 0.03, freq: 160, q: 0.8 });
   },
 };
+
+/** One quiet engine hum for the whole pack, loudest when a kart is near. */
+export class PackDrone {
+  private osc: OscillatorNode | null = null;
+  private osc2: OscillatorNode | null = null;
+  private gain: GainNode | null = null;
+
+  start(): void {
+    const g = audioGraph();
+    if (!g || this.osc) return;
+    const c = g.ctx;
+    this.osc = c.createOscillator();
+    this.osc2 = c.createOscillator();
+    this.osc.type = 'sawtooth';
+    this.osc2.type = 'square';
+    const f = c.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.value = 420;
+    this.gain = c.createGain();
+    this.gain.gain.value = 0.0001;
+    this.osc.connect(f);
+    this.osc2.connect(f);
+    f.connect(this.gain).connect(g.out);
+    this.osc.start();
+    this.osc2.start();
+  }
+
+  /** `near` 0..1: how close the nearest kart is; `speed01` its speed. */
+  set(near: number, speed01: number): void {
+    const g = audioGraph();
+    if (!g || !this.osc || !this.osc2 || !this.gain) return;
+    const t = g.ctx.currentTime;
+    this.osc.frequency.setTargetAtTime(62 + speed01 * 80, t, 0.1);
+    this.osc2.frequency.setTargetAtTime(31 + speed01 * 41, t, 0.1);
+    this.gain.gain.setTargetAtTime(Math.max(0.0001, near * near * 0.035), t, 0.15);
+  }
+
+  stop(): void {
+    const g = audioGraph();
+    if (!g || !this.osc || !this.osc2 || !this.gain) return;
+    this.gain.gain.setTargetAtTime(0.0001, g.ctx.currentTime, 0.05);
+    this.osc.stop(g.ctx.currentTime + 0.3);
+    this.osc2.stop(g.ctx.currentTime + 0.3);
+    this.osc = this.osc2 = null;
+    this.gain = null;
+  }
+}
