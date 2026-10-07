@@ -269,6 +269,7 @@ export class FartSimulator implements SpaceView {
     for (const u of newUnlocks(before, after)) {
       setTimeout(() => this.ctx.ui.toast(u.kind === 'golden' ? 'The golden toot is yours! See the Toot-o-Matic.' : `New ${u.kind === 'voice' ? 'toot voice' : 'cloud style'}: ${u.name}. Try it at the Toot-o-Matic.`, 'good', 3800), 1400);
       const horn = this.village.tootomaticHorn.position;
+      if (u.kind === 'voice') setTimeout(() => toot({ gas: 'beans', size: 'boost', voice: u.id as Voice }), 1600);
       this.sparks.burst({ at: { x: horn.x, y: horn.y + 1, z: horn.z }, count: 30, speed: [2, 4], color: [0xffd24a, 0xff8fc8], size: [0.1, 0.2], life: [0.6, 1.2], drag: 1.5 });
     }
     for (const t of ['library', 'picnic'] as TrialId[]) {
@@ -285,8 +286,78 @@ export class FartSimulator implements SpaceView {
     this.ph.hint(n ? n.text : null);
   }
 
+  /** Every golden bean: the Mayor pins a medal on you on the bandstand, trying to keep a straight face. */
   private ceremony(): void {
-    // The medal ceremony (must-have 11) hooks in here.
+    if (this.cere || this.save.medal) return;
+    if (this.trial) {
+      this.cerePending = true;
+      return;
+    }
+    this.cere = { t: 0, step: 0, medal: null };
+    this.mover.reset();
+    this.ctx.teleport(BANDSTAND.x + 2.6, BANDSTAND.z + 0.1, Math.PI / 2, BANDSTAND.floor);
+    const mayor = this.vil.actors.get('mayor');
+    if (mayor) {
+      mayor.brain.x = BANDSTAND.x + 2.4;
+      mayor.brain.z = BANDSTAND.z - 1.05;
+      mayor.brain.yaw = 0.9;
+      mayor.brain.mood = 'perform';
+      mayor.y = BANDSTAND.floor;
+    }
+    this.hud.letterbox(true);
+  }
+  private cere: { t: number; step: number; medal: HTMLElement | null } | null = null;
+  private cerePending = false;
+
+  private ceremonyShot(dt: number): CameraShot {
+    const c = this.cere!;
+    c.t += dt;
+    const say = (text: string, life = 2.2) => this.words.bubble(text, () => this.vil.head('mayor'), { life });
+    const mayor = this.vil.person('mayor');
+    if (c.step === 0 && c.t > 0.6) {
+      c.step = 1;
+      say('Ahem. Ladies and gentlemen of Little Puffington...');
+    } else if (c.step === 1 && c.t > 3) {
+      c.step = 2;
+      say('For outstanding services to... to... tooting...');
+      if (mayor) mayor.p.face = 'suspicious';
+    } else if (c.step === 2 && c.t > 5.4) {
+      c.step = 3;
+      fx.fanfare();
+      fx.cheer();
+      this.ctx.pose('cheer');
+      c.medal = document.createElement('div');
+      c.medal.className = 'pf-medal';
+      c.medal.textContent = 'Golden Tooter';
+      this.ph.root.appendChild(c.medal);
+      this.confetti.burst({ at: { x: BANDSTAND.x + 2.4, y: 4, z: BANDSTAND.z + 0.4 }, count: 200, shape: 'up', speed: [3, 8], color: [0xffd24a, 0xe8574a], size: [0.1, 0.2], life: [2, 3], gravity: 5, drag: 1.1, sizeEnd: 1 });
+      toot({ gas: 'beans', size: 'rocket', voice: 'golden' });
+      this.cloudFx.ring('golden', { x: BANDSTAND.x + 2.6, y: BANDSTAND.floor + 0.3, z: BANDSTAND.z + 0.1 }, 16, 3, 0.22);
+      this.sparks.burst({ at: { x: BANDSTAND.x + 2.4, y: 2.2, z: BANDSTAND.z + 0.9 }, count: 40, speed: [2, 5], color: [0xffd24a, 0xfff3b0], size: [0.1, 0.2], life: [0.6, 1.2], drag: 2 });
+    } else if (c.step === 3 && c.t > 7.2) {
+      c.step = 4;
+      say('Pfft! Ahem. Well done.', 2);
+    } else if (c.step === 4 && c.t > 9.5) {
+      this.finishCeremony();
+    }
+    return { position: new THREE.Vector3(BANDSTAND.x + 8.4, 2.4, BANDSTAND.z - 0.6), target: new THREE.Vector3(BANDSTAND.x + 2.5, 1.8, BANDSTAND.z - 0.4), fov: 46, blend: Math.min(1, c.t * 2), lockPlayer: true, skip: () => this.finishCeremony(), skipLabel: 'Skip' };
+  }
+
+  private finishCeremony(): void {
+    const c = this.cere;
+    if (!c) return;
+    c.medal?.remove();
+    this.cere = null;
+    this.hud.letterbox(false);
+    this.ctx.pose(null);
+    this.save.medal = true;
+    this.progress.save();
+    const mayor = this.vil.actors.get('mayor');
+    if (mayor) {
+      mayor.brain.mood = 'walk';
+      mayor.y = 0;
+    }
+    this.ctx.ui.toast('The golden toot is yours! Pick it at the Toot-o-Matic.', 'good', 4000);
   }
 
   // ---------------------------------------------------------------------------
@@ -436,7 +507,7 @@ export class FartSimulator implements SpaceView {
   }
 
   private tooting(): boolean {
-    return (!this.trial || this.trial.tooting) && !(this.intro && !this.intro.done);
+    return (!this.trial || this.trial.tooting) && !(this.intro && !this.intro.done) && !this.cere;
   }
 
   kickAction(p: PlayerState): { label: string; run: () => void } | null {
@@ -468,6 +539,7 @@ export class FartSimulator implements SpaceView {
 
   cameraShot(dt: number): CameraShot | null {
     if (this.intro && !this.intro.done) return this.introShot(dt);
+    if (this.cere) return this.ceremonyShot(dt);
     return this.trial?.cameraShot?.(dt) ?? null;
   }
 
@@ -585,6 +657,11 @@ export class FartSimulator implements SpaceView {
     this.showVillage(true);
     if (music.playing !== PUFFINGTON_MARCH.name) music.play(PUFFINGTON_MARCH, { fadeIn: 1.5 });
     this.musicNear = -1;
+    if (this.cerePending) {
+      this.cerePending = false;
+      setTimeout(() => this.ceremony(), 800);
+      return;
+    }
     if (next === 'again' && id) this.startTrial(id);
     else if (next && next !== 'again') {
       const spot = SPOTS[next];
@@ -934,7 +1011,7 @@ export class FartSimulator implements SpaceView {
     const brains: Record<string, { mood: string; x: number; z: number; said: string; cup: boolean }> = {};
     for (const [id, a] of this.vil.actors) brains[id] = { mood: a.brain.mood, x: +a.brain.x.toFixed(2), z: +a.brain.z.toFixed(2), said: a.brain.said, cup: a.brain.hasCup };
     return {
-      mode: this.trial?.id ?? (this.intro && !this.intro.done ? 'intro' : 'fete'),
+      mode: this.trial?.id ?? (this.intro && !this.intro.done ? 'intro' : this.cere ? 'ceremony' : 'fete'),
       player: p ? { x: p.x, y: p.y, z: p.z, vy: p.vy, grounded: p.grounded } : null,
       gas: { type: this.mover.tank.gas, amount: Math.round(this.mover.tank.amount), hovering: this.mover.hovering, tapMode: this.mover.tapMode },
       moves: this.mover.stats,
@@ -998,6 +1075,10 @@ export class FartSimulator implements SpaceView {
 
   debugStartTrial(id: TrialId, opts: Record<string, unknown> = {}): void {
     this.startTrial(id, opts);
+  }
+
+  debugCeremony(): void {
+    this.ceremony();
   }
 
   debugTrial(method: string, ...args: unknown[]): unknown {

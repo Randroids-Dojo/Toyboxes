@@ -185,7 +185,9 @@ export class CloudFx {
     // Lingering clouds: clusters of puffs.
     for (const c of clouds) {
       const t = c.age / c.life;
-      const fade = t < 0.75 ? 1 : 1 - (t - 0.75) / 0.25;
+      // Puffs shrink away at the end (a clean cartoon fade), with a last wisp of dissolve.
+      const shrink = t < 0.72 ? 1 : Math.max(0, 1 - (t - 0.72) / 0.28);
+      const fade = t < 0.92 ? 1 : 1 - (t - 0.92) / 0.08;
       const n = c.gas === 'cabbage' || c.r1 > 2 ? 9 : c.r1 > 1.2 ? 7 : 5;
       for (let i = 0; i < n && k < cap; i++) {
         const a = (i / n) * Math.PI * 2 + c.seed;
@@ -193,7 +195,7 @@ export class CloudFx {
         const ox = Math.cos(a) * c.r * ring;
         const oz = Math.sin(a) * c.r * ring;
         const oy = i === 0 ? c.r * 0.25 : Math.sin(a * 3 + c.seed) * c.r * 0.18;
-        const sc = c.r * (i === 0 ? 0.75 : 0.5 + ((c.seed * (i + 3)) % 7) * 0.03) * (0.9 + Math.sin(time * 1.3 + i + c.seed) * 0.06);
+        const sc = c.r * (i === 0 ? 0.75 : 0.5 + ((c.seed * (i + 3)) % 7) * 0.03) * (0.9 + Math.sin(time * 1.3 + i + c.seed) * 0.06) * (0.15 + 0.85 * shrink * (1 - (1 - shrink) * (i % 3) * 0.2));
         this.v.set(c.x + ox, c.y + oy, c.z + oz);
         this.s.set(sc, sc * 0.85, sc);
         this.tmp.compose(this.v, this.q.identity(), this.s);
@@ -217,13 +219,14 @@ export class CloudFx {
       b.z += b.vz * dt;
       if (k < cap) {
         const t = b.age / b.life;
-        const sc = b.s0 + (b.s1 - b.s0) * (1 - (1 - t) * (1 - t));
+        const end = t < 0.62 ? 1 : Math.max(0.05, 1 - (t - 0.62) / 0.38);
+        const sc = (b.s0 + (b.s1 - b.s0) * (1 - (1 - t) * (1 - t))) * end;
         this.v.set(b.x, b.y, b.z);
         this.s.setScalar(sc);
         this.tmp.compose(this.v, this.q.identity(), this.s);
         this.mesh.setMatrixAt(k, this.tmp);
         this.mesh.setColorAt(k, b.color);
-        this.alpha.array[k] = t < 0.6 ? 1 : 1 - (t - 0.6) / 0.4;
+        this.alpha.array[k] = t < 0.9 ? 1 : 1 - (t - 0.9) / 0.1;
         k++;
       }
       return true;
