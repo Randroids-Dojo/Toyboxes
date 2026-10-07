@@ -46,14 +46,15 @@ Rebuilt as the **Toybox Grand Prix** (2026-10-07): tiny karts, giant rooms.
 
 Page 2 was edited to ask for other casino games as well. Built automatically on 2026-10-05: a **roulette wheel** and a **blackjack table** with a robot dealer in the Casino, sharing its credits. The server decides every spin and every card. Evidence: `scripts/experiencetest.ts` (desktop and `PHONE=1`), `tests/casino-games.test.ts`.
 
-Room 12 (estevan) asked for a "black hole galaxy" (page 1, with a drawing of a ringed planet, a swirl and streaking comets). Built automatically on 2026-10-05:
-- **Black hole galaxy:** a portal-dimension inner area in its own art style (shader nebula, accretion disk, photon ring, bending light, iridescent glass platform, comet streaks).
-- **Gameplay:** kick orbs into the black hole, plus 60-second feeding frenzies with a board.
-- **Graphics tiers:** set by the Graphics setting, or measured on Auto.
-- **Evidence:** `scripts/galaxytest.ts` (desktop and `PHONE=1`) records frame times per tier.
+Room 12 (estevan) asked for a "black hole galaxy" (page 1, with a drawing of a ringed planet, a swirl and streaking comets). Built automatically on 2026-10-05, then rebuilt as its own game on 2026-10-07:
+
+| Page | Idea | Built | Evidence |
+| --- | --- | --- | --- |
+| 1 | A black hole galaxy (drawing: deep space, diagonal streaks of coloured stars, a blue planet with a green ring, a yellow, purple and green swirl) | **Black hole bloom** (`src/experiences/galaxy/`): a crystal hub under a black hole that grows with every star you feed it. The drawing's planet is **Ringworld** (a two-lap ring run on its ring), plus **Cinder** (rock rain) and the **Comet dock** (a comet ride through the streaks and the planet's ring). The wake tutorial and a 60-second feeding frenzy on the hub, star slings, bounce blossoms, comet lanes, a star net, eight lost moons, constellations that light up, and at 12 stars the Horizon stair and the finale, where the black hole blooms into a spiral galaxy. Shader sky and disk, lensing and bloom by graphics tier; songs for each place; boards for the frenzy (the old board, kept), ring run (server-checked splits), rock rain and comet surf | `scripts/galaxytest.ts` (desktop, `PHONE=1`, `PAD=1`, `REMOTE=1`), `tests/galaxy.test.ts` |
 
 ## Needs a person
 
+- Black hole bloom (room 12): play it on the Samsung TV and a mid phone at the low tier and check the frame rate; listen to the songs and effects at real volume (headless playtests cannot hear); judge the ring run's three-star time (54 s) and the comet's stardust thresholds with real hands.
 - Load https://toyboxes.games on the Samsung S90H browser: check that focus is visible, the remote's arrows, OK and Back work, the on-screen keyboard and PIN pad work from the couch, and whether the TV browser exposes a paired controller.
 - Play on a real phone: stick feel, drag-to-look, the system keyboard over the sketchbook, and frame rate.
 - Judge vehicle handling, camera comfort and night readability; the numbers are in `src/world/vehicles.ts`, `src/game/camera.ts` and `src/world/sky.ts`.

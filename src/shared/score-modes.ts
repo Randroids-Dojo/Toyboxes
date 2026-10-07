@@ -5,6 +5,7 @@
 // Keep `min` and `max` honest: `max` is the best score a perfect run can
 // reach (or for times, `min` is the fastest a perfect run can be).
 
+import { COMET_MOTES, ringFromLog, ringMinMs, stormTotal } from './galaxy-rules.js';
 import type { Experience } from './model';
 import { neonModes } from './neon/rules.js';
 
@@ -41,7 +42,11 @@ export const MAX_LOG = 24_000;
 export const SCORE_MODES: Record<Experience['kind'], ScoreMode[]> = {
   kart: [],
   casino: [],
-  galaxy: [],
+  galaxy: [
+    { id: 'ring', label: 'Ring run', better: 'lower', unit: 'ms', min: ringMinMs(), max: 10 * 60_000, ticket: { minMs: Math.floor(ringMinMs() * 0.8) }, fromLog: ringFromLog },
+    { id: 'storm', label: 'Rock rain', better: 'higher', unit: 'points', min: 0, max: stormTotal() },
+    { id: 'comet', label: 'Comet surf', better: 'higher', unit: 'points', min: 0, max: COMET_MOTES },
+  ],
   neon: neonModes(),
   fart: [],
 };

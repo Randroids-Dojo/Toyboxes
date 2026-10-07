@@ -13,6 +13,8 @@ PAD=1 karttest.ts
 REMOTE=1 karttest.ts
 galaxytest.ts
 PHONE=1 galaxytest.ts
+PAD=1 galaxytest.ts
+REMOTE=1 galaxytest.ts
 neontest.ts
 PHONE=1 neontest.ts
 PAD=1 neontest.ts
