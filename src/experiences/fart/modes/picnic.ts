@@ -190,7 +190,7 @@ export class PicnicPanic implements Trial {
     const res = w.trialBeans('picnic', full ? beans : 0, done && full ? ms : null, 'lower');
     const ticket = await this.ticket;
     const posted = done && full ? await w.boards.post('picnic', ms, ticket) : null;
-    await new Promise((r) => setTimeout(r, 1300));
+    await new Promise((r) => setTimeout(r, 2100));
     const choice = await w.hud.results({
       title: done ? 'Lawn cleared!' : 'Time up',
       subtitle: done ? `${this.sim.people.length} picnickers in ${formatLap(ms)}` : `${this.sim.people.length - this.sim.left} of ${this.sim.people.length} cleared`,

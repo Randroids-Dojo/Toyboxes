@@ -12,7 +12,7 @@ import { Hud, Particles, PostFX, Progress, Shockwaves } from '../kit';
 import { disposeTree } from '../../world/kit';
 import { IS_TV } from '../../input/input';
 import { music } from '../../audio/music';
-import { ARRIVAL, BALLOON, BANDSTAND, CRUMBS, EXIT, FOUNTAIN, SPOTS, balloonSlice, balloonTop, canopies, villageBoxes, villageCircles } from './layout';
+import { ARRIVAL, BALLOON, BANDSTAND, CRUMBS, EXIT, FOUNTAIN, SPOTS, balloonSlice, balloonTop, canopies, canopyTop, villageBoxes, villageCircles } from './layout';
 import { buildVillage, type Village } from './village';
 import { Figures } from './figures';
 import { registerParts } from './people';
@@ -461,7 +461,7 @@ export class FartSimulator implements SpaceView {
 
   private press(src: 'interact' | 'kick' | 'jump'): void {
     const b = music.beat();
-    this.pressBeat = b >= 0 ? b : null;
+    this.pressBeat = b >= 0 ? b - this.save.offset * (music.tempoBpm / 60) : null;
     this.mover.press(src);
   }
 
@@ -875,17 +875,19 @@ export class FartSimulator implements SpaceView {
   private bounces(p: PlayerState): void {
     if (p.vy >= 0) return;
     for (const c of this.canopyList) {
-      if (Math.hypot(p.x - c.x, p.z - c.z) > c.r) continue;
-      if (this.lastY >= c.y - 0.05 && p.y < c.y + 0.02) {
+      const d = Math.hypot(p.x - c.x, p.z - c.z);
+      if (d > c.r) continue;
+      const top = canopyTop(c, d);
+      if (this.lastY >= top - 0.05 && p.y < top + 0.02) {
         const vy = Math.max(c.bounce, 0.8 * -p.vy);
         this.ctx.impulse(0, vy, 0);
         this.ctx.squash(-0.3);
         fx.boing(vy);
         const cm = this.village.canopies.find((x) => x.id === c.id);
         if (cm) cm.wobble = 1;
-        this.sparks.burst({ at: { x: p.x, y: c.y + 0.2, z: p.z }, count: 14, shape: 'ring', speed: [2, 4], color: [0xffd24a, 0xffffff], size: [0.08, 0.16], life: [0.3, 0.6], drag: 2 });
+        this.sparks.burst({ at: { x: p.x, y: top + 0.2, z: p.z }, count: 14, shape: 'ring', speed: [2, 4], color: [0xffd24a, 0xffffff], size: [0.08, 0.16], life: [0.3, 0.6], drag: 2 });
         this.ctx.shake(0.08);
-        this.words.word('BOING!', { x: p.x, y: c.y + 0.8, z: p.z }, { color: '#9fe3ff', size: 0.9 });
+        this.words.word('BOING!', { x: p.x, y: top + 0.8, z: p.z }, { color: '#9fe3ff', size: 0.9 });
         return;
       }
     }

@@ -255,7 +255,7 @@ export class RocketRings implements Trial {
     }
     const ticket = await this.ticket;
     const posted = done && full ? await w.boards.post('rings', ms, ticket) : null;
-    await new Promise((r) => setTimeout(r, 1200));
+    await new Promise((r) => setTimeout(r, 2100));
     const choice = await w.hud.results({
       title: done ? 'Rally finished!' : 'Out of time',
       subtitle: done ? `${this.hoops.length} rings in ${formatLap(ms)}` : 'The rings will be here when you come back.',

@@ -36,6 +36,13 @@ export interface Canopy {
   y: number;
   /** Bounce speed, m/s (at least). */
   bounce: number;
+  /** The canvas rises this much to its centre (a cone or a ridge). */
+  peak: number;
+}
+
+/** Height of a canopy's surface at a distance from its centre. */
+export function canopyTop(c: Canopy, d: number): number {
+  return c.y + c.peak * Math.max(0, 1 - d / c.r);
 }
 
 export interface Pt {
@@ -189,10 +196,10 @@ export function villageCircles(): LCircle[] {
 
 export function canopies(): Canopy[] {
   return [
-    { id: 'gran-awning', x: 3.6, z: 18.5, r: 1.9, y: 2.6, bounce: 9 },
-    { id: 'bandstand', x: BANDSTAND.x, z: BANDSTAND.z, r: 4.6, y: BANDSTAND.canopy, bounce: 9.5 },
-    { id: 'umbrella', x: 14, z: 3, r: 1.6, y: 2.7, bounce: 9 },
-    { id: 'sprout-awning', x: -17.8, z: 9, r: 1.9, y: 2.6, bounce: 9 },
+    { id: 'gran-awning', x: 3.6, z: 18.5, r: 1.9, y: 2.6, bounce: 9, peak: 0.45 },
+    { id: 'bandstand', x: BANDSTAND.x, z: BANDSTAND.z, r: 4.6, y: BANDSTAND.canopy, bounce: 9.5, peak: 1.6 },
+    { id: 'umbrella', x: 14, z: 3, r: 1.6, y: 2.7, bounce: 9, peak: 0.6 },
+    { id: 'sprout-awning', x: -17.8, z: 9, r: 1.9, y: 2.6, bounce: 9, peak: 0.45 },
   ];
 }
 

@@ -100,8 +100,6 @@ export function buildLibrary(parent: THREE.Object3D): LibrarySet {
   P.box(wood, 0x6b4a3a, LIB.cx, 0, LIB.z0 + 0.03, LIB.x1 - LIB.x0, 1.1, 0.06, { tile: 1, base: null });
   P.box(wood, 0x6b4a3a, LIB.x1 - 0.03, 0, -5.25, 0.06, 1.1, 7.5, { tile: 1, base: null });
   P.box(wood, 0x6b4a3a, LIB.x1 - 0.03, 0, 5.25, 0.06, 1.1, 7.5, { tile: 1, base: null });
-  // Beams across the top (the fans hang from them).
-  for (const x of [195, 206]) P.box(wood, 0x5a3424, x, H - 0.1, 0, 0.35, 0.35, LIB.z1 - LIB.z0, { base: null, tile: 1 });
   // Shelves with spines on both long faces and coloured end caps with aisle letters.
   const capCols = [0xe8574a, 0x4aa3df, 0x3fb68b, 0xffd45c, 0x8a6bd1];
   const shelfList = shelves();
@@ -251,8 +249,8 @@ export function buildLibrary(parent: THREE.Object3D): LibrarySet {
       arm.rotation.y = (i / 4) * Math.PI * 2;
       f.add(arm);
     }
-    const rodf = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.5, 6), hub.material);
-    rodf.position.y = 0.3;
+    const rodf = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.4, 6), hub.material);
+    rodf.position.y = 0.75;
     f.add(rodf);
     f.position.set(x, 3.9, 0);
     group.add(f);

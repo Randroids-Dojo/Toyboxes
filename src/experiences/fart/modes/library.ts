@@ -409,7 +409,7 @@ export class LibraryTrial implements Trial {
     const res = w.trialBeans('library', beans, full ? score : null, 'higher');
     const ticket = await this.ticket;
     const posted = full && score > 0 ? await w.boards.post('library', score, ticket) : null;
-    await new Promise((r) => setTimeout(r, 1400));
+    await new Promise((r) => setTimeout(r, 2100));
     const choice = await w.hud.results({
       title: why === 'done' ? 'All shelved!' : why === 'strikes' ? 'Shown the door' : why === 'overflow' ? 'The big one escaped' : 'Closing time',
       subtitle: `${this.sim.shelved} of ${this.sim.books.length} books shelved`,

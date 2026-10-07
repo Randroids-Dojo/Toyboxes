@@ -396,7 +396,7 @@ export class BandBash implements Trial {
     const mode = this.song === 'march' ? 'band-march' : 'band-polka';
     const ticket = await this.ticket;
     const posted = full ? await w.boards.post(mode, result.score, ticket, { song: this.song, hits: this.hits, held: this.held }) : null;
-    await new Promise((r) => setTimeout(r, 1300));
+    await new Promise((r) => setTimeout(r, 2100));
     w.ctx.pose(null);
     const choice = await w.hud.results({
       title: beans >= 1 ? 'Bravo!' : 'The band plays on',
