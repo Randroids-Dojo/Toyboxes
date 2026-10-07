@@ -215,7 +215,7 @@ export function openRaceMenu(w: KartWorld): void {
       tag('boards')(button('Boards', () => openBoards(w, id), 'ghost')),
       tag('warm')(button('Warm-up lap', () => {
         ui.close(panel);
-        void w.startSession({ kind: 'warmup', circuit: w.c.id, cls: 'windup', items: false });
+        void w.startSession({ kind: 'warmup', circuit: w.circuits[0], cls: 'windup', items: true });
       }, 'ghost')),
     );
     const out = h(

@@ -30,6 +30,7 @@ import { DRIVERS, Driver, driverById, type Mood } from './drivers';
 import { Env } from './env';
 import { ITEM_NAMES, RaceHud } from './hud';
 import { Items } from './items';
+import { Bubble, TipBoards, boltLine, type Controls } from './onboarding';
 import { openRaceMenu, showResults, showStandings, openBoards, openTrophies, openSketch, podiumCard, warmupDone, confirmLeave } from './menu';
 import { RaceKart, WheelPool } from './racekart';
 import { newRacer, progress, type Racer } from './racer';
@@ -128,6 +129,8 @@ export class KartWorld implements SpaceView {
   private rings: Shockwaves;
   private ghostKart: RaceKart;
   private grabber: THREE.Group;
+  private tips: TipBoards | null = null;
+  private bubble = new Bubble();
   private track: number[];
   private sketchLaps: number;
   session: Session | null = null;
@@ -209,6 +212,7 @@ export class KartWorld implements SpaceView {
     this.ghostKart.setShadowBlob(false);
     this.scene.add(this.ghostKart.root);
     this.wheels.set([mine, ...this.cpus.map((r) => r.kart)]);
+    this.cpus[0].kart.root.add(this.bubble.sprite);
     this.grabber = this.buildGrabber();
     this.scene.add(this.grabber);
 
@@ -274,6 +278,13 @@ export class KartWorld implements SpaceView {
     this.scene.add(this.cs.group);
     this.colliders.length = 0;
     this.colliders.push(...this.cs.colliders);
+    // Tip boards on the home circuit, where the warm-up lap runs.
+    this.tips?.dispose();
+    this.tips = id === this.circuits[0] ? new TipBoards(this.c) : null;
+    if (this.tips) {
+      this.scene.add(this.tips.group);
+      this.colliders.push(...this.tips.colliders);
+    }
     this.items = new Items(this.c, () => this.rnd(), this.itemEvents());
     this.items.enabled = false;
     this.items.show(false);
@@ -677,7 +688,7 @@ export class KartWorld implements SpaceView {
     };
     if (opts.kind === 'warmup' || opts.kind === 'trial') this.session.shotLen = 0;
     const cls = CLASSES[opts.cls];
-    this.items.enabled = opts.items && (opts.kind === 'cup' || opts.kind === 'single');
+    this.items.enabled = opts.items && (opts.kind === 'cup' || opts.kind === 'single' || opts.kind === 'warmup');
     this.items.show(this.items.enabled);
     // Karts take this class's numbers.
     const trial = opts.kind === 'trial';
@@ -1707,7 +1718,7 @@ export class KartWorld implements SpaceView {
       setTimeout(() => {
         if (this.disposed || !this.kart.ridden || this.session) return;
         void confirmLeave(this, 'Warm-up lap with Bolt?', 'Bolt shows you the boost pads, drifting and items. One lap.', 'Yes please', 'Skip').then((ok) => {
-          if (ok && this.kart.ridden && !this.session) void this.startSession({ kind: 'warmup', circuit: this.c.id, cls: 'windup', items: false });
+          if (ok && this.kart.ridden && !this.session) void this.startSession({ kind: 'warmup', circuit: this.circuits[0], cls: 'windup', items: true });
           else {
             this.save.d.warmupDone = true;
             this.save.save();
@@ -1776,6 +1787,15 @@ export class KartWorld implements SpaceView {
     this.rings.update(dt);
     this.fovKick = Math.max(0, this.fovKick - dt * 9);
     this.paintHud(dt);
+    // Onboarding: tip boards for this device, and Bolt talking you round the warm-up lap.
+    const warm = s?.opts.kind === 'warmup';
+    if (this.tips) {
+      const controls: Controls = this.kart.assists.remote ? 'remote' : this.ctx.ui.device;
+      this.tips.update(controls);
+      this.tips.show(warm || (!s && !this.save.d.warmupDone && this.kart.ridden));
+    }
+    this.bubble.sprite.visible = warm && s.state !== 'done';
+    if (warm) this.bubble.say(boltLine(this.cpus[0].s, { drifted: this.save.d.learned.drift, turbo: this.save.d.learned.turbo, item: this.save.d.learned.item }));
     // The pit ring pulses.
     const ring = this.cs.paddock.ring;
     if (ring.visible) (ring.material as THREE.MeshBasicMaterial).opacity = 0.45 + Math.sin(t * 4) * 0.25;
@@ -1912,6 +1932,8 @@ export class KartWorld implements SpaceView {
     this.hud.dispose();
     this.race.dispose();
     this.items?.dispose();
+    this.tips?.dispose();
+    this.bubble.dispose();
     this.cs?.dispose();
     this.env.dispose();
     this.wheels.dispose();
