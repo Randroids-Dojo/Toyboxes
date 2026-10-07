@@ -514,7 +514,8 @@ export class FartSimulator implements SpaceView {
   kickAction(p: PlayerState): { label: string; run: () => void } | null {
     if (this.trial?.kickAction) return this.trial.kickAction(p);
     if (!this.tooting() || this.tootOnInteract) return null;
-    return { label: this.mover.label(p), run: () => this.press('kick') };
+    // The round touch button only fits a word; keyboards and pads get the full hint.
+    return { label: this.ctx.ui.device === 'touch' ? (p.grounded ? 'Toot' : 'Boost') : this.mover.label(p), run: () => this.press('kick') };
   }
 
   jumpAction(p: PlayerState): { label: string; run: () => void } | null {

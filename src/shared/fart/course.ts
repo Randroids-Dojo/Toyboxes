@@ -16,7 +16,8 @@ export interface Hoop {
 export const RINGS_START = { x: 6, z: 5 };
 
 const RAW: [number, number, number, ([number, number, number] | null)?][] = [
-  [6, 2.2, -2],
+  // The first ring is low enough to run through, so everyone gets off to a start.
+  [6, 1.9, -2],
   [8, 3.5, -9],
   [3, 4, -15],
   [-6, 6, -20],

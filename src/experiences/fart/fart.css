@@ -750,3 +750,51 @@ html.reduce-motion .pf-meter.hot,
 html.reduce-motion .pf-wind.wobble svg {
   animation: none;
 }
+
+/* ---- narrow screens (phones in portrait) */
+
+@media (max-width: 560px) {
+  .pf-jar {
+    top: calc(62px + var(--safe-t));
+    right: calc(12px + var(--safe-r));
+    font-size: 0.95rem;
+  }
+
+  .pf-chip {
+    top: calc(108px + var(--safe-t));
+    max-width: 44vw;
+    font-size: 0.72rem;
+  }
+
+  .pf-tummy {
+    top: calc(62px + var(--safe-t));
+    padding: 4px 10px 4px 5px;
+  }
+
+  .pf-tank {
+    width: 96px;
+  }
+
+  .pf-note {
+    top: calc(150px + var(--safe-t));
+  }
+
+  .pf-wind {
+    top: calc(176px + var(--safe-t));
+  }
+}
+
+body[data-device='touch'] .puff.trial .pf-tummy {
+  top: calc(170px + var(--safe-t));
+}
+
+body[data-device='touch'] .puff.trial .pf-jar {
+  top: calc(10px + var(--safe-t));
+  right: calc(68px + var(--safe-r));
+}
+
+body[data-device='touch'] .pf-sheet {
+  bottom: auto;
+  top: calc(168px + var(--safe-t));
+  height: 64px;
+}

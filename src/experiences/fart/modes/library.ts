@@ -189,7 +189,7 @@ export class LibraryTrial implements Trial {
 
   kickAction(): { label: string; run: () => void } | null {
     if (this.phase !== 'run' || this.tootOnInteract) return null;
-    return { label: this.label(), run: () => this.press('kick') };
+    return { label: this.w.ctx.ui.device === 'touch' ? (this.btn?.squeezing || this.tapSqueeze ? 'Shh...' : 'Toot') : this.label(), run: () => this.press('kick') };
   }
 
   private label(): string {
@@ -561,6 +561,11 @@ export class LibraryTrial implements Trial {
       readers: s.readers.map((r) => ({ id: r.id, state: r.state, x: +r.x.toFixed(2), z: +r.z.toFixed(2) })),
       ended: s.ended?.why ?? null,
     };
+  }
+
+  /** Playtests: set the pressure. */
+  debugPressure(p: number): void {
+    this.sim.pressure = p;
   }
 
   /** Playtests: fewer books. */

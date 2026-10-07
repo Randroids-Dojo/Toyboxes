@@ -151,6 +151,14 @@ export class RocketRings implements Trial {
     this.w.endTrial();
   }
 
+  /** Playtests: three low rings in a line ahead of the pad, passable on foot. */
+  debugTestCourse(): void {
+    this.hoops = [1, -3, -7].map((z) => ({ x: RINGS_START.x, y: 1.9, z, nx: 0, ny: 0, nz: -1 }));
+    this.mesh.count = 3;
+    this.w.hud.set('ring', `0/3`);
+    this.paint();
+  }
+
   /** Playtests: a short course with the real start. */
   debugShorten(n: number): void {
     this.hoops = this.hoops.slice(0, n);

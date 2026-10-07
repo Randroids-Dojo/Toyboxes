@@ -189,7 +189,9 @@ export class BandBash implements Trial {
   }
 
   cameraShot(): CameraShot | null {
-    return { position: new THREE.Vector3(-5.6, 3.3, -10.6), target: new THREE.Vector3(-12.3, 1.7, -6.2), fov: innerWidth < innerHeight ? 66 : 52, blend: 1 };
+    // Portrait screens are narrow: frame you and the Maestro rather than the whole stand.
+    if (innerWidth < innerHeight) return { position: new THREE.Vector3(-6.4, 3.0, -11.4), target: new THREE.Vector3(-10.9, 1.5, -7.0), fov: 62, blend: 1 };
+    return { position: new THREE.Vector3(-5.6, 3.3, -10.6), target: new THREE.Vector3(-12.3, 1.7, -6.2), fov: 52, blend: 1 };
   }
 
   /** The heard beat at the moment of a press (event time), with your offset. */
