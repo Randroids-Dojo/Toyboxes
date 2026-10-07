@@ -1,0 +1,678 @@
+/* Club Nova (src/experiences/neon): beat bar, rival meter, combo, judges'
+   cards, hint bubbles, the tap zone, the laser tag and duel HUDs and the
+   menus. Kept inside a 5% safe margin for TV overscan. */
+
+.nova-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  --nova-violet: #8668cf;
+  --nova-lilac: #b49cff;
+  --nova-pink: #ff3dae;
+  --nova-cyan: #2de8ff;
+  --nova-lime: #a8ff3e;
+  --nova-gold: #ffc93c;
+  --nova-panel: rgba(20, 12, 52, 0.92);
+}
+
+/* ---- tap zone: the whole screen below the menu corner during rhythm play */
+
+.nova-tap {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  top: calc(64px + var(--safe-t));
+  pointer-events: none;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.nova-tap.on {
+  pointer-events: auto;
+}
+
+/* ---- beat bar */
+
+.nova-bar {
+  position: absolute;
+  left: max(5vw, calc(8px + var(--safe-l)));
+  right: max(5vw, calc(8px + var(--safe-r)));
+  bottom: max(7vh, calc(24px + var(--safe-b)));
+  height: clamp(86px, 15vh, 128px);
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.nova-bar.on {
+  opacity: 1;
+  transform: none;
+}
+
+.nova-bar canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* ---- rival meter (tug of war) */
+
+.nova-rival {
+  position: absolute;
+  top: calc(122px + var(--safe-t));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: min(420px, 82vw);
+  font: 400 0.95rem var(--display);
+  color: #fff4fe;
+  text-shadow: 0 0 8px rgba(134, 104, 207, 0.9);
+}
+
+.nova-rival .track {
+  flex: 1;
+  height: 12px;
+  border-radius: 99px;
+  background: var(--nova-pink);
+  box-shadow: 0 0 12px rgba(255, 61, 174, 0.6);
+  overflow: hidden;
+  border: 2px solid rgba(255, 244, 254, 0.7);
+}
+
+.nova-rival .track i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--nova-cyan), var(--nova-lilac));
+  transform-origin: left center;
+  transition: transform 0.25s ease;
+}
+
+.nova-rival.ahead .you {
+  color: var(--nova-cyan);
+}
+
+/* ---- combo counter by the dancer */
+
+.nova-combo {
+  position: absolute;
+  right: max(6vw, calc(14px + var(--safe-r)));
+  top: 38%;
+  font: 400 clamp(2.4rem, 7vw, 4.2rem) var(--display);
+  color: #fff4fe;
+  text-shadow: 0 0 14px var(--nova-violet), 0 3px 0 #120b33;
+  transition: transform 0.08s ease;
+}
+
+.nova-combo:not(:empty)::after {
+  content: 'combo';
+  display: block;
+  font-size: 0.32em;
+  text-align: center;
+  letter-spacing: 0.12em;
+  opacity: 0.8;
+}
+
+.nova-combo.hot {
+  color: var(--nova-gold);
+  text-shadow: 0 0 18px var(--nova-pink), 0 3px 0 #120b33;
+}
+
+/* ---- the judges' cards */
+
+.nova-cards {
+  position: absolute;
+  left: 50%;
+  bottom: max(10vh, calc(30px + var(--safe-b)));
+  transform: translateX(-50%);
+  display: flex;
+  gap: 14px;
+  align-items: flex-end;
+  perspective: 600px;
+}
+
+.nova-card {
+  position: relative;
+  width: clamp(76px, 18vw, 120px);
+  height: clamp(100px, 23vw, 150px);
+  transform-style: preserve-3d;
+  transition: transform 0.45s cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+
+.nova-card .back,
+.nova-card .front {
+  position: absolute;
+  inset: 0;
+  border-radius: 14px;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  backface-visibility: hidden;
+  border: 3px solid #05030b;
+  box-shadow: 0 6px 0 #05030b;
+}
+
+.nova-card .back {
+  background: repeating-linear-gradient(45deg, #2a1a66, #2a1a66 10px, #1b1147 10px, #1b1147 20px);
+  color: var(--nova-lilac);
+  font: 400 2.4rem var(--display);
+}
+
+.nova-card .front {
+  transform: rotateY(180deg);
+  background: #fff4fe;
+  color: #120b33;
+}
+
+.nova-card .front small {
+  font: 700 0.78rem var(--body);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.nova-card .front b {
+  font: 400 clamp(2.2rem, 7vw, 3.4rem) var(--display);
+  line-height: 1;
+}
+
+.nova-card.tempo .front {
+  border-color: var(--nova-cyan);
+}
+
+.nova-card.groove .front {
+  border-color: var(--nova-pink);
+}
+
+.nova-card.sparkle .front {
+  border-color: var(--nova-gold);
+}
+
+.nova-card.flip {
+  transform: rotateY(180deg);
+}
+
+.nova-total {
+  display: grid;
+  text-align: center;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: var(--nova-panel);
+  border: 2px solid var(--nova-violet);
+  color: #fff4fe;
+  opacity: 0;
+  transform: scale(0.6);
+  transition: opacity 0.3s ease, transform 0.4s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+
+.nova-total small {
+  font: 700 0.75rem var(--body);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.nova-total b {
+  font: 400 1.9rem var(--display);
+  color: var(--nova-gold);
+}
+
+.nova-cards.total .nova-total {
+  opacity: 1;
+  transform: none;
+}
+
+/* ---- hint bubbles (six words or fewer, shown once) */
+
+.nova-hint {
+  position: absolute;
+  left: 50%;
+  top: 30%;
+  transform: translate(-50%, 0) scale(0.8);
+  padding: 10px 18px;
+  border-radius: 99px;
+  background: var(--nova-panel);
+  border: 2px solid var(--nova-lilac);
+  color: #fff4fe;
+  font: 400 1.25rem var(--display);
+  box-shadow: 0 0 24px rgba(134, 104, 207, 0.6);
+  opacity: 0;
+  white-space: nowrap;
+}
+
+.nova-hint.on {
+  animation: nova-hint 3.2s ease forwards;
+}
+
+@keyframes nova-hint {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 10px) scale(0.8);
+  }
+  10%,
+  80% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -10px) scale(1);
+  }
+}
+
+/* ---- menus */
+
+.nova-menu {
+  width: min(560px, calc(100vw - 28px));
+  --xk-card-accent: #b49cff;
+  --xk-card-accent-2: #ff3dae;
+}
+
+.nova-songs {
+  display: grid;
+  gap: 10px;
+  margin: 10px 0 14px;
+}
+
+.nova-song {
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(134, 104, 207, 0.14);
+  border: 2px solid rgba(180, 156, 255, 0.3);
+}
+
+.nova-song.locked {
+  opacity: 0.55;
+}
+
+.nova-song-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.nova-song-head b {
+  font: 400 1.25rem var(--display);
+  color: #fff4fe;
+}
+
+.nova-song-head small {
+  opacity: 0.75;
+  text-align: right;
+}
+
+.nova-song-diffs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.nova-song-diffs .btn {
+  flex: 1 1 120px;
+  padding-left: 8px;
+  padding-right: 8px;
+  font-size: 0.95rem;
+}
+
+.nova-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+  margin: 8px 0 14px;
+}
+
+.nova-grid .btn {
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  padding: 10px 12px;
+}
+
+.nova-grid .btn small {
+  font: 600 0.78rem var(--body);
+  opacity: 0.8;
+}
+
+.nova-grid .btn.on {
+  outline: 3px solid var(--nova-gold);
+}
+
+.nova-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+}
+
+/* ---- laser tag HUD */
+
+.nova-reticle {
+  position: absolute;
+  width: 64px;
+  height: 64px;
+  margin: -32px 0 0 -32px;
+  left: 0;
+  top: 0;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.nova-reticle.on {
+  opacity: 1;
+}
+
+.nova-reticle i {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border: 3px solid var(--nova-lime);
+  filter: drop-shadow(0 0 4px var(--nova-lime));
+}
+
+.nova-reticle i:nth-child(1) {
+  left: 0;
+  top: 0;
+  border-right: 0;
+  border-bottom: 0;
+}
+
+.nova-reticle i:nth-child(2) {
+  right: 0;
+  top: 0;
+  border-left: 0;
+  border-bottom: 0;
+}
+
+.nova-reticle i:nth-child(3) {
+  left: 0;
+  bottom: 0;
+  border-right: 0;
+  border-top: 0;
+}
+
+.nova-reticle i:nth-child(4) {
+  right: 0;
+  bottom: 0;
+  border-left: 0;
+  border-top: 0;
+}
+
+.nova-reticle b {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 6px);
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  border-radius: 50%;
+  background: #fff4fe;
+  transition: transform 0.08s ease;
+}
+
+.nova-reticle.beat b {
+  background: var(--nova-lime);
+  transform: scale(1.6);
+}
+
+.nova-reticle.bank i {
+  border-color: var(--nova-gold);
+  filter: drop-shadow(0 0 4px var(--nova-gold));
+}
+
+.nova-pips {
+  position: absolute;
+  left: max(5vw, calc(14px + var(--safe-l)));
+  bottom: max(6vh, calc(18px + var(--safe-b)));
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 16px;
+  background: var(--nova-panel);
+  border: 2px solid rgba(45, 232, 255, 0.6);
+}
+
+.nova-pips i {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--nova-cyan);
+  box-shadow: 0 0 10px var(--nova-cyan);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.nova-pips i.off {
+  opacity: 0.18;
+  transform: scale(0.7);
+  box-shadow: none;
+}
+
+.nova-pips .heat {
+  width: 70px;
+  height: 8px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+  margin-left: 6px;
+}
+
+.nova-pips .heat b {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--nova-lime), var(--nova-gold), #ff8a3d);
+  transform-origin: left center;
+}
+
+.nova-pips .heat.hot b {
+  background: #ff8a3d;
+  animation: nova-blink 0.25s steps(2) infinite;
+}
+
+.nova-pips .power {
+  font: 400 0.9rem var(--display);
+  color: var(--nova-gold);
+}
+
+@keyframes nova-blink {
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.nova-radar {
+  position: absolute;
+  right: max(5vw, calc(12px + var(--safe-r)));
+  top: calc(124px + var(--safe-t));
+  width: 96px;
+  height: 96px;
+  border-radius: 16px;
+  background: var(--nova-panel);
+  border: 2px solid rgba(180, 156, 255, 0.5);
+}
+
+.nova-radar canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.nova-edge {
+  position: absolute;
+  width: 0;
+  height: 0;
+  border-left: 14px solid transparent;
+  border-right: 14px solid transparent;
+  border-bottom: 24px solid var(--nova-pink);
+  filter: drop-shadow(0 0 8px var(--nova-pink));
+  margin: -12px 0 0 -14px;
+  animation: nova-blink 0.3s steps(2) infinite;
+}
+
+.nova-vignette {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(255, 61, 174, 0.55));
+}
+
+.nova-vignette.on {
+  opacity: 1;
+  transition: none;
+}
+
+.nova-out {
+  position: absolute;
+  inset: 0;
+  backdrop-filter: grayscale(0.85);
+  -webkit-backdrop-filter: grayscale(0.85);
+  background: rgba(10, 6, 32, 0.25);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.nova-out.on {
+  opacity: 1;
+}
+
+/* ---- duel HUD */
+
+.nova-duel {
+  position: absolute;
+  left: 50%;
+  top: calc(66px + var(--safe-t));
+  transform: translateX(-50%);
+  width: min(620px, 90vw);
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 10px;
+  align-items: center;
+  font: 400 1rem var(--display);
+  color: #fff4fe;
+}
+
+.nova-duel .side {
+  display: grid;
+  gap: 4px;
+}
+
+.nova-duel .side.them {
+  text-align: right;
+}
+
+.nova-duel .bar {
+  height: 14px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 2px solid rgba(255, 244, 254, 0.6);
+  overflow: hidden;
+  position: relative;
+}
+
+.nova-duel .bar b,
+.nova-duel .bar s {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  transform-origin: left center;
+}
+
+.nova-duel .them .bar b,
+.nova-duel .them .bar s {
+  transform-origin: right center;
+}
+
+.nova-duel .bar s {
+  background: rgba(255, 255, 255, 0.55);
+  transition: transform 0.6s ease 0.25s;
+}
+
+.nova-duel .bar b {
+  transition: transform 0.12s ease;
+}
+
+.nova-duel .you .bar b {
+  background: var(--nova-cyan);
+}
+
+.nova-duel .them .bar b {
+  background: var(--nova-pink);
+}
+
+.nova-duel .phase {
+  padding: 6px 14px;
+  border-radius: 99px;
+  background: var(--nova-panel);
+  border: 2px solid var(--nova-lilac);
+  min-width: 96px;
+  text-align: center;
+}
+
+.nova-duel .phase.guard {
+  border-color: var(--nova-cyan);
+  color: var(--nova-cyan);
+}
+
+.nova-duel .phase.strike {
+  border-color: var(--nova-pink);
+  color: var(--nova-pink);
+}
+
+.nova-duel .pips {
+  display: flex;
+  gap: 5px;
+}
+
+.nova-duel .pips i {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--nova-cyan);
+  box-shadow: 0 0 8px var(--nova-cyan);
+}
+
+.nova-duel .pips i.off {
+  opacity: 0.2;
+  box-shadow: none;
+}
+
+.nova-ring {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: 50%;
+  border: 4px solid #fff4fe;
+  pointer-events: none;
+  box-shadow: 0 0 12px currentColor, inset 0 0 12px currentColor;
+}
+
+.nova-target {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 28px;
+  height: 28px;
+  margin: -14px 0 0 -14px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff4fe 20%, var(--nova-pink) 60%, transparent 70%);
+  pointer-events: none;
+}
+
+@media (max-width: 520px) {
+  .nova-combo {
+    top: 30%;
+  }
+  .nova-rival {
+    top: calc(118px + var(--safe-t));
+  }
+  .nova-radar {
+    width: 76px;
+    height: 76px;
+  }
+}

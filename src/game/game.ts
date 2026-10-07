@@ -22,7 +22,7 @@ import { Vehicle } from '../world/vehicles';
 import type { ExperienceCtx } from '../experiences/common';
 import { Casino } from '../experiences/casino';
 import { Galaxy } from '../experiences/galaxy';
-import { NeonParty } from '../experiences/neon';
+import { NeonParty } from '../experiences/neon/index';
 import { FartSimulator } from '../experiences/fart';
 import { KartTrack } from '../experiences/kart';
 import type { CameraShot, CaptureLabels, PlayerState, SpaceView, Tier } from '../world/space';
