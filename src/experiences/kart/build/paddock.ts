@@ -97,10 +97,12 @@ export function buildPaddock(c: Circuit, batch: Batch, group: THREE.Group, tex: 
     colliders.push(box((a.x + b.x) / 2, (a.z + b.z) / 2, 0.2, len / 2 + 0.2, Math.atan2(b.x - a.x, b.z - a.z), 1.4, 0.3, false));
   };
   runFence(-H, gate0, PADDOCK.fence, PADDOCK.fence);
-  runFence(gate1, H, PADDOCK.fence, PADDOCK.fence);
+  // The gap can reach the corner: then the side fence brings its own corner post.
+  const rightRun = H - gate1 > 0.5;
+  if (rightRun) runFence(gate1, H, PADDOCK.fence, PADDOCK.fence);
   // The side fences start at the corner posts the front fence already has.
   runFence(-H, -H, PADDOCK.fence, PADDOCK.back, false);
-  runFence(H, H, PADDOCK.fence, PADDOCK.back, false);
+  runFence(H, H, PADDOCK.fence, PADDOCK.back, !rightRun);
   void fence;
 
   // ---- Boom gate at the pit exit: a collider on foot, lifted for karts.
@@ -110,7 +112,7 @@ export function buildPaddock(c: Circuit, batch: Batch, group: THREE.Group, tex: 
   arm.position.set(gp.x, 1.15, gp.z);
   arm.rotation.y = yawOf(1, 0) - Math.PI / 2;
   const armShape = new Shape();
-  for (let i = 0; i < 8; i++) armShape.at(rbox(1.0, 0.16, 0.16, 0.05), i % 2 ? PAL.cream : PAL.tomato, 0.5 + i * 1.0, 0, 0);
+  for (let i = 0; i < 7; i++) armShape.at(rbox(1.0, 0.16, 0.16, 0.05), i % 2 ? PAL.cream : PAL.tomato, 0.5 + i * 1.0, 0, 0);
   const armMesh = armShape.mesh('plastic');
   arm.add(armMesh);
   group.add(arm);

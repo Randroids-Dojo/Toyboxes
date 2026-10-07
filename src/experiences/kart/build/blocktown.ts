@@ -251,13 +251,18 @@ export function dressBlockTown(d: Dresser, scene: CircuitScene, tex: TexCache): 
     d.claim(q.x, q.z, 22);
   }
 
-  // ---- TOYBOX arch over the main straight at s 30.
+  // ---- TOYBOX arch over the main straight: at s 30, or further on where the
+  // paddock (on some layouts beside the straight) leaves room for both pillars.
   {
-    const s = 30;
-    const f = c.frame(s);
-    const yaw = Math.atan2(f.tx, f.tz);
     const side = EDGE + 5.2;
     const size = 2.6;
+    const clear = (s: number) => {
+      const f = c.frame(s);
+      return [1, -1].every((sd) => d.free(f.x + f.nx * sd * side, f.z + f.nz * sd * side, 1.9, 0));
+    };
+    const s = [30, 64, 68].find(clear) ?? 30;
+    const f = c.frame(s);
+    const yaw = Math.atan2(f.tx, f.tz);
     for (const sd of [1, -1]) {
       const px = f.x + f.nx * sd * side;
       const pz = f.z + f.nz * sd * side;
