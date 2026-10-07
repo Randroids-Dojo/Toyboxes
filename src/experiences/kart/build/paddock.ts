@@ -10,23 +10,23 @@ import * as THREE from 'three';
 import type { Theme } from '../../../shared/kart/circuits';
 import { box, type Collider } from '../../../world/physics';
 import type { Circuit } from '../circuit';
-import { PAL, flag, bunting } from './props';
-import { Batch, Shape, ball, rbox, torus, xform } from './shape';
+import { PAL, flag } from './props';
+import { Batch, Shape, ball, cone, cyl, rbox, torus, xform } from './shape';
 import { LAYER, decal } from './road';
 import type { TexCache } from './textures';
 
 export const PADDOCK = {
-  arrival: [-4, 30] as const,
-  kart: [-4, 20.5] as const,
-  door: [-4, 39.2] as const,
-  tower: [19, 23] as const,
-  podium: [-23, 23] as const,
-  cabinet: [-15, 37.5] as const,
-  sketch: [8, 37.5] as const,
+  arrival: [-4, 24.5] as const,
+  kart: [-4, 17] as const,
+  door: [-4, 32.6] as const,
+  tower: [17, 21] as const,
+  podium: [-21, 21] as const,
+  cabinet: [-15, 31] as const,
+  sketch: [8, 31] as const,
   gate: [30, 11] as const,
   fence: 11,
-  back: 41,
-  half: 36,
+  back: 34,
+  half: 34,
 };
 
 export interface PaddockBuild {
@@ -67,16 +67,12 @@ export function buildPaddock(c: Circuit, batch: Batch, group: THREE.Group, tex: 
   };
   const H = PADDOCK.half;
 
-  // ---- Floor: a big printed pad just above the ground (prints layer).
-  const floorTex = tex.get(`pfloor-${c.theme}`, 256, 256, (g, w, h) => {
-    g.fillStyle = look.floor;
-    g.fillRect(0, 0, w, h);
-    g.fillStyle = look.floorB;
-    for (let i = 0; i < 8; i++) g.fillRect(0, (i * h) / 8, w, h / 16);
-    g.fillStyle = 'rgba(255,255,255,0.06)';
-    for (let i = 0; i < 300; i++) g.fillRect(Math.random() * w, Math.random() * h, 2, 2);
-  }, { repeat: [8, 4] });
-  const floorGeo = new THREE.PlaneGeometry(H * 2, PADDOCK.back - PADDOCK.fence + 2).rotateX(-Math.PI / 2);
+  // ---- Floor: a printed mat just above the ground (prints layer), one big picture per theme.
+  const FW = H * 2;
+  const FD = PADDOCK.back - PADDOCK.fence + 2;
+  const floorTex = tex.get(`pfloor-${c.theme}`, 1024, 512, (g, w, h) => paintFloor(g, w, h, c.theme, look));
+  floorTex.wrapS = floorTex.wrapT = THREE.ClampToEdgeWrapping;
+  const floorGeo = new THREE.PlaneGeometry(FW, FD).rotateX(-Math.PI / 2);
   const fc = P(0, (PADDOCK.back + PADDOCK.fence) / 2 + 0.5);
   floorGeo.rotateY(yawOf(1, 0) - Math.PI / 2);
   floorGeo.translate(fc.x, LAYER.prints, fc.z);
@@ -263,9 +259,42 @@ export function buildPaddock(c: Circuit, batch: Batch, group: THREE.Group, tex: 
   doorSign.rotation.y = dyaw;
   group.add(doorSign);
 
-  // ---- Bunting and flags along the fence.
-  for (let u = -30; u <= 22; u += 13) batch.shape(bunting(12, 0.6), at(u + 6, PADDOCK.fence, 3.2, 1, 0).multiply(xform(0, 0, 0, 0, Math.PI / 2, 0)), 'plastic', { cast: false });
+  // ---- Flags along the fence, and the pit garage over your kart.
   for (const u of [-34, -17, 0, 17, 26]) batch.shape(flag([PAL.tomato, PAL.sky, PAL.sun, PAL.mint, PAL.gum][Math.abs(u) % 5], 3.4), at(u, PADDOCK.fence, 0, 1, 0), 'plastic');
+  {
+    // A striped lean-to over the pit box, its two posts on the track side so nothing stands between you and your kart.
+    const k = c.paddock;
+    const cy = Math.atan2(-k.vz, k.vx);
+    const g = new Shape();
+    for (const sz of [-3.2, 3.2]) g.at(cyl(0.12, 0.14, 3.9, 10), look.tower, -3.4, 1.95, sz);
+    const stripes = 8;
+    for (let i = 0; i < stripes; i++) g.at(rbox(5.4, 0.12, 7.4 / stripes + 0.004, 0), i % 2 ? look.accent : PAL.cream, -1.0, 4.0 + i * 0.002, -3.7 + (i + 0.5) * (7.4 / stripes), 0, 0, -0.12);
+    for (let i = 0; i < 9; i++) g.at(cone(0.42, 0.6, 3), i % 2 ? look.accent : look.post, 1.7, 3.45, -3.6 + i * 0.9, Math.PI, Math.PI / 2, 0, 1, 1, 0.25);
+    batch.shape(g, xform(kq.x, 0, kq.z, 0, cy, 0));
+    for (const sz of [-3.2, 3.2]) {
+      const q = { x: kq.x + Math.cos(cy) * -3.4 + Math.sin(cy) * sz, z: kq.z - Math.sin(cy) * -3.4 + Math.cos(cy) * sz };
+      colliders.push({ kind: 'circle', x: q.x, z: q.z, r: 0.18, h: 3.9, bounce: 0.3, blocksCamera: false });
+    }
+    // Pit things: a tool chest, spare wheels, a fuel can and cones.
+    const pit = new Shape();
+    pit.at(rbox(1.4, 1.6, 0.8, 0.08), PAL.tomato, 0, 0.8, 0);
+    for (let k = 0; k < 4; k++) pit.at(rbox(1.3, 0.04, 0.02, 0), '#1d1830', 0, 0.4 + k * 0.35, 0.41);
+    pit.at(rbox(1.5, 0.12, 0.9, 0.04), '#c9c6d6', 0, 1.66, 0);
+    batch.shape(pit, at(-10, 15, 0, 1, 0));
+    colliders.push(box(P(-10, 15).x, P(-10, 15).z, 0.8, 0.5, kyaw, 1.7, 0.3, false));
+    const tyres = new Shape();
+    for (let k = 0; k < 3; k++) tyres.at(torus(0.42, 0.18, 8, 16), '#24212e', 0, 0.18 + k * 0.36, 0, Math.PI / 2, 0, 0);
+    tyres.at(torus(0.42, 0.18, 8, 16), '#24212e', 1.2, 0.18, 0.3, Math.PI / 2, 0, 0);
+    batch.shape(tyres, at(2.5, 15, 0, 1, 0));
+    colliders.push({ kind: 'circle', x: P(2.5, 15).x, z: P(2.5, 15).z, r: 0.7, h: 1.1, bounce: 0.6, blocksCamera: false });
+    const can = new Shape().at(rbox(0.6, 0.8, 0.35, 0.08), PAL.sun, 0, 0.4, 0).at(cyl(0.08, 0.08, 0.3, 8), PAL.ink, 0.18, 0.9, 0, 0, 0, -0.5);
+    batch.shape(can, at(-11.6, 16.2, 0, 1, 0));
+    for (const [u, v] of [
+      [-30, 13.5],
+      [-26, 13.5],
+      [24, 13.5],
+    ]) batch.shape(new Shape().at(cone(0.3, 0.8, 10), '#ff7a3d', 0, 0.45, 0).at(rbox(0.6, 0.06, 0.6, 0), '#ff7a3d', 0, 0.03, 0).at(cyl(0.2, 0.25, 0.12, 10), '#fffaf0', 0, 0.5, 0), at(u, v, 0, 1, 0));
+  }
   void torus;
 
   const arrival = P(PADDOCK.arrival[0], PADDOCK.arrival[1]);
@@ -294,4 +323,132 @@ export function buildPaddock(c: Circuit, batch: Batch, group: THREE.Group, tex: 
       return Math.abs(u) <= H && v >= PADDOCK.fence && v <= PADDOCK.back;
     },
   };
+}
+
+/** The paddock's floor picture: a play mat, a deck, a boardwalk or a rug. */
+function paintFloor(g: CanvasRenderingContext2D, w: number, h: number, theme: Theme, look: { floor: string; floorB: string; accent: string; post: string }): void {
+  const r = (() => {
+    let s = 29;
+    return () => (s = (s * 16807) % 2147483647) / 2147483647;
+  })();
+  if (theme === 'playroom') {
+    // A town play mat: grass blocks, a grey road loop, little houses, a pond and a zebra crossing.
+    g.fillStyle = '#9ad06a';
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = '#86c05a';
+    for (let i = 0; i < 40; i++) g.fillRect(r() * w, r() * h, 30 + r() * 60, 20 + r() * 40);
+    g.strokeStyle = '#8c8a9a';
+    g.lineWidth = 46;
+    g.lineJoin = 'round';
+    g.beginPath();
+    g.roundRect(70, 70, w - 140, h - 140, 60);
+    g.moveTo(w / 2, 70);
+    g.lineTo(w / 2, h - 70);
+    g.stroke();
+    g.strokeStyle = '#fffaf0';
+    g.lineWidth = 4;
+    g.setLineDash([22, 18]);
+    g.beginPath();
+    g.roundRect(70, 70, w - 140, h - 140, 60);
+    g.moveTo(w / 2, 70);
+    g.lineTo(w / 2, h - 70);
+    g.stroke();
+    g.setLineDash([]);
+    g.fillStyle = '#fffaf0';
+    for (let i = 0; i < 6; i++) g.fillRect(w / 2 - 23 + i * 8, h / 2 - 30, 5, 60);
+    g.fillStyle = '#5fb8e8';
+    g.beginPath();
+    g.ellipse(w * 0.75, h * 0.5, 70, 44, 0, 0, Math.PI * 2);
+    g.fill();
+    const houses = ['#e8574a', '#ffd24a', '#4aa3df', '#ef6fa0', '#8a6bd1'];
+    for (let i = 0; i < 9; i++) {
+      const x = 130 + ((i * 113) % (w - 260));
+      const y = i % 2 ? 130 : h - 190;
+      if (Math.abs(x - w / 2) < 60) continue;
+      g.fillStyle = houses[i % 5];
+      g.fillRect(x, y, 46, 40);
+      g.fillStyle = '#7a4a32';
+      g.beginPath();
+      g.moveTo(x - 6, y);
+      g.lineTo(x + 23, y - 24);
+      g.lineTo(x + 52, y);
+      g.fill();
+      g.fillStyle = '#fffaf0';
+      g.fillRect(x + 16, y + 18, 14, 22);
+    }
+    for (let i = 0; i < 14; i++) {
+      g.fillStyle = '#3f9e55';
+      g.beginPath();
+      g.arc(100 + r() * (w - 200), 100 + r() * (h - 200), 10 + r() * 8, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.strokeStyle = '#4aa3df';
+    g.lineWidth = 16;
+    g.strokeRect(8, 8, w - 16, h - 16);
+    return;
+  }
+  if (theme === 'bedroom') {
+    // A round-cornered rug with stars and a moon.
+    g.fillStyle = look.floor;
+    g.fillRect(0, 0, w, h);
+    g.strokeStyle = look.floorB;
+    g.lineWidth = 26;
+    for (let k = 0; k < 3; k++) {
+      g.beginPath();
+      g.roundRect(30 + k * 40, 30 + k * 40, w - 60 - k * 80, h - 60 - k * 80, 60);
+      g.stroke();
+    }
+    for (let i = 0; i < 26; i++) {
+      const x = 80 + r() * (w - 160);
+      const y = 80 + r() * (h - 160);
+      g.fillStyle = ['#7ef0ff', '#ff8fd1', '#ffe9a8', '#b6ff8a'][i % 4];
+      g.beginPath();
+      for (let k = 0; k < 10; k++) {
+        const rr = k % 2 ? 6 : 15;
+        const a = (k / 10) * Math.PI * 2 - Math.PI / 2;
+        g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+      }
+      g.fill();
+    }
+    g.fillStyle = '#ffe9a8';
+    g.beginPath();
+    g.arc(w * 0.82, h * 0.3, 40, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = look.floor;
+    g.beginPath();
+    g.arc(w * 0.82 + 18, h * 0.3 - 10, 36, 0, Math.PI * 2);
+    g.fill();
+    return;
+  }
+  // Decks and boardwalks: long planks with grain, gaps and nail heads.
+  const n = 22;
+  for (let i = 0; i < n; i++) {
+    const y = (i * h) / n;
+    g.fillStyle = i % 3 === 0 ? look.floorB : i % 3 === 1 ? look.floor : '#c49a64';
+    g.fillRect(0, y, w, h / n);
+    for (let k = 0; k < 14; k++) {
+      g.fillStyle = `rgba(80,45,20,${0.05 + r() * 0.07})`;
+      g.fillRect(r() * w, y + r() * (h / n), 40 + r() * 140, 1.5);
+    }
+    g.fillStyle = 'rgba(60,35,20,0.55)';
+    g.fillRect(0, y, w, 2);
+    const off = (i * 157) % 300;
+    for (let x = off; x < w; x += 300) {
+      g.fillRect(x, y, 2, h / n);
+      g.fillStyle = 'rgba(40,30,30,0.6)';
+      g.fillRect(x + 6, y + h / n / 2 - 2, 3, 3);
+      g.fillRect(x - 9, y + h / n / 2 - 2, 3, 3);
+      g.fillStyle = 'rgba(60,35,20,0.55)';
+    }
+  }
+  if (theme === 'garden') {
+    // A checked picnic rug laid on the deck.
+    g.fillStyle = 'rgba(232,87,74,0.85)';
+    const x0 = w * 0.6;
+    const y0 = h * 0.18;
+    for (let i = 0; i < 8; i++) {
+      g.fillRect(x0 + i * 30, y0, 15, 240);
+      g.fillRect(x0, y0 + i * 30, 240, 15);
+    }
+  }
 }
