@@ -187,7 +187,7 @@ export const CIRCUITS: Record<CircuitId, CircuitDef> = {
         sides: 'wall',
         style: 'melon',
         segs: [{ s0: 129, s1: 140, h0: 0, h1: 1.3, ease: 'kick' }],
-        gap: { s0: 140, s1: 147, floor: -0.5 },
+        gap: { s0: 140, s1: 147, floor: 0 },
       },
       {
         sides: 'verge',

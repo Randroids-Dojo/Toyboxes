@@ -105,7 +105,7 @@ export function strip(c: Circuit, s0: number, s1: number, cols: (s: number) => [
 }
 
 /** A vertical wall along one edge (side +1 left, -1 right), facing out, from y0(s) to y1(s). */
-export function wall(c: Circuit, s0: number, s1: number, off: number, y0: (s: number) => number, y1: (s: number) => number, vScale: number): THREE.BufferGeometry {
+export function wall(c: Circuit, s0: number, s1: number, off: number, y0: (s: number) => number, y1: (s: number) => number, vScale: number, fromTop = false): THREE.BufferGeometry {
   const ss = samples(c, s0, s1);
   const pos: number[] = [];
   const uv: number[] = [];
@@ -119,7 +119,9 @@ export function wall(c: Circuit, s0: number, s1: number, off: number, y0: (s: nu
     const a = y0(s);
     const b = y1(s);
     pos.push(x, a, z, x, b, z);
-    uv.push(s / vScale, 0, s / vScale, (b - a) / vScale);
+    // From the top: the top edge always maps to the top of the texture (a melon's rind).
+    if (fromTop) uv.push(s / vScale, 1 - (b - a) / vScale, s / vScale, 1);
+    else uv.push(s / vScale, 0, s / vScale, (b - a) / vScale);
     nrm.push(f.nx * out, 0, f.nz * out, f.nx * out, 0, f.nz * out);
     if (k < ss.length - 1) {
       const i = k * 2;
@@ -251,36 +253,48 @@ export function buildRoad(c: Circuit, batch: Batch, look: RoadLook, colliders: C
     const gap = r.gap;
     const spans: [number, number][] = gap ? [[a, gap.s0], [gap.s1, b]].filter(([x, y]) => y > x + 0.1) as [number, number][] : [[a, b]];
     const sideMat = look.side[r.style] ?? look.side.earth;
+    const top = r.style === 'melon' ? 0.45 : r.style === 'books' ? 0.3 : 0.6;
+    const RO = EDGE + 0.12;
+    const RW = 0.22;
     for (const [x0, x1] of spans) {
       for (const sd of [1, -1]) {
-        // Side face from the curb lip down below the ground.
-        batch.raw(wall(c, x0, x1, sd * EDGE, () => -0.14, (s) => Math.max(-0.1, h(s) - 0.04), 2), sideMat, { receive: true, cast: true });
-        // A low rail standing proud of the deck.
-        const ro = sd * (EDGE + 0.12);
-        batch.raw(wall(c, x0, x1, ro, (s) => h(s) - 0.04, (s) => h(s) + 0.42, 2), look.rail, { cast: true });
-        batch.raw(wall(c, x0, x1, ro + sd * 0.22, () => -0.14, (s) => h(s) + 0.42, 2), look.rail, { cast: true });
-        batch.raw(
-          strip(c, x0, x1, (s) => {
-            const p: [number, number][] = [
-              [ro, h(s) + 0.42],
-              [ro + sd * 0.22, h(s) + 0.42],
-            ];
-            return sd > 0 ? p : p.reverse();
-          }, 2, { flatUp: true }),
-          look.rail,
-        );
+        const side2 = (a0: number, b0: number): [number, number][] => (sd > 0 ? [[a0, 0], [b0, 0]] : [[b0, 0], [a0, 0]]);
+        // A ledge from the curb lip to the rail.
+        batch.raw(strip(c, x0, x1, (s) => side2(sd * EDGE, sd * RO).map(([o]) => [o, h(s) - 0.04]) as [number, number][], 2, { flatUp: true }), look.rail);
+        if (r.style === 'planks') {
+          // An open bridge: a deck fascia, support posts and rope rails, so the water shows underneath.
+          batch.raw(wall(c, x0, x1, sd * (RO + RW), (s) => Math.max(-0.14, h(s) - 0.36), (s) => h(s) - 0.04, 1), sideMat, { cast: true });
+          batch.raw(wall(c, x0, x1, sd * RO, (s) => Math.max(-0.14, h(s) - 0.36), (s) => h(s) - 0.04, 1), sideMat, { cast: false });
+          batch.raw(strip(c, x0, x1, (s) => side2(sd * RO, sd * (RO + RW)).map(([o]) => [o, Math.max(-0.12, h(s) - 0.36)]) as [number, number][], 2, { flatUp: true }), sideMat);
+          for (let s = x0 + 0.5; s <= x1 - 0.4; s += 2.2) {
+            const f = c.frame(s);
+            const px = f.x + f.nx * sd * (RO + RW / 2);
+            const pz = f.z + f.nz * sd * (RO + RW / 2);
+            const hh = h(s);
+            const yaw = Math.atan2(f.tx, f.tz);
+            if (hh > 0.4) batch.part(new THREE.CylinderGeometry(0.16, 0.18, hh + 0.1, 8), '#8a5a3b', new THREE.Matrix4().makeRotationY(yaw).setPosition(px, hh / 2 - 0.1, pz), 'plastic');
+            batch.part(new THREE.CylinderGeometry(0.09, 0.1, top + 0.1, 8), '#b98a5e', new THREE.Matrix4().makeRotationY(yaw).setPosition(px, hh + top / 2, pz), 'plastic');
+          }
+          // Two ropes along the posts.
+          for (const ry of [top * 0.55, top]) batch.raw(strip(c, x0, x1, (s) => side2(sd * (RO + RW / 2 - 0.05), sd * (RO + RW / 2 + 0.05)).map(([o]) => [o, h(s) + ry]) as [number, number][], 1, { flatUp: true }), look.rail);
+          continue;
+        }
+        // The rail: inner face, top, and the outer face down below the ground.
+        batch.raw(wall(c, x0, x1, sd * RO, (s) => h(s) - 0.04, (s) => h(s) + top, 2), look.rail, { cast: false });
+        batch.raw(strip(c, x0, x1, (s) => side2(sd * RO, sd * (RO + RW)).map(([o]) => [o, h(s) + top]) as [number, number][], 2, { flatUp: true }), look.rail);
+        batch.raw(wall(c, x0, x1, sd * (RO + RW), () => -0.14, (s) => h(s) + top, r.style === 'melon' ? 2.2 : 2, r.style === 'melon'), sideMat, { receive: true, cast: true });
       }
       // Ends of each stretch, where it meets a gap.
-      if (gap && Math.abs(x1 - gap.s0) < 0.01) batch.raw(cap(c, x1, gap.floor - 0.1, h(x1 - 0.01) - 0.01, 1, EDGE + 0.34), sideMat, { cast: true });
-      if (gap && Math.abs(x0 - gap.s1) < 0.01 && h(x0 + 0.01) > 0.05) batch.raw(cap(c, x0, gap.floor - 0.1, h(x0 + 0.01) - 0.01, -1, EDGE + 0.34), sideMat, { cast: true });
+      if (gap && Math.abs(x1 - gap.s0) < 0.01) batch.raw(cap(c, x1, gap.floor - 0.1, h(x1 - 0.01) - 0.01, 1, RO + RW), sideMat, { cast: true });
+      if (gap && Math.abs(x0 - gap.s1) < 0.01 && h(x0 + 0.01) > 0.05) batch.raw(cap(c, x0, gap.floor - 0.1, h(x0 + 0.01) - 0.01, -1, RO + RW), sideMat, { cast: true });
     }
     // Rail colliders, also across the gap so nobody slides off the side in the air.
-    const top = Math.max(...r.segs.map((sg) => Math.max(sg.h0, sg.h1)));
+    const peak = Math.max(...r.segs.map((sg) => Math.max(sg.h0, sg.h1)));
     for (let s = a; s < b; s += 2) {
       const ms = s + 1;
       const f = c.frame(ms);
       const yaw = Math.atan2(f.tx, f.tz);
-      const hh = gap && ms > gap.s0 && ms < gap.s1 ? top + 1.2 : Math.max(0.5, h(ms) + 0.9);
+      const hh = gap && ms > gap.s0 && ms < gap.s1 ? peak + 1.2 : Math.max(0.5, h(ms) + 0.9);
       for (const sd of [1, -1]) colliders.push(box(f.x + f.nx * sd * (EDGE + 0.23), f.z + f.nz * sd * (EDGE + 0.23), 0.15, 1.05, yaw, hh, 0.3, false));
     }
   }

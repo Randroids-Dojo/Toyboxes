@@ -553,10 +553,19 @@ export async function showResults(w: KartWorld, order: Racer[]): Promise<string>
     rows,
     board: {
       title: 'Finishing order',
-      rows: order.map((r) => ({ name: `${ordinal(r.place)} ${r.you ? 'You' : r.name}`, value: r.finishedAt !== null ? formatLap(r.finishedAt * 1000) : 'Racing', you: r.you })),
+      rows: order.map((r) => ({ name: `${ordinal(r.place)} ${r.you ? 'You' : r.name}`, value: r.finishedAt !== null ? formatLap(r.finishedAt * 1000) : gap(w, r), you: r.you })),
     },
     buttons: cup ? [{ id: 'next', label: last ? 'See the standings' : 'Next race', primary: true }, ...(last ? [] : [{ id: 'leave', label: 'Leave the cup' }])] : [{ id: 'again', label: 'Race again', primary: true }, { id: 'trial', label: 'Time trial' }, { id: 'leave', label: 'Done' }],
   });
+}
+
+/** A kart still racing: its expected gap to you, from how far it has left at its pace. */
+function gap(w: KartWorld, r: Racer): string {
+  const s = w.session;
+  if (!s || w.you.finishedAt === null) return 'Racing';
+  const left = s.laps * w.c.length - (r.raced - r.toLine);
+  const est = s.t + Math.max(0, left) / Math.max(6, r.kart.speed);
+  return `+${Math.max(0.1, est - w.you.finishedAt).toFixed(1)}s`;
 }
 
 export async function showStandings(w: KartWorld, cup: { index: number; circuits: HomeId[]; points: Record<string, number>; last: Record<string, number> }): Promise<void> {

@@ -56,7 +56,9 @@ export class Dresser {
   outsideSide(s: number): number {
     const turn = this.c.path.turnAhead(s - 6, 12);
     if (Math.abs(turn) > 0.05) return turn > 0 ? -1 : 1;
-    return this.c.paddock.side === 1 ? -1 : 1;
+    // On a straight: whichever side is not the infield.
+    const f = this.c.frame(s);
+    return this.c.inside(f.x + f.nx * 20, f.z + f.nz * 20) ? -1 : 1;
   }
 
   /** Places a shape with a collider of radius r (or none), if it fits. */

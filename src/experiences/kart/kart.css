@@ -15,6 +15,11 @@
   display: none;
 }
 
+/* While racing, the room's place chip makes way for the race HUD. */
+.hud.kz-on .hud-top {
+  display: none;
+}
+
 .kz-tl {
   position: absolute;
   left: calc(14px + var(--safe-l, 0px));
@@ -145,8 +150,8 @@
 
 .kz-item {
   position: absolute;
-  right: calc(14px + var(--safe-r, 0px));
-  top: calc(12px + var(--safe-t, 0px));
+  right: calc(12px + var(--safe-r, 0px));
+  top: calc(68px + var(--safe-t, 0px));
   width: 92px;
   display: grid;
   justify-items: center;
@@ -303,14 +308,14 @@
 
 /* Touch screens: the item sits under the clock, the map moves up out of the buttons' way. */
 body[data-device='touch'] .kz-map {
-  top: calc(12px + var(--safe-t, 0px));
+  top: calc(66px + var(--safe-t, 0px));
   bottom: auto;
   width: 116px;
   height: 116px;
 }
 
 body[data-device='touch'] .kz-item {
-  top: calc(140px + var(--safe-t, 0px));
+  top: calc(190px + var(--safe-t, 0px));
 }
 
 @media (max-width: 600px) {

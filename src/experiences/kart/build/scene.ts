@@ -39,6 +39,8 @@ export interface SceneInfo {
 }
 
 export interface Hazard {
+  /** Where to steer round it near s (for the computer drivers). */
+  danger?(s: number): { off: number; width: number } | null;
   /** Moving colliders this step. */
   colliders(): Collider[];
   /** Whether a kart at (x, z, y) is hit right now. */
@@ -58,6 +60,8 @@ export interface CircuitScene {
   meshes: THREE.Mesh[];
   /** Night-lit materials: emissive goes up after dark. */
   lamps: THREE.MeshStandardMaterial[];
+  /** The environment's point lights (high tier), for themes that light things up. */
+  envPoints?: THREE.PointLight[];
   build(): void;
   dispose(): void;
 }
@@ -174,7 +178,7 @@ export function buildScene(c: Circuit, opts: SceneOpts, dress: (d: Dresser, s: C
       }),
     }),
   };
-  const rail = new THREE.MeshStandardMaterial({ color: c.theme === 'bedroom' ? '#ff8fd1' : c.theme === 'beach' ? '#d9b27a' : '#fffaf0', roughness: 0.6 });
+  const rail = new THREE.MeshStandardMaterial({ color: c.theme === 'bedroom' ? '#ff8fd1' : c.theme === 'beach' ? '#e8d2a8' : c.theme === 'garden' ? '#2f8f4e' : '#fffaf0', roughness: 0.6 });
   if (c.theme === 'bedroom') {
     rail.emissive = new THREE.Color('#ff8fd1');
     rail.emissiveIntensity = 0.35;

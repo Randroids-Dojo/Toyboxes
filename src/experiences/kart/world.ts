@@ -270,6 +270,7 @@ export class KartWorld implements SpaceView {
     this.c = new Circuit(id, this.track, this.sketchLaps);
     const theme = this.c.theme;
     this.cs = buildScene(this.c, { ownerName: this.ctx.ownerName, tier: this.tier }, (d, s, tex): ThemeParts => (id === 'blocktown' || id === 'sketch' ? dressBlockTown(d, s, tex) : DRESSERS[theme](d, s, tex)));
+    this.cs.envPoints = this.env.points;
     this.scene.add(this.cs.group);
     this.colliders.length = 0;
     this.colliders.push(...this.cs.colliders);
@@ -363,8 +364,8 @@ export class KartWorld implements SpaceView {
     const tex = new THREE.CanvasTexture(c);
     tex.colorSpace = THREE.SRGBColorSpace;
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthWrite: false, transparent: true }));
-    s.scale.set(1.5, 0.42, 1);
-    s.position.set(0, 2.25, 0);
+    s.scale.set(1.15, 0.32, 1);
+    s.position.set(0, 2.35, 0);
     return s;
   }
 
@@ -771,6 +772,9 @@ export class KartWorld implements SpaceView {
     const s = this.session;
     if (!s) return;
     s.state = 'countdown';
+    // Cut straight to the follow camera behind your kart.
+    this.shot = null;
+    this.shotBlend = 0;
     this.hud.letterbox(false);
     this.ctx.snapCamera(this.kart.yaw);
     s.pressedAt = null;
@@ -1243,8 +1247,8 @@ export class KartWorld implements SpaceView {
     // Off the road, in water or a gap: the Grabber comes.
     r.offFor = !onRoad && !inPaddock && active ? r.offFor + h : 0;
     r.offMax = Math.max(r.offMax, r.offFor);
-    const inWater = !k.air && !inPaddock && !!this.cs.parts.water?.(k.pos.x, k.pos.z);
-    const fell = !k.air && gap && k.pos.y < c.profile.h(n.s - 1) - 0.3;
+    const inWater = !k.air && !inPaddock && k.pos.y < 0.4 && !!this.cs.parts.water?.(k.pos.x, k.pos.z);
+    const fell = !k.air && gap;
     if (active && !r.you) {
       r.stuckFor = k.speed < 1 && !k.frozen ? r.stuckFor + h : 0;
       if (r.offFor > 3 || r.stuckFor > 2.5 || inWater || fell) this.callGrabber(r);
@@ -1338,7 +1342,7 @@ export class KartWorld implements SpaceView {
       items: this.items.enabled,
       threat: (r) => this.items.threat(r),
       useItem: (r) => this.useItem(r),
-      danger: (sv) => this.items.danger(sv),
+      danger: (sv) => this.items.danger(sv) ?? (this.cs.parts.hazards ?? []).map((hz) => hz.danger?.(sv) ?? null).find((x) => x) ?? null,
     };
   }
 
@@ -1819,7 +1823,7 @@ export class KartWorld implements SpaceView {
     const rh = this.race;
     const s = this.session;
     const riding = this.kart.ridden;
-    rh.show(riding || (!!s && s.state !== 'podium'));
+    rh.show((riding || !!s) && !(s && (s.state === 'podium' || ((s.state === 'intro' || s.state === 'grid') && s.shotLen > 0))));
     if (!riding && !s) return;
     const t = this.timing;
     const field = this.active();

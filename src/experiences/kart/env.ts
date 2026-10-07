@@ -86,7 +86,7 @@ export class Env {
     const far = t === 'low' ? 150 : Math.max(220, this.reach * 2.2);
     this.fog.near = t === 'low' ? 45 : far * 0.4;
     this.fog.far = far;
-    for (const p of this.points) p.visible = t === 'high' && this.theme === 'bedroom' && p.intensity > 0;
+    for (const p of this.points) p.visible = t === 'high' && this.theme === 'bedroom';
   }
 
   /** The clock's day phase and where the camera is. */
@@ -109,12 +109,13 @@ export class Env {
     }
     if (th === 'bedroom') {
       this.night = 1;
-      this.sun.color.copy(c('#b9c4ff'));
-      this.sun.intensity = 1.05;
-      this.hemi.color.copy(c('#4a56a8'));
-      this.hemi.groundColor.copy(c('#2b2560'));
-      this.hemi.intensity = 1.25;
-      this.fog.color.copy(c('#141838'));
+      // Moonlight through the window and a cosy blue fill: dark, but every toy reads.
+      this.sun.color.copy(c('#c8d2ff'));
+      this.sun.intensity = 1.9;
+      this.hemi.color.copy(c('#8a96e8'));
+      this.hemi.groundColor.copy(c('#4a3e98'));
+      this.hemi.intensity = 2.1;
+      this.fog.color.copy(c('#1c2250'));
       this.place(focus, new THREE.Vector3(-0.35, 0.8, 0.45).normalize());
       return;
     }

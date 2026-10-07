@@ -167,6 +167,7 @@ export class RaceHud {
 
   show(on: boolean): void {
     this.root.classList.toggle('hidden', !on);
+    this.root.parentElement?.classList.toggle('kz-on', on);
   }
 
   /** Race (place shown) or a solo mode (no place, no strip). */
@@ -388,6 +389,7 @@ export class RaceHud {
   }
 
   dispose(): void {
+    this.root.parentElement?.classList.remove('kz-on');
     this.root.remove();
   }
 }
