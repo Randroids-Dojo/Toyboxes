@@ -144,7 +144,7 @@ export function expectedReturn(grand = GRAND_SEED): { rtp: number; base: number;
           if (PAYTABLE[rule].multiplier > 1) net++;
         }
       }
-  const ring = BONUS_RING.reduce((s, seg) => s + ringMultiplier(seg, grand), 0) / BONUS_RING.length;
+  const ring = BONUS_RING.reduce<number>((s, seg) => s + ringMultiplier(seg, grand), 0) / BONUS_RING.length;
   return { rtp: (base + bonus * ring) / n, base: base / n, hitRate: hits / n, netWinRate: net / n, bonusRate: bonus / n };
 }
 
@@ -248,7 +248,9 @@ export interface CasinoStats {
   /** River Wheel Anchor wins in a row. */
   anchorRun?: number;
   calmDrops?: number;
-  bests?: { falls?: number; poker?: number; streak?: number; voyage?: number; balance?: number };
+  /** Different local days with at least one play. */
+  playDays?: number;
+  bests?: { falls?: number; poker?: string; streak?: number; voyage?: number; balance?: number };
 }
 
 export function freshStats(now: number): CasinoStats {
