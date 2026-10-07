@@ -11,6 +11,7 @@ import { LAYOUT_NAMES, type LayoutId } from '../../shared/neon/arena';
 import { TAG_DIFF_NAMES, type TagDiff } from '../../shared/neon/tag';
 import { DUELISTS as DUEL_LIST, type DuelistId } from '../../shared/neon/duel';
 import { NIGHTS as NIGHT_LIST } from '../../shared/neon/night';
+import { UNLOCKS as UNLOCK_LIST } from '../../shared/neon/progress';
 import { songData } from './music';
 import type { Nova } from './world';
 
@@ -290,4 +291,66 @@ export function nightSelect(nova: Nova, onPick: (n: number, resume: boolean) => 
     initial: () => resume ?? (rows[Math.min(4, save.nights)].querySelector('button') as HTMLElement),
   };
   ui.open(panel);
+}
+
+/** The wardrobe mirror: suits, blades, victory poses and the helmet, earned with stars. */
+export function wardrobe(nova: Nova, onChange: () => void, onClose: () => void): void {
+  const ui = nova.ctx.ui;
+  const save = nova.save;
+  const have = save.stars;
+  const eq = save.data.equipped;
+  const groups: { kind: 'suit' | 'blade' | 'pose' | 'helmet'; title: string }[] = [
+    { kind: 'suit', title: 'Suits' },
+    { kind: 'blade', title: 'Prism blades' },
+    { kind: 'pose', title: 'Victory poses' },
+    { kind: 'helmet', title: 'Extras' },
+  ];
+  const all: HTMLButtonElement[] = [];
+  const refresh = () => {
+    for (const b of all) {
+      const id = b.dataset.id!;
+      const kind = b.dataset.kind as 'suit' | 'blade' | 'pose' | 'helmet';
+      const on = kind === 'helmet' ? eq.helmet : (eq as Record<string, unknown>)[kind] === id;
+      b.classList.toggle('on', on);
+      const small = b.querySelector('small');
+      if (small && !b.disabled) small.textContent = on ? 'Wearing' : kind === 'helmet' ? 'Tap to wear' : 'Unlocked';
+    }
+  };
+  const sections = groups.map((g) => {
+    const items = UNLOCK_LIST.filter((u) => u.kind === g.kind).map((u) => {
+      const locked = u.stars > have;
+      const b = button('', () => {
+        if (locked) return;
+        if (u.kind === 'helmet') eq.helmet = !eq.helmet;
+        else (eq as Record<string, unknown>)[u.kind] = u.id;
+        save.save();
+        refresh();
+        onChange();
+      }, 'ghost');
+      b.append(h('b', {}, u.name), h('small', {}, locked ? `★ ${u.stars} to unlock` : u.kind === 'helmet' ? 'Tap to wear or take off' : 'Unlocked'));
+      b.dataset.id = u.id;
+      b.dataset.kind = u.kind;
+      b.disabled = locked;
+      all.push(b);
+      return b;
+    });
+    return h('div', {}, h('div', { class: 'xk-card-kicker' }, g.title), h('div', { class: 'nova-grid' }, ...items));
+  });
+  refresh();
+  const next = UNLOCK_LIST.find((u) => u.stars > have);
+  const done = button('Done', () => ui.close(panel), 'primary');
+  const panel: Panel = {
+    el: wardrobeCard('Wardrobe', 'Glow Lab', h('p', { class: 'xk-tagline' }, `You have ${have} star${have === 1 ? '' : 's'}.${next ? ` Next: ${next.name} at ${next.stars}.` : ' You have everything!'}`), ...sections, h('div', { class: 'actions' }, done)),
+    light: true,
+    onBack: () => ui.close(panel),
+    onClose: () => onClose(),
+    initial: () => all.find((b) => b.classList.contains('on')) ?? done,
+  };
+  ui.open(panel);
+}
+
+function wardrobeCard(title: string, kicker: string, ...body: (Node | null)[]): HTMLElement {
+  const c = card(title, kicker, ...body);
+  c.classList.add('nova-wardrobe');
+  return c;
 }

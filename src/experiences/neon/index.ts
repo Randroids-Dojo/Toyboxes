@@ -10,7 +10,7 @@ import { disposeTree } from '../../world/kit';
 import { circle, type Collider } from '../../world/physics';
 import type { CameraShot, CaptureLabels, PlayerState, SpaceAction, SpaceView, Tier } from '../../world/space';
 import type { ExperienceCtx } from '../common';
-import { Hud, Particles, PostFX, Shockwaves } from '../kit';
+import { Hud, Particles, PostFX, Ribbon, Shockwaves } from '../kit';
 import { DIFF_NAMES, type Diff } from '../../shared/neon/charts';
 import { SONGS, type SongId } from '../../shared/neon/songs';
 import { BLADE_COLORS } from '../../shared/neon/progress';
@@ -21,7 +21,7 @@ import { NovaCore } from './core';
 import { Crowd } from './crowd';
 import { DanceMode, RIVALS, type DanceOutcome } from './dance';
 import { FLOOR_R, NovaFloor } from './floor';
-import { askSoundCheck, DUEL_NIGHT, duelSelect, nightSelect, partySettings, songSelect, tagSetup } from './menus';
+import { askSoundCheck, DUEL_NIGHT, duelSelect, nightSelect, partySettings, songSelect, tagSetup, wardrobe } from './menus';
 import { DuelMode, type DuelOutcome } from './duel';
 import { duelist as duelMeta, duelStars, type DuelistId } from '../../shared/neon/duel';
 import { ArenaView } from './arena-view';
@@ -35,7 +35,7 @@ import { RING as RING_CENTER } from './station';
 import { NovaProgress } from './save';
 import { Sky } from './sky';
 import { nova as snd } from './sounds';
-import { BOOTH, buildStation, DOOR, DUEL_TERMINAL, JUDGES, JUKEBOX, ORBIT_SPOT, paintBoard, PEDESTALS, STAR_PAD, stationQuality, TAG_TERMINAL, type StationParts } from './station';
+import { BOOTH, buildStation, DOOR, DUEL_TERMINAL, JUDGES, JUKEBOX, ORBIT_SPOT, paintBoard, PEDESTALS, STAR_PAD, stationQuality, TAG_TERMINAL, WARDROBE, type StationParts } from './station';
 import { SyncMode, type SyncResult } from './sync';
 import { NightRun } from './night';
 import { Dancer, Fencer, Outfit, type SuitId } from './style';
@@ -72,6 +72,7 @@ export class NeonParty implements SpaceView, Nova {
   readonly layer: HTMLElement;
 
   private sky: Sky;
+  private trail: Ribbon;
   private station: StationParts;
   private arena: ArenaView;
   private hemi: THREE.HemisphereLight;
@@ -187,6 +188,7 @@ export class NeonParty implements SpaceView, Nova {
     this.rin = new RhythmInput(ctx.ui);
 
     this.outfit = new Outfit(() => ctx.bones());
+    this.trail = new Ribbon(this.scene, { color: C.cyan, width: 0.5, length: 28, life: 0.45, minStep: 0.12 });
     this.wearEquipped();
 
     // The hall of fame starts empty and fills from the server.
@@ -256,18 +258,37 @@ export class NeonParty implements SpaceView, Nova {
 
   // ---- the hall of fame in the Glow Lab
 
+  private boardSets = [
+    { title: 'Party nights', modes: ['night'], accent: '#ffc93c' },
+    { title: 'Laser tag and duels', modes: ['tag', ...DUELISTS.map((d) => duelBoard(d.id as DuelistId))], accent: '#2de8ff' },
+    { title: 'Dance off', modes: Object.values(DANCE_BOARD) as string[], accent: '#ff3dae' },
+  ];
+  private boardData: Record<string, { rows: { name: string; value: number; you: boolean }[] }> = {};
+  private boardCycle = 0;
+  private lastPosted: unknown = null;
+  private boardT = 0;
+
   private async paintBoards(): Promise<void> {
-    const sets: { title: string; modes: string[]; accent: string; fmt: (v: number) => string }[] = [
-      { title: 'Party nights', modes: ['night'], accent: '#ffc93c', fmt: (v) => v.toLocaleString('en-US') },
-      { title: 'Laser tag', modes: ['tag'], accent: '#2de8ff', fmt: (v) => v.toLocaleString('en-US') },
-      { title: 'Nova Lights', modes: ['dance-nova-lights'], accent: '#ff3dae', fmt: (v) => v.toLocaleString('en-US') },
-    ];
-    sets.forEach((b, i) => paintBoard(this.station.boardMeshes[i], b.title, [], 'Hall of fame', b.accent));
-    const got = await this.boards.fetch(sets.flatMap((b) => b.modes));
+    this.boardSets.forEach((b, i) => paintBoard(this.station.boardMeshes[i], b.title, [], 'Hall of fame', b.accent));
+    const got = await this.boards.fetch(this.boardSets.flatMap((b) => b.modes));
     if (this.disposed) return;
-    sets.forEach((b, i) => {
-      const rows = (got[b.modes[0]]?.rows ?? []).map((r) => ({ name: r.name, value: b.fmt(r.value), you: r.you }));
-      paintBoard(this.station.boardMeshes[i], b.title, rows, 'Hall of fame', b.accent);
+    this.boardData = got;
+    this.repaintBoards();
+  }
+
+  private boardName(mode: string): string {
+    if (mode === 'night') return 'Party nights';
+    if (mode === 'tag') return 'Laser tag';
+    if (mode.startsWith('duel-')) return `Duel: ${duelMeta(mode.slice(5) as DuelistId).name}`;
+    const song = (Object.keys(DANCE_BOARD) as SongId[]).find((k) => DANCE_BOARD[k] === mode);
+    return song ? SONGS[song].name : mode;
+  }
+
+  private repaintBoards(): void {
+    this.boardSets.forEach((b, i) => {
+      const mode = b.modes[this.boardCycle % b.modes.length];
+      const rows = (this.boardData[mode]?.rows ?? []).map((r) => ({ name: r.name, value: r.value.toLocaleString('en-US'), you: r.you }));
+      paintBoard(this.station.boardMeshes[i], this.boardName(mode), rows, 'Hall of fame', b.accent);
     });
   }
 
@@ -349,6 +370,17 @@ export class NeonParty implements SpaceView, Nova {
 
   cameraShot(dt: number): CameraShot | null {
     if (this.intro.on) return this.flyover(dt);
+    if (this.wardrobeOn) {
+      this.wardrobeT += dt;
+      const p = this.player_;
+      const a = Math.sin(this.wardrobeT * 0.45) * 0.45;
+      const portrait = innerHeight > innerWidth;
+      // Frame the avatar beside the wardrobe card (above it on a phone).
+      const pos = new THREE.Vector3(p.x + Math.sin(a) * 4.2, portrait ? 1.3 : 1.5, p.z + Math.cos(a) * 4.2);
+      const side = new THREE.Vector3(Math.cos(a), 0, -Math.sin(a));
+      const target = new THREE.Vector3(p.x, portrait ? 0.4 : 0.95, p.z).addScaledVector(side, portrait ? 0 : 1.1);
+      return { position: pos, target, blend: Math.min(1, this.wardrobeT * 2.5) };
+    }
     if (this.podiumOn) {
       this.podiumT += dt;
       const k = Math.min(1, this.podiumT / 1.2);
@@ -397,6 +429,7 @@ export class NeonParty implements SpaceView, Nova {
       const open = this.save.data.nights >= DUEL_NIGHT[id];
       out.push({ x: p.x + (RING_CENTER.x - p.x) * 0.22, z: p.z + (RING_CENTER.z - p.z) * 0.22, range: 1.5, label: open ? `Duel ${duelMeta(id).name}` : `${duelMeta(id).name}: finish night ${DUEL_NIGHT[id]}`, short: open ? 'Duel' : 'Locked', run: () => (open ? this.openDuels(id) : this.ctx.ui.toast(`Finish night ${DUEL_NIGHT[id]} to duel ${duelMeta(id).name}`)) });
     });
+    out.push({ x: WARDROBE.x, z: WARDROBE.z + 1.4, range: 1.6, label: 'Try on suits', short: 'Wardrobe', run: () => this.openWardrobe() });
     out.push({ x: JUKEBOX.x, z: JUKEBOX.z - 1.2, range: 1.8, label: 'Party settings and sound check', short: 'Settings', run: () => this.openSettings() });
     if (Math.hypot(p.x, p.z) < FLOOR_R - 0.3) out.push({ x: p.x, z: p.z, range: 0.5, label: 'Dance', short: 'Dance', run: () => this.queueFreeDance() });
     return out;
@@ -557,6 +590,38 @@ export class NeonParty implements SpaceView, Nova {
   refreshUnlocks(): void {
     DUELISTS.forEach((d, i) => this.duelists[i].setDark(this.save.data.nights < DUEL_NIGHT[d.id as DuelistId]));
     this.wearEquipped();
+  }
+
+  private openWardrobe(): void {
+    this.ctx.teleport(WARDROBE.x, WARDROBE.z + 1.7, 0);
+    this.wardrobeT = 0;
+    this.wardrobeOn = true;
+    this.dancer.beat = () => this.clock.drawBeat();
+    wardrobe(
+      this,
+      () => {
+        this.wearEquipped();
+        const p = this.player_;
+        this.fx.glow.burst({ at: { x: p.x, y: 0.2, z: p.z }, count: 40, shape: 'up', speed: [1, 3], color: [this.suitColor(), C.white], life: [0.5, 0.9], size: [0.1, 0.2], gravity: -2 });
+        this.outfit.setGlow(2.2);
+        snd.pose();
+        this.dancer.play(this.victoryMove(), 0.9);
+        this.ctx.pose(this.dancer.pose);
+      },
+      () => {
+        this.wardrobeOn = false;
+        this.ctx.pose(null);
+      },
+    );
+  }
+
+  private wardrobeOn = false;
+  private wardrobeT = 0;
+
+  /** The equipped victory pose as a dance move. */
+  victoryMove(): 'wave' | 'point' | 'glide' {
+    const p = this.save.data.equipped.pose;
+    return p === 'point' ? 'point' : p === 'glide' ? 'glide' : 'wave';
   }
 
   private openTag(): void {
@@ -796,6 +861,10 @@ export class NeonParty implements SpaceView, Nova {
     for (const p of [this.fx.sparks, this.fx.glow, this.fx.confetti]) p.update(dt);
     this.fx.rings.update(dt);
     this.outfit.update(dt, t, beat);
+    // The Comet suit leaves a light trail when you run.
+    const pl = this.player_;
+    if (this.save.data.equipped.suit === 'comet' && Math.hypot(pl.vx, pl.vz) > 3.5) this.trail.push({ x: pl.x, y: pl.y + 0.75, z: pl.z });
+    this.trail.update(dt, this.ctx.camera);
 
     // Station animation.
     const st = this.station;
@@ -805,6 +874,17 @@ export class NeonParty implements SpaceView, Nova {
     st.ringMat.uniforms.uBeat.value = beat;
     st.portalMat.uniforms.uTime.value = t;
     this.animateEq(beat);
+    // The hall of fame cycles through its boards and refreshes after a new result.
+    this.boardT += dt;
+    if (this.boardT > 8) {
+      this.boardT = 0;
+      this.boardCycle++;
+      if (this.player_.x > 15) this.repaintBoards();
+    }
+    if (this.boards.last && this.boards.last !== this.lastPosted) {
+      this.lastPosted = this.boards.last;
+      void this.paintBoards();
+    }
     this.arena.update(dt, beat, t);
     st.lasers.visible = this.tierNow !== 'low' && (night > 0.35 || this.glowAmt > 0);
     if (st.lasers.visible) {
@@ -903,6 +983,7 @@ export class NeonParty implements SpaceView, Nova {
     if (this.renderer) this.renderer.info.autoReset = true;
     for (const p of [this.fx.sparks, this.fx.glow, this.fx.confetti]) p.dispose();
     this.fx.rings.dispose();
+    this.trail.dispose();
     for (const r of [this.orbit, ...this.judges, ...this.duelists, ...this.extras]) r.dispose();
     disposeTree(this.scene);
   }

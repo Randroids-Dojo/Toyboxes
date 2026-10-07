@@ -384,6 +384,18 @@ export function prismBlade(color: number, len = 1.0): THREE.Group {
   g.add(hilt, guard, blade, glow, halo);
   g.userData.blade = blade;
   g.userData.color = color;
+  // The prism blade cycles through the rainbow.
+  if (color === 0xffffff) {
+    const bm = blade.material as THREE.MeshBasicMaterial;
+    const gm = glow.material as THREE.MeshBasicMaterial;
+    const hm = halo.material as THREE.SpriteMaterial;
+    blade.onBeforeRender = () => {
+      const t = performance.now() / 1000;
+      bm.color.setHSL(t * 0.4 % 1, 1, 0.75).multiplyScalar(2.4);
+      gm.color.setHSL((t * 0.4 + 0.05) % 1, 1, 0.55).multiplyScalar(1.4);
+      hm.color.setHSL(t * 0.4 % 1, 1, 0.6);
+    };
+  }
   return g;
 }
 

@@ -338,7 +338,35 @@
 }
 
 .nova-grid .btn.on {
-  outline: 3px solid var(--nova-gold);
+  border-color: #ffc93c;
+  box-shadow: 0 4px 0 #05030b, 0 0 16px rgba(255, 201, 60, 0.45);
+  background: rgba(255, 201, 60, 0.16);
+}
+
+.nova-grid .btn.on small {
+  color: #ffc93c;
+  opacity: 1;
+}
+
+/* The wardrobe sits to one side so you can see your avatar. */
+.nova-wardrobe {
+  justify-self: end;
+  width: min(400px, calc(100vw - 28px));
+  max-height: min(86vh, calc(var(--vvh) - 40px));
+  margin-right: max(2vw, var(--safe-r));
+}
+
+.nova-wardrobe .nova-grid {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+@media (max-aspect-ratio: 1/1) {
+  .nova-wardrobe {
+    justify-self: center;
+    align-self: end;
+    max-height: 52vh;
+    margin-right: 0;
+  }
 }
 
 .nova-row {
