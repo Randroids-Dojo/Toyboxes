@@ -403,7 +403,7 @@ if (stages.has('comet')) {
       const dy = n.oy - r.oy;
       const l = Math.hypot(dx, dy);
       await input(l > 0.25 ? dx / Math.max(l, 1) : 0, l > 0.25 ? dy / Math.max(l, 1) : 0);
-      if (process.env.DEBUG_COMET && Math.random() < 0.1) log('comet steer', r.u.toFixed(3), 'at', r.ox.toFixed(2), r.oy.toFixed(2), 'want', n.ox.toFixed(2), n.oy.toFixed(2), 'touch', JSON.stringify(touch && { down: touch.down }));
+      if (process.env.DEBUG_COMET && Math.random() < 0.1) log('comet steer', r.u.toFixed(3), 'at', r.ox.toFixed(2), r.oy.toFixed(2), 'want', n.ox.toFixed(2), n.oy.toFixed(2));
     }
     const q = Math.floor(r.u * 5);
     if (!shots.has(q) && q > 0 && q < 5) {

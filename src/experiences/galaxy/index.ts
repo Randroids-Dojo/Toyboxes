@@ -167,6 +167,7 @@ export class Galaxy implements SpaceView {
   private debugLog: string[] = [];
   private fadeEl: HTMLElement;
   private renderer: THREE.WebGLRenderer | null = null;
+  private tmpV = new THREE.Vector3();
   private drawInfo = { calls: 0, triangles: 0 };
   private warpEl: HTMLElement;
 
@@ -1116,6 +1117,13 @@ export class Galaxy implements SpaceView {
     }
     for (const pad of [this.hub.pads.ring, this.hub.pads.storm, this.hub.pads.comet, this.ring.start, this.ring.back, this.cinder.start, this.cinder.back, this.dock.back]) padNear(pad, cam.position, dt);
     this.hub.fade.update(cam.position, dt);
+    // Low tier: far boards and signs are not drawn at all.
+    if (this.tier === 'low') {
+      for (const b of [this.ring.billboard.mesh, this.cinder.billboard.mesh, this.dock.billboard.mesh]) b.visible = b.getWorldPosition(this.tmpV).distanceTo(cam.position) < 40;
+      for (const pad of [this.hub.pads.ring, this.hub.pads.storm, this.hub.pads.comet, this.ring.start, this.ring.back, this.cinder.start, this.cinder.back, this.dock.back]) {
+        if (pad.sign.sprite.visible && pad.group.getWorldPosition(this.tmpV).distanceTo(cam.position) > 45) pad.sign.sprite.visible = pad.holo.visible = false;
+      }
+    } else for (const b of [this.ring.billboard.mesh, this.cinder.billboard.mesh, this.dock.billboard.mesh]) b.visible = true;
     // Rounds keep their island clear of signs and holograms.
     const quiet = !!this.round?.boarded;
     for (const pad of [this.ring.start, this.ring.back, this.cinder.start, this.cinder.back, this.dock.back]) {

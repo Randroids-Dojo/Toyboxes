@@ -63,14 +63,13 @@ function slingPad(x: number, y: number, z: number, color: string, uniforms: Unif
   sign.sprite.position.y = 4.3;
   group.add(sign.sprite);
   // Four little crystal posts around the pad.
-  const post = new THREE.ConeGeometry(0.12, 0.7, 5).translate(0, 0.35, 0);
-  const pm = new THREE.MeshStandardMaterial({ color: '#2a1c52', emissive: new THREE.Color(color), emissiveIntensity: 0.6, flatShading: true });
-  for (let i = 0; i < 4; i++) {
-    const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
-    const m = new THREE.Mesh(post, pm);
-    m.position.set(Math.cos(a) * 1.45, 0, Math.sin(a) * 1.45);
-    group.add(m);
-  }
+  const posts = mergeGeometries(
+    [0, 1, 2, 3].map((i) => {
+      const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+      return new THREE.ConeGeometry(0.12, 0.7, 5).translate(Math.cos(a) * 1.45, 0.35, Math.sin(a) * 1.45);
+    }),
+  )!;
+  group.add(new THREE.Mesh(posts, new THREE.MeshStandardMaterial({ color: '#2a1c52', emissive: new THREE.Color(color), emissiveIntensity: 0.6, flatShading: true })));
   parent.add(group);
   return { spot: { x, y, z }, shown: 1, decal, beacon, holo, sign, group };
 }
@@ -153,6 +152,28 @@ export function miniature(kind: Island | 'hole' | 'hub', scale = 1): THREE.Group
   return g;
 }
 
+/** Bakes a little group of coloured meshes into one vertex-coloured mesh (one draw call). */
+export function bake(group: THREE.Object3D): THREE.Mesh {
+  group.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(group.matrixWorld).invert();
+  const parts: THREE.BufferGeometry[] = [];
+  group.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) return;
+    const g = m.geometry.clone().toNonIndexed();
+    g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, m.matrixWorld));
+    const mat = m.material as THREE.MeshStandardMaterial;
+    const c = (mat.emissive && mat.emissive.getHex() ? mat.emissive : mat.color).clone();
+    const n = g.getAttribute('position').count;
+    const col = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) col.set([c.r, c.g, c.b], i * 3);
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'color') g.deleteAttribute(k);
+    parts.push(g);
+  });
+  return new THREE.Mesh(mergeGeometries(parts)!, new THREE.MeshBasicMaterial({ vertexColors: true }));
+}
+
 // ---------------------------------------------------------------------------
 // The Rim: the hub
 
@@ -162,7 +183,9 @@ export class Hub {
   readonly pads: Record<Island, SlingPad>;
   readonly shrineBoard: THREE.Mesh;
   readonly horizonBlossom: number;
-  readonly chartPips: Record<string, THREE.Mesh[]> = {};
+  /** Star pips over the orrery: one instanced mesh, a range of instances per place. */
+  private pips: THREE.InstancedMesh;
+  private pipRange: Record<string, [number, number]> = {};
   private tiles: THREE.InstancedMesh;
   readonly tileMats: { physical: THREE.MeshPhysicalMaterial; plain: THREE.MeshStandardMaterial };
   readonly seamMat: THREE.ShaderMaterial;
@@ -300,24 +323,26 @@ export class Hub {
     ch.add(tableRim);
     this.chartTop = new THREE.Group();
     this.chartTop.position.y = 1.3;
+    const minis = new THREE.Group();
+    this.pips = new THREE.InstancedMesh(new THREE.OctahedronGeometry(0.06), new THREE.MeshBasicMaterial({ color: '#ffffff' }), 13);
+    let pi = 0;
     const place = (kind: Island | 'hole' | 'hub', x: number, z: number, pips: number, id: string, sc: number) => {
       const m = miniature(kind, sc);
       m.position.set(x, 0, z);
-      this.chartTop.add(m);
-      const list: THREE.Mesh[] = [];
+      minis.add(m);
+      this.pipRange[id] = [pi, pips];
       for (let i = 0; i < pips; i++) {
-        const p = new THREE.Mesh(new THREE.OctahedronGeometry(0.06), new THREE.MeshBasicMaterial({ color: '#3a3450' }));
-        p.position.set(x + (i - (pips - 1) / 2) * 0.15, 0.42, z);
-        this.chartTop.add(p);
-        list.push(p);
+        m4.makeTranslation(x + (i - (pips - 1) / 2) * 0.15, 0.42, z);
+        this.pips.setMatrixAt(pi, m4);
+        this.pips.setColorAt(pi++, new THREE.Color('#3a3450'));
       }
-      this.chartPips[id] = list;
     };
     place('hub', 0, 0, 4, 'hub', 0.45);
     place('hole', 0.4, -0.95, 0, 'hole', 0.7);
     place('ring', -0.65, -0.8, 3, 'ring', 0.45);
     place('storm', 1.0, -0.1, 3, 'storm', 0.5);
     place('comet', 0.62, 0.62, 3, 'comet', 0.45);
+    this.chartTop.add(bake(minis), this.pips);
     ch.add(this.chartTop);
     const chartLabel = new Sign('#b9a4ff', 3.2);
     chartLabel.set('Star chart', null, false);
@@ -371,11 +396,13 @@ export class Hub {
     this.shrineBeam.u.uAlpha.value = o.frenzy ? 0.22 : 0.05;
     this.horizonBeam.u.uAlpha.value += ((o.horizon ? 0.55 : 0) - this.horizonBeam.u.uAlpha.value) * Math.min(1, dt * 2);
     this.chartTop.rotation.y = Math.sin(time * 0.2) * 0.25;
-    for (const [id, list] of Object.entries(this.chartPips)) {
+    const lit = new THREE.Color('#f4b740');
+    const dim = new THREE.Color('#3a3450');
+    for (const [id, [first, count]] of Object.entries(this.pipRange)) {
       const n = o.pips[id] ?? 0;
-      list.forEach((m, i) => (m.material as THREE.MeshBasicMaterial).color.set(i < n ? '#f4b740' : '#3a3450'));
-      list.forEach((m) => (m.rotation.y += dt * 2));
+      for (let i = 0; i < count; i++) this.pips.setColorAt(first + i, i < n ? lit : dim);
     }
+    if (this.pips.instanceColor) this.pips.instanceColor.needsUpdate = true;
   }
 }
 
@@ -932,7 +959,7 @@ export class Dock {
   readonly billboard = new Billboard('#bfe8ff');
   readonly mooring = new THREE.Vector3(DOCK.x + 8.2, DOCK.top + 1.4, DOCK.z);
   readonly rideSpot = { x: DOCK.x + 5.4, z: DOCK.z };
-  private tail: THREE.Mesh[] = [];
+  private tail: THREE.InstancedMesh;
   readonly iceMat: THREE.MeshStandardMaterial;
 
   constructor(scene: THREE.Scene, uniforms: Uniforms) {
@@ -949,19 +976,20 @@ export class Dock {
     g.add(discMesh);
     // A crescent of ice spikes along the west side.
     const spikeMat = new THREE.MeshStandardMaterial({ color: '#d8f0ff', roughness: 0.1, emissive: new THREE.Color('#6cc4ff'), emissiveIntensity: 0.7, flatShading: true });
+    const spikes: THREE.BufferGeometry[] = [];
     for (let i = 0; i < 9; i++) {
       const a = Math.PI * 0.55 + (i / 8) * Math.PI * 0.9;
       const h = 1.6 + Math.sin(i * 1.7) * 0.6 + (i === 4 ? 1.4 : 0);
-      const sp = new THREE.Mesh(new THREE.ConeGeometry(0.45 + (i % 3) * 0.12, h, 5), spikeMat);
       const x = DOCK.x + Math.cos(a) * (DOCK.r - 0.7);
       const z = DOCK.z + Math.sin(a) * (DOCK.r - 0.7);
-      sp.position.set(x, top + h / 2 - 0.05, z);
-      sp.rotation.z = Math.cos(a) * 0.25;
-      sp.rotation.x = -Math.sin(a) * 0.25;
-      sp.castShadow = true;
-      g.add(sp);
+      const geo = new THREE.ConeGeometry(0.45 + (i % 3) * 0.12, h, 5);
+      geo.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(x, top + h / 2 - 0.05, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.sin(a) * 0.25, 0, Math.cos(a) * 0.25)), new THREE.Vector3(1, 1, 1)));
+      spikes.push(geo.toNonIndexed());
       this.colliders.push(circle(x, z, 0.5, top + h, 0.3, false));
     }
+    const spikeMesh = new THREE.Mesh(mergeGeometries(spikes)!, spikeMat);
+    spikeMesh.castShadow = true;
+    g.add(spikeMesh);
     const root = underside(DOCK.r, 9, 37, veinMaterial('#4a7aa8', '#bfe8ff', { roughness: 0.2 }), { top: top - 1.15 });
     root.position.set(DOCK.x, 0, DOCK.z);
     g.add(root);
@@ -986,17 +1014,12 @@ export class Dock {
     const coma = glowSprite('#bfe8ff', 3.6, 0.7);
     coma.name = 'coma';
     this.comet.add(coma);
+    // Six streaks in the drawing's colours, one draw call.
     const colors = ['#8a6bd1', '#3fb68b', '#4aa3df', '#f4b740', '#e8574a', '#fffaf0'];
-    colors.forEach((c, i) => {
-      const t = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.ShaderMaterial({ vertexShader: S.QUAD_VERT, fragmentShader: S.STREAK_FRAG.replace('varying vec3 vColor;', 'uniform vec3 vColor;'), uniforms: { vColor: { value: new THREE.Color(c) } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
-      t.rotation.x = (i / colors.length) * Math.PI;
-      t.scale.set(14 + i * 1.5, 1.1 - i * 0.08, 1);
-      t.position.x = 7.5 + i * 0.6;
-      // The quad's bright head is at +x; flip so it trails behind.
-      t.rotation.y = Math.PI;
-      this.tail.push(t);
-      this.comet.add(t);
-    });
+    this.tail = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), new THREE.ShaderMaterial({ vertexShader: S.STREAK_VERT, fragmentShader: S.STREAK_FRAG, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }), colors.length);
+    colors.forEach((c, i) => this.tail.setColorAt(i, new THREE.Color(c)));
+    this.tail.frustumCulled = false;
+    this.comet.add(this.tail);
     this.comet.position.copy(this.mooring);
     g.add(this.comet);
     this.start = slingPad(this.rideSpot.x - 0.4, top, this.rideSpot.z - 3.2, '#53f0c0', uniforms, miniature('comet', 0.8), g);
@@ -1019,12 +1042,24 @@ export class Dock {
     const coma = this.comet.getObjectByName('coma')!;
     coma.quaternion.copy(camera.quaternion);
     coma.scale.setScalar(riding ? 1.8 : 3.6);
-    for (const t of this.tail) t.visible = !riding;
+    this.tail.visible = !riding;
     if (!riding) {
       this.comet.position.set(this.mooring.x, this.mooring.y + Math.sin(time * 1.1) * 0.25, this.mooring.z);
       this.comet.rotation.set(0, 0, 0);
     }
-    this.tail.forEach((t, i) => (t.rotation.x = (i / this.tail.length) * Math.PI + time * 0.4));
+    if (this.tail.visible) {
+      const m4 = new THREE.Matrix4();
+      const q = new THREE.Quaternion();
+      const e = new THREE.Euler();
+      for (let i = 0; i < 6; i++) {
+        // The quad's bright head is at +x; turned round so it trails behind.
+        e.set((i / 6) * Math.PI + time * 0.4, Math.PI, 0);
+        q.setFromEuler(e);
+        m4.compose(new THREE.Vector3(7.5 + i * 0.6, 0, 0), q, new THREE.Vector3(14 + i * 1.5, 1.1 - i * 0.08, 1));
+        this.tail.setMatrixAt(i, m4);
+      }
+      this.tail.instanceMatrix.needsUpdate = true;
+    }
   }
 }
 
@@ -1050,18 +1085,19 @@ export class Stair {
     const mats = [veinMaterial('#2a6b58', '#3fb68b', { roughness: 0.4 }), veinMaterial('#2c2232', '#ff8a3d', { roughness: 0.85 }), veinMaterial('#8fc4e6', '#bfe8ff', { roughness: 0.2 })];
     STAIR.forEach((st, i) => {
       const g = new THREE.Group();
-      const topGeo = new THREE.CylinderGeometry(st.r, st.r * 0.85, 0.6, 9).translate(0, -0.3, 0);
-      const tp = topGeo.getAttribute('position');
-      const tc = new Float32Array(tp.count * 3).fill(0.12);
-      topGeo.setAttribute('color', new THREE.BufferAttribute(tc, 3));
-      const top = new THREE.Mesh(topGeo.toNonIndexed(), mats[i % 3]);
-      top.receiveShadow = true;
-      g.add(top);
-      g.add(underside(st.r, 3 + st.r, 50 + i, mats[i % 3], { top: -0.55, count: 6 }));
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(st.r + 0.04, 0.04, 6, 48), new THREE.MeshBasicMaterial({ color: '#f4b740' }));
-      ring.rotation.x = Math.PI / 2;
-      ring.position.y = -0.12;
-      g.add(ring);
+      // One mesh per stone: the top, its hanging roots and a glowing rim.
+      const colored = (geo: THREE.BufferGeometry, v: number) => {
+        const n = geo.getAttribute('position').count;
+        geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * 3).fill(v), 3));
+        return geo;
+      };
+      const topGeo = colored(new THREE.CylinderGeometry(st.r, st.r * 0.85, 0.6, 9).translate(0, -0.3, 0).toNonIndexed(), 0.1);
+      const roots = underside(st.r, 3 + st.r, 50 + i, mats[i % 3], { top: -0.55, count: 6 });
+      const rim = colored(new THREE.TorusGeometry(st.r + 0.04, 0.05, 6, 48).rotateX(Math.PI / 2).translate(0, -0.12, 0).toNonIndexed(), 1.4);
+      const stone = new THREE.Mesh(mergeGeometries([topGeo, roots.geometry, rim])!, mats[i % 3]);
+      roots.geometry.dispose();
+      stone.receiveShadow = true;
+      g.add(stone);
       g.position.set(st.x, st.y, st.z);
       g.visible = false;
       this.group.add(g);
