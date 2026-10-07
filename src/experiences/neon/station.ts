@@ -199,6 +199,7 @@ export interface StationParts {
   signs: { mesh: THREE.Mesh; base: number; flicker: number }[];
   starPad: THREE.Mesh;
   airlockDoors: THREE.Mesh[];
+  airlockShell: THREE.Group;
   lasers: THREE.Group;
   boardMeshes: THREE.Mesh[];
   jukeboxScreen: THREE.Mesh;
@@ -609,26 +610,34 @@ export function buildStation(scene: THREE.Scene, ownerName: string): StationPart
   // ---- airlock to Comet Yard
 
   const airlockDoors: THREE.Mesh[] = [];
+  // The airlock walls and gate frame are their own meshes, hidden while you
+  // play in the yard and the camera looks in from behind them.
+  const airlockShell = new THREE.Group();
   {
+    const AS = new Batch();
+    const AG = new Batch();
     const zN = Math.sqrt(ATRIUM_R * ATRIUM_R - AIRLOCK_HALF * AIRLOCK_HALF);
     const len = zN - Math.abs(ARENA.z1) + 0.0;
     const mid = -(zN + Math.abs(ARENA.z1)) / 2;
     for (const side of [-1, 1]) {
       const x = side * (AIRLOCK_HALF + 0.2);
-      S.add(new THREE.BoxGeometry(0.4, 3.2, Math.abs(len)), wallMat, x, 1.6, mid);
-      G.add(new THREE.BoxGeometry(0.05, 0.08, Math.abs(len)), neonCyan, x - side * 0.215, 2.7, mid);
-      G.add(new THREE.BoxGeometry(0.05, 0.08, Math.abs(len)), neonCyan, x - side * 0.215, 0.3, mid);
-      // As tall as the gate for the camera, so it never skims the top with the wall filling the view.
-      colliders.push(box(x, mid, 0.2, Math.abs(len) / 2, 0, 4.6, 0.5, true));
+      AS.add(new THREE.BoxGeometry(0.4, 3.2, Math.abs(len)), wallMat, x, 1.6, mid);
+      AG.add(new THREE.BoxGeometry(0.05, 0.08, Math.abs(len)), neonCyan, x - side * 0.215, 2.7, mid);
+      AG.add(new THREE.BoxGeometry(0.05, 0.08, Math.abs(len)), neonCyan, x - side * 0.215, 0.3, mid);
+      colliders.push(box(x, mid, 0.2, Math.abs(len) / 2, 0, 3.2, 0.5, true));
     }
     // Gate frame at the arena wall with a light curtain.
     // The gate's top bar sits high, above where the follow camera passes.
-    S.add(new THREE.BoxGeometry(2 * AIRLOCK_HALF + 0.8, 0.4, 0.6), wallMat, 0, 4.8, ARENA.z1 - 0.3);
+    AS.add(new THREE.BoxGeometry(2 * AIRLOCK_HALF + 0.8, 0.4, 0.6), wallMat, 0, 4.8, ARENA.z1 - 0.3);
     for (const side of [-1, 1]) {
-      S.add(new THREE.BoxGeometry(0.4, 4.6, 0.6), wallMat, side * (AIRLOCK_HALF + 0.2), 2.3, ARENA.z1 - 0.3);
-      colliders.push(box(side * (AIRLOCK_HALF + 0.2), ARENA.z1 - 0.3, 0.2, 0.3, 0, 4.6, 0.5, true));
+      AS.add(new THREE.BoxGeometry(0.4, 4.6, 0.6), wallMat, side * (AIRLOCK_HALF + 0.2), 2.3, ARENA.z1 - 0.3);
+      // The pillars stand where the yard wall meets the airlock wall.
+      colliders.push(box(side * (AIRLOCK_HALF + 0.2), ARENA.z1 - 0.3, 0.2, 0.3, 0, 4.6, 0.5, false));
     }
-    G.add(new THREE.BoxGeometry(2 * AIRLOCK_HALF, 0.07, 0.07), neonCyan, 0, 4.58, ARENA.z1 - 0.62);
+    AG.add(new THREE.BoxGeometry(2 * AIRLOCK_HALF, 0.07, 0.07), neonCyan, 0, 4.58, ARENA.z1 - 0.62);
+    AS.build(airlockShell, { receive: true });
+    AG.build(airlockShell, { receive: false });
+    scene.add(airlockShell);
     const curtain = new THREE.ShaderMaterial({
       transparent: true,
       depthWrite: false,
@@ -895,7 +904,7 @@ export function buildStation(scene: THREE.Scene, ownerName: string): StationPart
   }
   scene.add(lasers);
 
-  return { colliders, deckMat, arenaMat, ringMat, portalMat, eq, halos, signs, starPad, airlockDoors, lasers, boardMeshes, jukeboxScreen, mirrorMat, holos };
+  return { colliders, deckMat, arenaMat, ringMat, portalMat, eq, halos, signs, starPad, airlockDoors, airlockShell, lasers, boardMeshes, jukeboxScreen, mirrorMat, holos };
 }
 
 /** A desk with rounded corners standing on the floor (bottom at y 0). */

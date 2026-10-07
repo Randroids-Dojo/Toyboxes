@@ -27,7 +27,7 @@ import { duelist as duelMeta, duelStars, type DuelistId } from '../../shared/neo
 import { ArenaView } from './arena-view';
 import { TagMode, type TagOutcome } from './tag';
 import { tagStars, TAG_DIFF_NAMES, type TagDiff } from '../../shared/neon/tag';
-import type { LayoutId } from '../../shared/neon/arena';
+import { ARENA, type LayoutId } from '../../shared/neon/arena';
 import { songData } from './music';
 import { RhythmInput } from './rhythm-input';
 import { DUELISTS, judgeBot, orbitBot, Robot, robotGlowScale } from './robots';
@@ -958,6 +958,8 @@ export class NeonParty implements SpaceView, Nova {
     const cam = this.ctx.camera.position;
     // Seen from inside the yard (or right next to it) the curtain hides.
     const near = (Math.abs(cam.z - -20.3) < 2.5 && Math.abs(cam.x) < 5) || this.player_.z < -20 ? 0 : 1;
+    // Playing in the yard with the camera out behind the south wall, the airlock walls and gate frame would fill the view.
+    st.airlockShell.visible = !(this.player_.z < ARENA.z1 && cam.z > ARENA.z1 - 1);
     this.doorOpen += ((this.doorsShut ? 0 : 1) - this.doorOpen) * Math.min(1, dt * 4);
     for (const d of st.airlockDoors) {
       d.visible = this.doorOpen < 0.98;
