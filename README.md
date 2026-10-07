@@ -13,7 +13,7 @@ Play at **https://toyboxes.games**. Works with touch, keyboard and mouse, contro
 - **The sketchbook:** one page per idea with a typed description and an optional drawing. Every visitor can read it; writing needs the room PIN. Turn to a new page for a new request, or edit an older page to revise it. Pages keep their identity, drafts survive failed saves, and edits from two devices ask which version to keep.
 - **Built experiences:** an inner area can be a kart track or a casino instead of a toy room.
   - *Kart track:* the course is drawn on a sketchbook page and smoothed into a road with curbs, a start gantry, tyre stacks and lamps. Three computer drivers lap it all the time; stop on the race pad in your kart for a 3-lap race from the grid with a countdown and live positions. Laps are timed with shortcut and wrong-way checks, personal bests are kept, and a board at the start shows everyone's best laps.
-  - *Casino:* a giant three-reel slot machine with a pull lever. The server decides every spin. Players start with 1,000 play credits and get a free refill when they run out; the credits kiosk shows each player's totals and balance over time, and a wall board shows the top balances. Credits only exist inside that casino.
+  - *Casino:* The Golden Paddle, a riverboat casino. A giant slot with a paddle wheel bonus, roulette, blackjack, a big money wheel on the stern deck, Lucky Falls and video poker in the lounge, and a high stakes blackjack table in the wheelhouse. The server decides every spin and card. Players start with 1,000 play credits (never real money) and Penny tops them up for free when they run out; stamps and ranks open the upper rooms, and the Captain's Logbook shows each player's totals, balance over time and the boards. Credits only exist inside that casino.
 - **Updates and installing:** open copies notice a new deploy within a minute and offer a refresh that brings you back to the same spot (also in the pause menu for controllers and remotes). Settings has an Add to home screen option.
 - **Creator tools** at `/admin`: a feed of new and changed pages, page status (requested, being built, ready to play), page history and revert, PIN reset, release, restore, move or relabel claims, and an editor that places game cabinets and up to three inner areas on a room map, linked to the pages they came from.
 - **Arcades:** normal same-tab navigation with a confirmation; the town remembers where you were, so Back puts you outside the same door.
@@ -59,7 +59,7 @@ npm run build
 | `TOYBOXES_SECRET` | Signs edit tokens, admin sessions and browser keys |
 | `ADMIN_PASSWORD` | Password for `/admin` |
 
-Scores live under the same prefix: `lap:<room>:<area>` and `casinoboard:<room>:<area>` sorted sets, `casino:<room>:<area>:<browser>` credit records, and `scorename:<browser>` for the name boards show.
+Scores live under the same prefix: `lap:<room>:<area>` and `casinoboard:<room>:<area>` sorted sets, `casino:<room>:<area>:<browser>` credit records (with any open hands), `casinowin:`, `casinostamps:` and `casinocapt:` boards, `casinojp:` jackpots and `casinofame:` for the Hall of Fame, and `scorename:<browser>` for the name boards show.
 
 ## Deployment
 

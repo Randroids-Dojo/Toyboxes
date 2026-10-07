@@ -126,7 +126,15 @@ export async function openWorld(opts: {
     })();`);
 
   const dbg = <T = any>(f: string, ...args: unknown[]): Promise<T> => page.evaluate(([f, a]) => (window as any).toyboxes.debug[f as string](...(a as unknown[])), [f, args] as const) as Promise<T>;
-  const padSet = (i: number, v: number) => page.evaluate(([i, v]) => ((window as any).__pad.buttons[i] = v), [i, v] as const);
+  // Waits two frames after each change so a slow (software rendered) frame never misses a press or a release.
+  const padSet = (i: number, v: number) =>
+    page.evaluate(
+      ([i, v]) => {
+        (window as any).__pad.buttons[i] = v;
+        return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      },
+      [i, v] as const,
+    );
   const w: World = {
     page,
     device,

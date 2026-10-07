@@ -9,7 +9,7 @@ export const ROULETTE_RED = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 
 /** Pocket order around a European wheel, clockwise from zero. */
 export const WHEEL_ORDER = [0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26];
 
-export type RouletteType = 'red' | 'black' | 'odd' | 'even' | 'low' | 'high' | 'dozen1' | 'dozen2' | 'dozen3' | 'number';
+export type RouletteType = 'red' | 'black' | 'odd' | 'even' | 'low' | 'high' | 'dozen1' | 'dozen2' | 'dozen3' | 'col1' | 'col2' | 'col3' | 'number';
 
 export interface RouletteBet {
   type: RouletteType;
@@ -27,6 +27,9 @@ export const ROULETTE_LABELS: Record<RouletteType, string> = {
   dozen1: '1st 12',
   dozen2: '2nd 12',
   dozen3: '3rd 12',
+  col1: 'Column 1',
+  col2: 'Column 2',
+  col3: 'Column 3',
   number: 'Lucky number',
 };
 
@@ -57,8 +60,32 @@ export function rouletteReturn(bet: RouletteBet, pocket: number): number {
       return pocket >= 13 && pocket <= 24 ? 3 : 0;
     case 'dozen3':
       return pocket >= 25 ? 3 : 0;
+    case 'col1':
+    case 'col2':
+    case 'col3':
+      // Column 1 holds 1, 4, 7 ... 34; column 3 holds 3, 6 ... 36.
+      return (pocket - 1) % 3 === Number(bet.type[3]) - 1 ? 3 : 0;
   }
   return 0;
+}
+
+/** A chip stack on the betting board: where it is and how many credits. */
+export interface RouletteChip extends RouletteBet {
+  amount: number;
+}
+
+/** Most separate bets in one spin. */
+export const ROULETTE_MAX_BETS = 8;
+
+/** Credits back for every bet on the board when `pocket` comes up (stakes included). */
+export function rouletteBoardReturn(bets: RouletteChip[], pocket: number): { total: number; perBet: number[] } {
+  const perBet = bets.map((b) => rouletteReturn(b, pocket) * b.amount);
+  return { total: perBet.reduce((a, b) => a + b, 0), perBet };
+}
+
+/** A stable key for a board cell, e.g. "red" or "number:17". */
+export function rouletteKey(b: RouletteBet): string {
+  return b.type === 'number' ? `number:${b.number}` : b.type;
 }
 
 // ---------------------------------------------------------------------------

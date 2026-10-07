@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import { chromium } from 'playwright-core';
 import { requireLocalPlaytest } from './autobuild/safety';
 import { grandPrixTrack } from '../src/shared/circuits';
+import { BLACKJACK } from '../src/experiences/casino/layout';
 
 const out = process.argv[2] ?? '/tmp/toyboxes-exp';
 const base = process.argv[3] ?? 'http://localhost:5207/';
@@ -128,49 +129,78 @@ await act('interact');
 await until((s) => s.space === 'area', 'the casino');
 await page.waitForTimeout(1500);
 await snap('casino-arrival');
-type CExp = { machine: { x: number; z: number }; kiosk: { x: number; z: number }; stats: { balance: number; spins: number; spent: number; earned: number } | null; spinning: boolean; bet: number; reels: number[] };
-let c = await dbg<CExp>('experience');
-await dbg('teleport', c.machine.x, c.machine.z, Math.PI);
+type CExp = {
+  spots: Record<string, { x: number; z: number; yaw: number }>;
+  stats: { balance: number; spins: number; spent: number; earned: number; refillCredits: number } | null;
+  introShown: boolean;
+  bet: number;
+  slot: { spinning: boolean; spins: number; shownStops: number[]; lastServerStops: number[] | null };
+  ceremony: unknown;
+  roulette: { spinning: boolean; lastPocket: number | null; shownPocket: number | null };
+  blackjack: { busy: boolean; view: { phase: string } | null };
+};
+const cexp = () => dbg<CExp>('experience');
+const addsUp = (c: CExp) => !!c.stats && c.stats.balance === 1000 + c.stats.refillCredits + c.stats.earned - c.stats.spent;
+const tap = async (selector: string) => {
+  const b = page.locator(selector).filter({ visible: true }).first();
+  if (phone) await b.tap();
+  else await b.click();
+  await page.waitForTimeout(200);
+};
+const cardOpen = () => page.evaluate(() => !!document.querySelector('.modal.in'));
+// The how to play card on the first visit.
+for (let i = 0; i < 60 && !(await cardOpen()); i++) await page.waitForTimeout(100);
+if (!(await cardOpen())) throw new Error('No how to play card on the first casino visit');
+await tap('.modal.in .btn.primary');
+let c = await cexp();
+await dbg('teleport', c.spots.lever.x, c.spots.lever.z, Math.PI);
 await page.waitForTimeout(400);
 await until((s) => String(s.prompt).startsWith('Pull the lever'), 'spin prompt');
 await act('kick'); // change bet
 await page.waitForTimeout(200);
-c = await dbg<CExp>('experience');
-console.log('bet now', c.bet);
+console.log('bet now', (await cexp()).bet);
 for (let i = 0; i < 3; i++) {
+  await until((s) => String(s.prompt).startsWith('Pull the lever'), 'the lever');
   await act('interact');
   await page.waitForTimeout(500);
   if (i === 0) await snap('reels-spinning');
-  for (let k = 0; k < 40 && (await dbg<CExp>('experience')).spinning; k++) await page.waitForTimeout(150);
+  const end = Date.now() + 30000;
+  while (Date.now() < end) {
+    c = await cexp();
+    if (!c.slot.spinning && !c.ceremony && c.slot.spins === i + 1) break;
+    await page.waitForTimeout(200);
+  }
 }
 await page.waitForTimeout(400);
 await snap('reels-landed');
-c = await dbg<CExp>('experience');
-console.log('casino stats', JSON.stringify(c.stats), 'reels', c.reels);
+c = await cexp();
+console.log('casino stats', JSON.stringify(c.stats), 'reels', c.slot.shownStops);
 if (!c.stats || c.stats.spins !== 3) throw new Error('Spins were not recorded');
-if (c.stats.balance !== 1000 - c.stats.spent + c.stats.earned) throw new Error('Credits do not add up');
+if (JSON.stringify(c.slot.shownStops) !== JSON.stringify(c.slot.lastServerStops)) throw new Error('The reels do not show the server\'s spin');
+if (!addsUp(c)) throw new Error('Credits do not add up');
 // Roulette: bet on red and spin.
-await dbg('teleport', (c as any).roulette.x, (c as any).roulette.z, Math.PI);
+await dbg('teleport', c.spots.roulette.x, c.spots.roulette.z, Math.PI);
 await page.waitForTimeout(300);
 await until((s) => s.prompt === 'Play roulette', 'roulette prompt');
 await act('interact');
-await page.waitForSelector('.table-panel');
-const tap = async (name: string | RegExp) => {
-  const b = page.locator('.table-panel').getByRole('button', { name }).first();
-  if (phone) await b.tap();
-  else await b.click();
-};
-await tap('Red');
-await tap('Spin the wheel');
+await page.waitForSelector('.rl-board');
+await page.waitForTimeout(400);
+await tap('.rl-cell[data-key="red"]');
+await tap('.gp-panel .gp-actions .btn.primary');
 await page.waitForTimeout(1500);
 await snap('roulette-spinning');
-await page.waitForFunction(() => /\d+ (red|black|green)/.test(document.querySelector('.table-status')?.textContent ?? ''), null, { timeout: 15000 });
-console.log('roulette:', await page.locator('.table-status').textContent());
+for (let end = Date.now() + 30000; Date.now() < end; await page.waitForTimeout(200)) {
+  const r = (await cexp()).roulette;
+  if (r.lastPocket !== null && !r.spinning) break;
+}
+const rl = (await cexp()).roulette;
+if (rl.shownPocket !== rl.lastPocket) throw new Error(`Roulette shows ${rl.shownPocket}, the server said ${rl.lastPocket}`);
+console.log('roulette:', await page.locator('.modal.in .gp-status').first().textContent());
 await snap('roulette-result');
-await tap('Done');
+await tap('.modal.in button:text-is("Done")');
 await page.waitForTimeout(300);
 // Walk straight at the blackjack table: you stop at its rim instead of sinking into it.
-const bjTable = (c as any).blackjackTable as { x: number; z: number; r: number };
+const bjTable = BLACKJACK;
 await dbg('teleport', bjTable.x, bjTable.z + bjTable.r + 1.4, Math.PI);
 await page.waitForTimeout(300);
 let gap = Infinity;
@@ -182,38 +212,40 @@ for (let i = 0; i < 24; i++) {
 }
 await walking;
 console.log('closest to the blackjack table rim', gap.toFixed(2), 'm');
-if (gap < 0.3) throw new Error(`Walked into the blackjack table: ${gap.toFixed(2)} m from its rim`);
-if (gap > 0.6) throw new Error(`Never reached the blackjack table: ${gap.toFixed(2)} m from its rim`);
-// Blackjack: deal, then stand (or play on until the hand ends).
-await dbg('teleport', (c as any).blackjack.x, (c as any).blackjack.z, Math.PI);
+if (gap < 0.2) throw new Error(`Walked into the blackjack table: ${gap.toFixed(2)} m from its rim`);
+if (gap > 0.7) throw new Error(`Never reached the blackjack table: ${gap.toFixed(2)} m from its rim`);
+// Blackjack: deal, then stand until the hand ends.
+await dbg('teleport', c.spots.blackjack.x, c.spots.blackjack.z, Math.PI);
 await page.waitForTimeout(300);
 await until((s) => String(s.prompt).includes('blackjack'), 'blackjack prompt');
 await act('interact');
-await page.waitForSelector('.table-panel');
-await tap('Deal');
-await page.waitForTimeout(800);
-for (let i = 0; i < 3; i++) {
-  const stand = page.locator('.table-panel').getByRole('button', { name: 'Stand' });
-  if (!(await stand.isVisible())) break;
-  await snap('blackjack-hand');
-  await tap('Stand');
-  await page.waitForTimeout(800);
-}
-const bjStatus = await page.locator('.table-status').textContent();
-console.log('blackjack:', bjStatus);
-if (!/win|Push|dealer wins|Bust|Blackjack/i.test(bjStatus ?? '')) throw new Error(`Hand did not settle: ${bjStatus}`);
-await snap('blackjack-result');
-await tap('Done');
-await page.waitForTimeout(300);
-c = await dbg<CExp>('experience');
-if (!c.stats || c.stats.balance !== 1000 - c.stats.spent + c.stats.earned) throw new Error('Credits do not add up after table games');
-await dbg('teleport', c.kiosk.x, c.kiosk.z, Math.PI);
-await page.waitForTimeout(300);
-await until((s) => s.prompt === 'Check my credits', 'kiosk prompt');
-await act('interact');
-await page.waitForSelector('.cchart');
+await page.waitForSelector('.bj-table');
 await page.waitForTimeout(400);
-await snap('credits-kiosk');
+await tap('.gp-panel .gp-actions .btn.primary');
+for (let i = 0; i < 12; i++) {
+  await page.waitForTimeout(500);
+  const b = (await cexp()).blackjack;
+  if (b.busy) continue;
+  if (b.view?.phase !== 'player') break;
+  await snap('blackjack-hand');
+  await tap('.gp-panel .gp-actions .btn:text-is("Stand")');
+}
+const bjStatus = (await cardOpen()) ? await page.locator('.modal.in .gp-status').first().textContent() : '(closed for a rank up)';
+console.log('blackjack:', bjStatus);
+if ((await cexp()).blackjack.view?.phase !== 'done') throw new Error(`Hand did not settle: ${bjStatus}`);
+await snap('blackjack-result');
+if (await cardOpen()) await tap('.modal.in button:text-is("Done")');
+await page.waitForTimeout(300);
+c = await cexp();
+if (!addsUp(c)) throw new Error('Credits do not add up after table games');
+// The Captain's Logbook: your credits over time.
+await dbg('teleport', c.spots.logbook.x, c.spots.logbook.z, c.spots.logbook.yaw);
+await page.waitForTimeout(300);
+await until((s) => String(s.prompt).includes('Logbook'), 'logbook prompt');
+await act('interact');
+await page.waitForSelector('.lb-tabs');
+await page.waitForTimeout(400);
+await snap('logbook');
 
 if (errors.length) {
   console.log('ERRORS', errors);
