@@ -66,6 +66,11 @@ export interface CameraShot {
   fov?: number;
   /** 0 keeps the follow camera, 1 is fully this shot. Ease it for smooth cuts. */
   blend?: number;
+  /**
+   * Usually the player's head. When set, the blended camera pulls in toward
+   * this point rather than end up in or behind a wall that blocks the camera.
+   */
+  pivot?: THREE.Vector3;
   /** Freezes the player (no moving, looking, jumping or actions) while it plays. */
   lockPlayer?: boolean;
   /** Interact skips a locked shot. */

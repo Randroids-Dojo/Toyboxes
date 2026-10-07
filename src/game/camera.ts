@@ -22,6 +22,8 @@ export class CameraRig {
   private shown = 6.2;
   private lastLook = -1e9;
   private target = new THREE.Vector3();
+  /** Where the follow camera looks this frame. */
+  readonly look = new THREE.Vector3();
   private inited = false;
   indoor = false;
   /** Seconds left of a small nudge, e.g. a hard bump. */
@@ -109,12 +111,17 @@ export class CameraRig {
     let dir = dirFor(pitch);
     if (!this.indoor) {
       let f = 1;
-      for (let i = 0; i < 5; i++) {
+      // A wall nearer than the camera can pull in (you stand against it)
+      // lets it lift further and look down from above instead.
+      let top = 1.2;
+      for (let i = 0; i < 8; i++) {
         dir = dirFor(pitch);
         const far = this.target.clone().addScaledVector(dir, wantDist);
         f = rayFraction(this.target.x, this.target.y, this.target.z, far.x, far.y, far.z, colliders);
-        if (f > 0.8 || pitch >= 1.2) break;
-        pitch = Math.min(1.2, pitch + 0.2);
+        if (f > 0.8) break;
+        if (wantDist * f - 0.3 < 1.6) top = 1.5;
+        if (pitch >= top) break;
+        pitch = Math.min(top, pitch + 0.2);
       }
       dist = Math.max(1.6, wantDist * f - 0.3);
     }
@@ -125,6 +132,12 @@ export class CameraRig {
     this.shown = dist < this.shown ? dist : this.shown + (dist - this.shown) * damp(3, dt);
     const pos = this.target.clone().addScaledVector(dir, this.shown);
     pos.y = Math.max(0.6, pos.y);
+    if (!this.indoor) {
+      // Never end up inside or behind a wall, even while the lift eases in.
+      const f = rayFraction(this.target.x, this.target.y, this.target.z, pos.x, pos.y, pos.z, colliders);
+      const len = pos.distanceTo(this.target);
+      if (f < 1 && len > 0) pos.sub(this.target).multiplyScalar(Math.max(0.3, f * len - 0.3) / len).add(this.target);
+    }
     if (this.nudge > 0 && !opts.reduceMotion) {
       this.nudge = Math.max(0, this.nudge - dt);
       const n = this.nudge * 0.25;
@@ -132,7 +145,8 @@ export class CameraRig {
       pos.y += (Math.random() - 0.5) * n;
     }
     this.camera.position.copy(pos);
-    this.camera.lookAt(this.target.x, this.target.y + 0.2, this.target.z);
+    this.look.set(this.target.x, this.target.y + 0.2, this.target.z);
+    this.camera.lookAt(this.look);
   }
 
   /**

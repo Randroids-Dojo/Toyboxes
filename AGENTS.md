@@ -61,7 +61,7 @@ Each experience is meant to feel like its own game. New and rebuilt worlds live 
 
 Engine hooks for worlds (`src/world/space.ts`, `ExperienceCtx` in `src/experiences/common.ts`):
 
-- `cameraShot(dt)` directs the camera (flyovers, podiums, chase or fixed framing); `lockPlayer` freezes the player and Interact runs `skip`. While a shot is in charge, walking is relative to the shot's view.
+- `cameraShot(dt)` directs the camera (flyovers, podiums, chase or fixed framing); `lockPlayer` freezes the player and Interact runs `skip`. While a shot is in charge, walking is relative to the shot's view. A part blend mixes the follow camera's position and look point (it never rolls); give a shot near walls a `pivot` (the player's head) and the blended camera pulls in rather than sit in or behind one.
 - `captureInput()` stops the game moving the player and handling interact, kick and jump; read `ctx.input` yourself (rhythm games, aiming) and give the touch buttons labels.
 - `carry(h, player, move)` puts the player on a scripted path or your own flight model, with a body pose; return null to hand back to normal physics.
 - `jumpAction` repurposes Jump; `runScale` turns off the run bonus in timed rounds so every device competes fairly.

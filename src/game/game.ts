@@ -14,7 +14,7 @@ import { h, type UI } from '../ui/ui';
 import { Avatar, shirtFor, type Pose, type PoseFn } from '../world/avatar';
 import { Interior } from '../world/interior';
 import { disposeTree } from '../world/kit';
-import { circle, clamp, damp, groundHeight, resolveCircle, wrapAngle, type Collider } from '../world/physics';
+import { circle, clamp, damp, groundHeight, rayFraction, resolveCircle, wrapAngle, type Collider } from '../world/physics';
 import { Sky, dayPhase } from '../world/sky';
 import { Town, type Entrance } from '../world/town';
 import { Toys, type Mover, type ToyEvent } from '../world/toys';
@@ -1285,7 +1285,7 @@ export class Game {
     } else {
       const look = steer ? this.input.look : { x: 0, y: 0 };
       this.rig.update(dt, now, look, this.follow(), cols, this.settings);
-      this.applyShot(shot);
+      this.applyShot(shot, cols);
       this.rig.applyShake(dt, this.settings.reduceMotion);
       if (this.space.kind !== 'hub') this.space.interior.cutaway(this.camera.position);
     }
@@ -1345,16 +1345,22 @@ export class Game {
   }
 
   /** Blends the follow camera toward an experience's directed shot. */
-  private applyShot(shot: CameraShot | null): void {
+  private applyShot(shot: CameraShot | null, cols: Collider[]): void {
     const base = innerWidth < innerHeight ? 68 : 55;
     let fov = base;
     if (shot) {
       const b = clamp(shot.blend ?? 1, 0, 1);
       if (b > 0) {
-        this.camera.position.lerp(shot.position, b);
-        const from = this.camera.quaternion.clone();
-        this.camera.lookAt(shot.target);
-        this.camera.quaternion.copy(from.slerp(this.camera.quaternion, b));
+        // Blend the look point rather than the rotation, so the view never rolls.
+        const look = this.rig.look.clone().lerp(shot.target, b);
+        const cam = this.camera.position.lerp(shot.position, b);
+        const pv = shot.pivot;
+        if (pv) {
+          const f = rayFraction(pv.x, pv.y, pv.z, cam.x, cam.y, cam.z, cols);
+          const len = cam.distanceTo(pv);
+          if (f < 1 && len > 0) cam.sub(pv).multiplyScalar(Math.max(0.6, f * len - 0.3) / len).add(pv);
+        }
+        this.camera.lookAt(look);
         fov = base + ((shot.fov ?? base) - base) * b;
       }
     }
