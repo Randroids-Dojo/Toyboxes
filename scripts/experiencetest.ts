@@ -239,6 +239,13 @@ await page.waitForTimeout(300);
 c = await cexp();
 if (!addsUp(c)) throw new Error('Credits do not add up after table games');
 // The Captain's Logbook: your credits over time.
+// A newly earned rank starts its camera after the stamp reveal. Wait for
+// both the queued stamps and the camera, so E opens the book instead of
+// being consumed by the promotion or the promotion closing the book.
+await page.waitForFunction(() => {
+  const c = (window as unknown as G).toyboxes.debug.experience();
+  return c && !c.stamping && !c.cinematic;
+});
 await dbg('teleport', c.spots.logbook.x, c.spots.logbook.z, c.spots.logbook.yaw);
 await page.waitForTimeout(300);
 await until((s) => String(s.prompt).includes('Logbook'), 'logbook prompt');

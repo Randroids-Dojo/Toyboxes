@@ -635,6 +635,7 @@ export class Casino implements SpaceView {
       seated: this.director.seated,
       view: { topEdge: Number(this.topEdge.toFixed(3)), camY: Number(this.ctx.camera.position.y.toFixed(2)), ceilings: this.boat.ceilings.filter((c) => c.visible).length },
       cinematic: this.director.playing,
+      stamping: this.hud.busyStamping,
       oldLucky: { x: OLD_LUCKY.x, z: OLD_LUCKY.z },
       roulette: { spinning: this.roulette.spinning, shownPocket: this.roulette.shownPocket, lastPocket: this.roulette.lastPocket, history: this.roulette.history.slice(0, 8) },
       blackjack: this.blackjack.debug(),
