@@ -1018,6 +1018,10 @@ export class Game {
     const items = [
       ...(this.updateReady ? [{ label: 'Get the new version', action: () => this.refreshForUpdate(), primary: true }] : []),
       { label: 'Resume', action: () => close(), primary: !this.updateReady },
+      ...(this.view()?.pauseItems?.() ?? []).map((it) => ({ label: it.label, action: () => {
+        close();
+        it.run();
+      } })),
       { label: 'Settings', action: () => settingsPanel(this.ui, (s) => this.applySettings(s)) },
       { label: 'Change my name', action: () => void this.rename() },
       { label: 'Reset the toys', action: () => {

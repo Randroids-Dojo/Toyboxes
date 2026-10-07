@@ -115,6 +115,8 @@ export interface SpaceView {
   kickAction?(player: PlayerState): { label: string; run: () => void } | null;
   /** Something that pauses with the menu, like a race. */
   holdsTime?(): boolean;
+  /** Extra pause menu items under Resume, e.g. "Restart the song" or "Quit the round". */
+  pauseItems?(): { label: string; run: () => void }[];
   /** Gravity for jumps here, as a share of normal (low in space). */
   gravity?(): number;
   /**
