@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import type { Input } from '../input/input';
 import type { Area } from '../shared/model';
 import type { UI } from '../ui/ui';
-import type { Pose } from '../world/avatar';
+import type { AvatarBones, Pose, PoseFn } from '../world/avatar';
 import type { Tier } from '../world/space';
 import { DISPLAY_FONT, BODY_FONT, keep, roundRect } from '../world/kit';
 
@@ -31,8 +31,10 @@ export interface ExperienceCtx {
   tier(): Tier;
   /** Which way the camera faces (radians, 0 faces +z), for camera-relative controls. */
   cameraYaw(): number;
-  /** Holds an avatar pose on foot (dance, crouch, aim...); null returns to walking. Carry poses win while carrying. */
-  pose(p: Pose | null): void;
+  /** Holds an avatar pose on foot (dance, crouch, aim... or your own PoseFn); null returns to walking. Carry poses win while carrying. */
+  pose(p: Pose | PoseFn | null): void;
+  /** The avatar's pivots, to dress the figure (remove what you add when you leave). */
+  bones(): AvatarBones;
   /** A quick right-arm swing. */
   swing(): void;
   /** Puts an object in the avatar's right hand (null empties it). The experience owns and disposes it. */

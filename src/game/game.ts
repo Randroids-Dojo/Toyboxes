@@ -11,7 +11,7 @@ import { ARCADES, EMPTY_CONTENT, exhibitsIn, type Area, type ArcadeId, type Exhi
 import { askName, choose, confirmBox, pinPad } from '../ui/dialogs';
 import { openSketchbook, type EditSession } from '../ui/sketchbook';
 import { h, type UI } from '../ui/ui';
-import { Avatar, shirtFor, type Pose } from '../world/avatar';
+import { Avatar, shirtFor, type Pose, type PoseFn } from '../world/avatar';
 import { Interior } from '../world/interior';
 import { disposeTree } from '../world/kit';
 import { circle, clamp, damp, groundHeight, resolveCircle, wrapAngle, type Collider } from '../world/physics';
@@ -92,7 +92,7 @@ export class Game {
   /** Set while the experience carries the player (see SpaceView.carry). */
   private carrying: { pose: Pose; speed: number } | null = null;
   /** A pose the experience asked for on foot. */
-  private worldPose: Pose | null = null;
+  private worldPose: Pose | PoseFn | null = null;
   private capture: CaptureLabels | null = null;
   private frameTimes: number[] = [];
   private lastScaleChange = 0;
@@ -503,6 +503,7 @@ export class Game {
       tier: () => this.tier,
       cameraYaw: () => this.controlYaw(),
       pose: (p) => (this.worldPose = p),
+      bones: () => this.avatar.bones(),
       swing: () => this.avatar.swing(),
       hold: (obj) => this.avatar.hold(obj),
       squash: (amount) => this.avatar.squash(amount),
