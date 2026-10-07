@@ -340,6 +340,7 @@ export class FartSimulator implements SpaceView {
       mayor.y = BANDSTAND.floor;
     }
     this.hud.letterbox(true);
+    this.ph.cinematic(true);
   }
   private cere: { t: number; step: number; medal: HTMLElement | null } | null = null;
   private cerePending = false;
@@ -384,6 +385,7 @@ export class FartSimulator implements SpaceView {
     c.medal?.remove();
     this.cere = null;
     this.hud.letterbox(false);
+    this.ph.cinematic(false);
     this.ctx.pose(null);
     this.save.medal = true;
     this.progress.save();
@@ -763,6 +765,7 @@ export class FartSimulator implements SpaceView {
     const k = Math.min(1, (it.t - a.t) / (b.t - a.t));
     const e = k * k * (3 - 2 * k);
     this.hud.letterbox(true);
+    this.ph.cinematic(true);
     return { position: a.p.clone().lerp(b.p, e), target: a.l.clone().lerp(b.l, e), blend: it.t > T - 0.8 ? (T - it.t) / 0.8 : 1, lockPlayer: true, skip: () => this.finishIntro(), skipLabel: 'Skip' };
   }
 
@@ -770,6 +773,7 @@ export class FartSimulator implements SpaceView {
     if (!this.intro || this.intro.done) return;
     this.intro.done = true;
     this.hud.letterbox(false);
+    this.ph.cinematic(false);
     this.save.seenIntro = true;
     this.progress.save();
     this.hud.title('Little Puffington', 'A fart simulator');

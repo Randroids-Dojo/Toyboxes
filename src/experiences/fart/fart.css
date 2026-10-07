@@ -204,6 +204,15 @@
   letter-spacing: 0.04em;
 }
 
+.puff.cine > * {
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.puff.cine > .pf-medal {
+  opacity: 1;
+}
+
 .puff.trial .pf-chip {
   display: none;
 }

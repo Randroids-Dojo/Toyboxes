@@ -135,6 +135,11 @@ export class PuffHud {
     this.tummy_.style.display = on ? '' : 'none';
   }
 
+  /** Hides the world HUD under the letterbox of a cinematic shot. */
+  cinematic(on: boolean): void {
+    this.root.classList.toggle('cine', on);
+  }
+
   trial(on: boolean): void {
     this.root.classList.toggle('trial', on);
   }
