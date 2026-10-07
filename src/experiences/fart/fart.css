@@ -1,0 +1,698 @@
+/* Little Puffington's HUD: the tummy gauge, the bean jar, the mischief
+   notebook, comic words, speech bubbles and the trial meters. Cream paper
+   panels, plum ink, tomato and bean-green accents. */
+
+.puff {
+  --pf-paper: #fff7e6;
+  --pf-ink: #2b1d3a;
+  --pf-tomato: #e8574a;
+  --pf-bean: #6fbf3b;
+  --pf-gold: #ffd24a;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  color: var(--pf-ink);
+  font-family: var(--body);
+}
+
+/* ---- tummy gauge */
+
+.pf-tummy {
+  position: absolute;
+  top: calc(58px + var(--safe-t));
+  left: calc(12px + var(--safe-l));
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px 5px 6px;
+  background: rgba(255, 247, 230, 0.95);
+  border: 2.5px solid var(--pf-ink);
+  border-radius: 999px;
+  box-shadow: 0 3px 0 var(--pf-ink);
+  transform: translateX(0);
+  transition: transform 0.35s cubic-bezier(0.3, 1.6, 0.5, 1), opacity 0.2s;
+}
+
+.pf-tummy.off {
+  transform: translateX(-130%);
+  opacity: 0;
+}
+
+.puff.trial .pf-tummy {
+  top: calc(132px + var(--safe-t));
+}
+
+.pf-tummy.shake {
+  animation: pf-shake 0.35s linear;
+}
+
+.pf-tummy.flash .pf-tank i {
+  animation: pf-flash 0.5s steps(2) 3;
+}
+
+@keyframes pf-shake {
+  0%, 100% { translate: 0 0; }
+  20% { translate: -4px 1px; }
+  40% { translate: 4px -1px; }
+  60% { translate: -3px 0; }
+  80% { translate: 3px 1px; }
+}
+
+@keyframes pf-flash {
+  50% { background: var(--pf-tomato); }
+}
+
+.pf-gas-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  border: 2.5px solid var(--pf-ink);
+  background: #e8e2d6;
+  font-family: var(--display);
+  font-size: 0.95rem;
+  color: var(--pf-ink);
+  transition: transform 0.2s;
+}
+
+.pf-gas-icon.pop {
+  animation: pf-pop 0.45s cubic-bezier(0.3, 1.8, 0.5, 1);
+}
+
+@keyframes pf-pop {
+  0% { transform: scale(0.4); }
+  100% { transform: scale(1); }
+}
+
+.pf-gas-icon[data-gas='beans'] {
+  background: radial-gradient(circle at 35% 30%, #d4f58a, #8fd14f 55%, #5e9e2e);
+}
+
+.pf-gas-icon[data-gas='fizzy'] {
+  background: radial-gradient(circle at 35% 30%, #ffffff, #9fe3ff 40%, #ff8fc8);
+}
+
+.pf-gas-icon[data-gas='cabbage'] {
+  background: radial-gradient(circle at 35% 30%, #b7e36a, #9b7bd6 60%, #7a5cb8);
+}
+
+.pf-gas-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.pf-tank-wrap {
+  display: grid;
+  gap: 2px;
+}
+
+.pf-tank-label {
+  font: 700 0.72rem var(--body);
+  letter-spacing: 0.02em;
+}
+
+.pf-tank {
+  position: relative;
+  width: clamp(110px, 26vw, 170px);
+  height: 14px;
+  border-radius: 999px;
+  border: 2px solid var(--pf-ink);
+  background: #efe6d4;
+  overflow: hidden;
+}
+
+.pf-tank i {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  background: linear-gradient(180deg, #d4f58a, #8fd14f);
+  transition: transform 0.12s linear;
+}
+
+.pf-tank b {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  background: repeating-linear-gradient(45deg, rgba(232, 87, 74, 0.85) 0 4px, rgba(255, 255, 255, 0.6) 4px 8px);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.pf-tank b.on {
+  opacity: 1;
+}
+
+.pf-tank[data-gas='fizzy'] i {
+  background: linear-gradient(180deg, #ffc4e4, #ff8fc8);
+}
+
+.pf-tank[data-gas='cabbage'] i {
+  background: linear-gradient(180deg, #c4a8f0, #9b7bd6);
+}
+
+/* ---- bean jar and mischief notebook */
+
+.pf-jar {
+  position: absolute;
+  top: calc(10px + var(--safe-t));
+  right: calc(68px + var(--safe-r));
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px 4px 6px;
+  background: rgba(255, 247, 230, 0.95);
+  border: 2.5px solid var(--pf-ink);
+  border-radius: 14px;
+  box-shadow: 0 3px 0 var(--pf-ink);
+  font: 1.05rem var(--display);
+  transition: transform 0.2s;
+}
+
+.pf-jar.bump {
+  animation: pf-jar 0.6s cubic-bezier(0.3, 1.8, 0.5, 1);
+}
+
+@keyframes pf-jar {
+  0% { transform: scale(1.35) rotate(-6deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+
+.pf-jar svg {
+  width: 30px;
+  height: 34px;
+}
+
+.pf-chip {
+  position: absolute;
+  top: calc(62px + var(--safe-t));
+  right: calc(12px + var(--safe-r));
+  max-width: min(46vw, 260px);
+  padding: 5px 12px;
+  background: rgba(255, 247, 230, 0.9);
+  border: 2px solid var(--pf-ink);
+  border-radius: 12px;
+  font: 700 0.8rem var(--body);
+  line-height: 1.25;
+}
+
+.pf-chip small {
+  display: block;
+  font-size: 0.68rem;
+  opacity: 0.7;
+  letter-spacing: 0.04em;
+}
+
+.puff.trial .pf-chip {
+  display: none;
+}
+
+.pf-note {
+  position: absolute;
+  top: calc(110px + var(--safe-t));
+  left: 50%;
+  width: min(360px, calc(100vw - 32px));
+  transform: translate(-50%, -30px) rotate(-2deg);
+  opacity: 0;
+  padding: 14px 18px 12px 44px;
+  background:
+    repeating-linear-gradient(180deg, transparent 0 25px, rgba(74, 163, 223, 0.35) 25px 27px),
+    #fffdf5;
+  border: 3px solid var(--pf-ink);
+  border-radius: 6px 16px 16px 6px;
+  box-shadow: 0 6px 0 var(--pf-ink);
+  transition: transform 0.35s cubic-bezier(0.3, 1.5, 0.5, 1), opacity 0.25s;
+}
+
+.pf-note::before {
+  content: '';
+  position: absolute;
+  left: 30px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: rgba(232, 87, 74, 0.6);
+}
+
+.pf-note.in {
+  transform: translate(-50%, 0) rotate(-2deg);
+  opacity: 1;
+}
+
+.pf-note h4 {
+  margin: 0 0 4px;
+  font: 1.15rem var(--display);
+}
+
+.pf-note p {
+  margin: 0;
+  font-weight: 700;
+  font-size: 1rem;
+  position: relative;
+}
+
+.pf-note p::after {
+  content: '';
+  position: absolute;
+  left: -4px;
+  right: 30%;
+  top: 52%;
+  height: 3px;
+  background: var(--pf-tomato);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.45s ease 0.35s;
+}
+
+.pf-note.in p::after {
+  transform: scaleX(1);
+}
+
+.pf-note .tick {
+  position: absolute;
+  left: 6px;
+  top: 34px;
+  font: 1.9rem var(--display);
+  color: var(--pf-bean);
+  transform: scale(0);
+  transition: transform 0.3s cubic-bezier(0.3, 1.8, 0.5, 1) 0.25s;
+}
+
+.pf-note.in .tick {
+  transform: scale(1);
+}
+
+/* ---- comic words and bubbles */
+
+.puff-words {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.puff-word {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-family: var(--display);
+  font-size: calc(1.9rem * var(--s, 1));
+  color: var(--c, #8fd14f);
+  rotate: var(--r, 0deg);
+  -webkit-text-stroke: 2px #2b1d3a;
+  paint-order: stroke fill;
+  text-shadow: 0 3px 0 #2b1d3a;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+  will-change: transform;
+}
+
+.puff-word.tiny {
+  font-size: 0.85rem;
+  -webkit-text-stroke: 1px #2b1d3a;
+  text-shadow: none;
+}
+
+.puff-bubble {
+  position: absolute;
+  left: 0;
+  top: 0;
+  max-width: 180px;
+  padding: 6px 12px;
+  background: #fffdf5;
+  border: 2.5px solid #2b1d3a;
+  border-radius: 16px;
+  font: 700 0.92rem var(--body);
+  color: #2b1d3a;
+  white-space: nowrap;
+  box-shadow: 0 3px 0 rgba(43, 29, 58, 0.85);
+  will-change: transform;
+}
+
+.puff-bubble::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -10px;
+  width: 14px;
+  height: 14px;
+  background: #fffdf5;
+  border-right: 2.5px solid #2b1d3a;
+  border-bottom: 2.5px solid #2b1d3a;
+  transform: translateX(-50%) rotate(45deg) skew(10deg, 10deg);
+}
+
+.puff-bubble.shout {
+  font-family: var(--display);
+  font-size: 1.1rem;
+  background: #fff3b0;
+}
+
+.puff-bubble.shout::after {
+  background: #fff3b0;
+}
+
+.puff-icon {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font: 1.7rem var(--display);
+  color: #fffdf5;
+  -webkit-text-stroke: 2px #2b1d3a;
+  paint-order: stroke fill;
+  will-change: transform;
+}
+
+.puff-icon.alert {
+  color: var(--pf-tomato, #e8574a);
+}
+
+.puff-icon.stink {
+  color: #9b7bd6;
+  letter-spacing: -0.2em;
+}
+
+/* ---- trial meters */
+
+.pf-meter {
+  position: absolute;
+  left: 50%;
+  bottom: calc(86px + var(--safe-b));
+  transform: translateX(-50%);
+  width: min(420px, calc(100vw - 40px));
+  padding: 6px 10px;
+  background: rgba(255, 247, 230, 0.95);
+  border: 2.5px solid var(--pf-ink);
+  border-radius: 14px;
+  box-shadow: 0 3px 0 var(--pf-ink);
+  font: 700 0.8rem var(--body);
+}
+
+.pf-meter .bar {
+  position: relative;
+  height: 14px;
+  margin-top: 3px;
+  border-radius: 999px;
+  border: 2px solid var(--pf-ink);
+  background: #efe6d4;
+  overflow: hidden;
+}
+
+.pf-meter .bar i {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  background: linear-gradient(90deg, #8fd14f, #ffd24a 70%, #e8574a);
+}
+
+.pf-meter.hot {
+  animation: pf-shake 0.35s linear infinite;
+}
+
+.pf-strikes {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: 8px;
+}
+
+.pf-strikes i {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--pf-ink);
+  background: #efe6d4;
+}
+
+.pf-strikes i.on {
+  background: var(--pf-tomato);
+}
+
+/* The band's sheet music strip. */
+.pf-sheet {
+  position: absolute;
+  left: 50%;
+  bottom: calc(90px + var(--safe-b));
+  transform: translateX(-50%);
+  width: min(560px, calc(100vw - 24px));
+  height: 74px;
+  background:
+    repeating-linear-gradient(180deg, transparent 0 13px, rgba(43, 29, 58, 0.35) 13px 15px) 0 7px / 100% 62px no-repeat,
+    #fffdf5;
+  border: 3px solid var(--pf-ink);
+  border-radius: 14px;
+  box-shadow: 0 4px 0 var(--pf-ink);
+  overflow: hidden;
+}
+
+.pf-sheet .now {
+  position: absolute;
+  left: 18%;
+  top: 4px;
+  bottom: 4px;
+  width: 5px;
+  border-radius: 3px;
+  background: var(--pf-tomato);
+}
+
+.pf-sheet .note {
+  position: absolute;
+  top: 0;
+  width: 26px;
+  height: 20px;
+  margin-left: -13px;
+  border-radius: 50%;
+  background: var(--pf-ink);
+  border: 2px solid var(--pf-ink);
+  rotate: -18deg;
+}
+
+.pf-sheet .note.hold::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 6px;
+  height: 6px;
+  width: var(--len, 40px);
+  background: rgba(111, 191, 59, 0.85);
+  border-radius: 3px;
+}
+
+.pf-sheet .note.rest {
+  background: transparent;
+  border: none;
+  rotate: 0deg;
+  font: 1.2rem var(--display);
+  color: var(--pf-tomato);
+  text-align: center;
+  line-height: 20px;
+}
+
+.pf-sheet .note.call {
+  background: #9fe3ff;
+}
+
+.pf-sheet .note.hit {
+  background: var(--pf-bean);
+}
+
+.pf-sheet .note.miss {
+  background: #c8bfae;
+  opacity: 0.5;
+}
+
+/* Wind arrow for Picnic Panic. */
+.pf-wind {
+  position: absolute;
+  top: calc(132px + var(--safe-t));
+  right: calc(12px + var(--safe-r));
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: rgba(255, 247, 230, 0.95);
+  border: 2.5px solid var(--pf-ink);
+  box-shadow: 0 3px 0 var(--pf-ink);
+  display: grid;
+  place-items: center;
+}
+
+.pf-wind svg {
+  width: 44px;
+  height: 44px;
+  transition: transform 0.6s cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+
+.pf-wind.wobble svg {
+  animation: pf-wobble 0.3s ease-in-out infinite alternate;
+}
+
+@keyframes pf-wobble {
+  from { rotate: -12deg; }
+  to { rotate: 12deg; }
+}
+
+.pf-wind small {
+  position: absolute;
+  bottom: -18px;
+  font: 700 0.7rem var(--body);
+  color: #fffdf5;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+/* Off-screen pointer to the next ring. */
+.pf-arrow {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 44px;
+  height: 44px;
+  margin: -22px 0 0 -22px;
+  pointer-events: none;
+}
+
+.pf-arrow svg {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 2px 0 #2b1d3a);
+}
+
+/* ---- dialogs: programme board and Toot-o-Matic */
+
+.pf-card {
+  width: min(560px, calc(100vw - 24px));
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  background: #fff7e6;
+  border: 3px solid #2b1d3a;
+  border-radius: 20px;
+  box-shadow: 0 6px 0 #2b1d3a;
+  padding: 18px 20px;
+  color: #2b1d3a;
+}
+
+.pf-card h2 {
+  margin: 0 0 4px;
+  font: 1.7rem var(--display);
+}
+
+.pf-card .pf-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 8px 0 12px;
+}
+
+.pf-card .pf-tabs .btn.on {
+  background: #ffd24a;
+}
+
+.pf-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pf-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border: 2px solid rgba(43, 29, 58, 0.2);
+  border-radius: 12px;
+  background: #fffdf5;
+  font-weight: 650;
+}
+
+.pf-list li.done {
+  background: #eaf7d8;
+  border-color: #6fbf3b;
+}
+
+.pf-list li .mark {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid #2b1d3a;
+  display: grid;
+  place-items: center;
+  font: 1rem var(--display);
+  background: #fff;
+}
+
+.pf-list li.done .mark {
+  background: #ffd24a;
+}
+
+.pf-list li small {
+  display: block;
+  font-weight: 600;
+  opacity: 0.7;
+  font-size: 0.8rem;
+}
+
+.pf-list li .grow {
+  flex: 1;
+}
+
+.pf-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.pf-grid .btn {
+  min-height: 64px;
+  white-space: normal;
+}
+
+.pf-grid .btn.on {
+  background: #ffd24a;
+}
+
+.pf-grid .btn.locked {
+  opacity: 0.55;
+}
+
+.pf-card .actions {
+  margin-top: 14px;
+}
+
+.pf-small {
+  font-size: 0.85rem;
+  opacity: 0.8;
+  margin: 2px 0 0;
+}
+
+/* Medal ceremony medal. */
+.pf-medal {
+  position: absolute;
+  left: 50%;
+  top: 38%;
+  width: 150px;
+  height: 150px;
+  margin: -75px 0 0 -75px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff3b0, #ffd24a 55%, #d9a03f);
+  border: 5px solid #2b1d3a;
+  box-shadow: 0 8px 0 #2b1d3a;
+  display: grid;
+  place-items: center;
+  font: 1.2rem var(--display);
+  text-align: center;
+  color: #2b1d3a;
+  animation: pf-medal 1s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+
+@keyframes pf-medal {
+  0% { transform: scale(0) rotate(-40deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+
+html.reduce-motion .pf-tummy.shake,
+html.reduce-motion .pf-meter.hot,
+html.reduce-motion .pf-wind.wobble svg {
+  animation: none;
+}
