@@ -1411,6 +1411,8 @@ export class Game {
       this.touch.setJump(jumpAct ? jumpAct.label : true);
       if (!it && !kick && ball && ball.dist < 1.8) ui.prompt('Kick', 'kick');
     }
+    // The hint shows walking controls, so it ends once you ride or a world takes the controls.
+    if (this.riding || this.capture || this.shot) this.hintTimer = 0;
     if (this.hintTimer > 0) {
       this.hintTimer -= dt;
       if (this.movedFor > 2.5 && this.hintTimer > 2) this.hintTimer = 2;
