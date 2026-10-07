@@ -61,3 +61,7 @@ Room 12 (estevan) asked for a "black hole galaxy" (page 1, with a drawing of a r
 - **Unlock lifetime:** 30-minute edit tokens; the game relocks after 5 quiet minutes or on leaving the room.
 - **Claim limits:** one active room per browser, a 10-minute cooldown, 6 claims per network per day, 5 wrong PINs per room per 15 minutes, 25 per network per hour.
 - **Domains:** toyboxes.games is canonical; toyboxes.app and both www hosts 308-redirect to it.
+
+## Room 11: Neon space party
+
+Built from page 1 (revision 1): a neon space arena, moving laser-tag drones, a close-range glowing baton, and a floor-panel dance final against a 160-point robot benchmark. Round points are local feedback, never shared or persistent scores. The arena is solo, with a replay pad and a clear exit. `tests/neon.test.ts` checks aiming and one-score-per-beat timing. `scripts/neontest.ts` drives laser, baton, dance, result, replay and exit via desktop, touch and remote Action mappings. The same neon test runs with an injected standard controller as well, including laser, baton, dance, replay and exit. Desktop tests use the day view and touch tests use the night view.

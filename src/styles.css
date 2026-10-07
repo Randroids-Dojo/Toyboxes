@@ -2079,3 +2079,5 @@ html.reduce-motion .book.turn .book-spread {
     padding: 4px 6px;
   }
 }
+
+.neon-hud { position:absolute; top:calc(58px + var(--safe-t)); left:12px; max-width:calc(100vw - 24px); padding:10px 14px; white-space:pre-line; font-size:clamp(12px,2vw,16px); line-height:1.5; background:rgba(16,8,37,.94); color:#fff; border:2px solid #49d9ff; border-radius:12px; pointer-events:none; }

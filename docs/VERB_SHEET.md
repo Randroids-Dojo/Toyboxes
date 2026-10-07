@@ -46,3 +46,7 @@ Name entry, the PIN pad, sketchbook, arrange panel, settings (sound, camera, tim
 Observed state transition and feedback: each row above passes its listed check.
 Required checks and evidence location: `npm test`, the four playtest scripts (screenshots in `/tmp/toyboxes-*`).
 Remaining human judgment: vehicle handling feel, camera comfort, and play on the Samsung S90H TV browser and a real phone.
+
+## Neon space party
+
+Start on the white pad with Action. Face a moving drone and press Action to laser-tag it; press Kick for a close-range glowing baton tag. A hit removes the drone briefly, flashes a beam and awards 10 or 15 round points. Misses and a firing cooldown prevent repeated automatic hits. After 24 seconds, move to the named, lit dance panel and press Action or Kick during NOW. A correct step awards 20 points once per beat. After 21 seconds compare your round points with the robot dancers' 160-point target, then return to the launch pad to replay. Points belong to this solo round and are not a shared leaderboard. All actions use the common touch, keyboard, controller and remote mappings; Back and the exit portal return to the room.

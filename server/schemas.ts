@@ -84,6 +84,7 @@ export const experience = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('kart'), track: z.array(z.number().finite()).min(40).max(2000), laps: z.number().int().min(1).max(9) }),
   z.object({ kind: z.literal('casino') }),
   z.object({ kind: z.literal('galaxy') }),
+  z.object({ kind: z.literal('neon') }),
 ]);
 
 export const area = z.object({
