@@ -568,6 +568,10 @@ export function buildStation(scene: THREE.Scene, ownerName: string): StationPart
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(11, 2.75), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, color: new THREE.Color(1.4, 1.4, 1.4) }));
     sign.position.set(0, 5.8, -12.2);
     scene.add(sign);
+    // A dark glass plate behind the letters so nothing shows through them.
+    const plate = new THREE.Mesh(new THREE.PlaneGeometry(11.3, 2.8), new THREE.MeshBasicMaterial({ color: 0x0b0722, side: THREE.DoubleSide }));
+    plate.position.set(0, 5.8, -12.27);
+    scene.add(plate);
     signs.push({ mesh: sign, base: 1.4, flicker: 0 });
     // Backing frame and pylons.
     S.add(new THREE.BoxGeometry(11.6, 0.14, 0.2), darkMat, 0, 4.35, -12.35);
