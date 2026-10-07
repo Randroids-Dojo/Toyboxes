@@ -1477,6 +1477,11 @@ export class Galaxy implements SpaceView {
     this.ctx.teleport(s.x, s.z, s.yaw, s.y);
   }
 
+  /** Playtests: start the comet ride where you stand. */
+  debugComet(): void {
+    this.startRound(new Comet(this));
+  }
+
   /** Playtests: shorten the next timed round. */
   debugShortRound(seconds: number): void {
     (globalThis as unknown as { __galaxyShort?: number }).__galaxyShort = seconds;

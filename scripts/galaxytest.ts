@@ -108,17 +108,44 @@ async function until(check: () => Promise<boolean>, what: string, ms = 20000): P
 async function settle(): Promise<void> {
   for (let i = 0; i < 40; i++) {
     const e = await exp();
-    if (await w.menuOpen()) await w.confirm();
+    if (await w.menuOpen()) await confirm();
     else if (e.cine || e.flyingStars) await w.act();
     else return;
     await page.waitForTimeout(250);
   }
 }
 
+/** Confirms the focused card button (a tap on a phone lifts the stick finger too). */
+async function confirm(): Promise<void> {
+  if (touch?.down) await stop();
+  await w.confirm();
+  if (touch) touch.down = false;
+}
+
+/** Closes a results card without playing again: Back, or on a phone a tap on its quiet button. */
+async function closeCard(): Promise<void> {
+  if (device === 'phone') {
+    const btn = page.locator('.modal.in .btn').filter({ hasText: /Stay here|Done/ });
+    await btn.first().tap();
+    if (touch) touch.down = false;
+    await page.waitForTimeout(300);
+  } else await w.back();
+}
+
 /** Interact (E, A, OK or the Action button). */
-const act = () => w.act('interact');
+const act = async () => {
+  // Lift the stick finger first: the harness's tap ends every touch at once.
+  if (touch?.down) await stop();
+  await w.act('interact');
+  // A tap lifts every finger, including the one on the stick.
+  if (touch) touch.down = false;
+};
 /** Kick: F, X, the Kick button; the remote kicks with OK. */
-const kick = () => (device === 'remote' ? w.act('interact') : w.act('kick'));
+const kick = async () => {
+  if (touch?.down) await stop();
+  await (device === 'remote' ? w.act('interact') : w.act('kick'));
+  if (touch) touch.down = false;
+};
 
 // ---------------------------------------------------------------------------
 // Arrival
@@ -132,7 +159,7 @@ await shot('flyover-planet');
 await act(); // skip
 await until(async () => w.menuOpen(), 'intro card');
 await shot('intro-card');
-await w.confirm();
+await confirm();
 await until(async () => !(await w.menuOpen()), 'intro closed');
 await page.waitForTimeout(600);
 await shot('hub');
@@ -146,14 +173,21 @@ if (stages.has('wake')) {
   const BH = { x: 24, z: -62 };
   for (let n = 0; n < 5; n++) {
     await until(async () => (await exp()).orbs.some((o: any) => o.state === 'ground'), 'an orb on the hub');
-    const orbs = (await exp()).orbs.filter((o: any) => o.state === 'ground');
-    const o = orbs[0];
-    // Walk up behind the orb (on the side away from the black hole) for real.
-    const a = Math.atan2(BH.x - o.x, BH.z - o.z);
-    const behind = { x: o.x - Math.sin(a) * 1.0, z: o.z - Math.cos(a) * 1.0 };
+    const nearest = async (back = 1.0) => {
+      const orbs = (await exp()).orbs.filter((o: any) => o.state === 'ground');
+      const o = orbs[0];
+      const a = Math.atan2(BH.x - o.x, BH.z - o.z);
+      return { o, a, behind: { x: o.x - Math.sin(a) * back, z: o.z - Math.cos(a) * back } };
+    };
     if (n === 0) {
-      await steer(async () => behind, async () => Math.hypot((await st()).x - behind.x, (await st()).z - behind.z) < 0.45, 'behind the first orb', 20000, 0.3);
+      // Walk up to the first orb for real (walking into it nudges it along).
+      await steer(async () => (await nearest(2)).behind, async () => {
+        const b = (await nearest(2)).behind;
+        const s = await st();
+        return Math.hypot(s.x - b.x, s.z - b.z) < 0.9;
+      }, 'behind the first orb', 20000, 0.5);
     }
+    const { a, behind } = await nearest();
     // Face the black hole and kick (teleport only lines the player up).
     await w.dbg('teleport', behind.x, behind.z, a);
     await page.waitForTimeout(250);
@@ -214,7 +248,7 @@ if (stages.has('ring')) {
   await page.waitForTimeout(400);
   if (await w.menuOpen()) {
     await shot('ring-intro');
-    await w.confirm();
+    await confirm();
   }
   await until(async () => (await exp()).round?.state === 'run', 'ring run starts', 10000);
   await shot('ring-go');
@@ -240,8 +274,8 @@ if (stages.has('ring')) {
   await shot('ring-results');
   log('ring', JSON.stringify(e.round), 'best', e.bests.ring);
   if (e.bests.ring === null) throw new Error('Ring run time not saved');
-  // Back closes the card and stays here; the stars fly into the black hole.
-  await w.back();
+  // Close the card and stay here; the stars fly into the black hole.
+  await closeCard();
   await settle();
   await page.waitForTimeout(500);
   e = await exp();
@@ -280,7 +314,7 @@ if (stages.has('storm')) {
   await steer(async () => sp, async () => (await st()).prompt === 'Start the rock rain', 'rock rain pad', 15000, 0.3);
   await act();
   await page.waitForTimeout(400);
-  if (await w.menuOpen()) await w.confirm();
+  if (await w.menuOpen()) await confirm();
   await until(async () => (await exp()).round?.state === 'run', 'rock rain starts', 10000);
   await page.waitForTimeout(3500);
   await shot('rock-rain');
@@ -315,7 +349,7 @@ if (stages.has('storm')) {
   e = await exp();
   await shot('storm-results');
   log('storm', JSON.stringify(e.round));
-  await w.back();
+  await closeCard();
   await settle();
   e = await exp();
   log('storm stars', e.stars.storm, 'best', e.bests.storm);
@@ -335,7 +369,7 @@ if (stages.has('comet')) {
   await steer(async () => ride, async () => (await st()).prompt === 'Ride the comet', 'the comet', 15000, 0.3);
   await act();
   await page.waitForTimeout(400);
-  if (await w.menuOpen()) await w.confirm();
+  if (await w.menuOpen()) await confirm();
   await until(async () => (await exp()).round?.state === 'run', 'comet ride starts', 10000);
   let spun = false;
   const shots = new Set<number>();
@@ -349,6 +383,7 @@ if (stages.has('comet')) {
       const dy = n.oy - r.oy;
       const l = Math.hypot(dx, dy);
       await input(l > 0.25 ? dx / Math.max(l, 1) : 0, l > 0.25 ? dy / Math.max(l, 1) : 0);
+      if (process.env.DEBUG_COMET && Math.random() < 0.1) log('comet steer', r.u.toFixed(3), 'at', r.ox.toFixed(2), r.oy.toFixed(2), 'want', n.ox.toFixed(2), n.oy.toFixed(2), 'touch', JSON.stringify(touch && { down: touch.down }));
     }
     const q = Math.floor(r.u * 5);
     if (!shots.has(q) && q > 0 && q < 5) {
@@ -366,7 +401,7 @@ if (stages.has('comet')) {
   e = await exp();
   await shot('comet-results');
   log('comet', JSON.stringify(e.round));
-  await w.back();
+  await closeCard();
   await settle();
   e = await exp();
   if (e.stars.comet < 1) throw new Error(`No comet star: ${e.bests.comet}`);
@@ -382,7 +417,7 @@ if (stages.has('frenzy')) {
   await steer(async () => HUB.shrine, async () => (await st()).prompt === 'Start a feeding frenzy', 'the frenzy shrine', 20000, 1.2);
   await act();
   await page.waitForTimeout(400);
-  if (await w.menuOpen()) await w.confirm();
+  if (await w.menuOpen()) await confirm();
   await until(async () => (await exp()).round?.state === 'run', 'frenzy starts', 10000);
   await shot('frenzy');
   const BH = { x: 24, z: -62 };
@@ -402,7 +437,7 @@ if (stages.has('frenzy')) {
   await shot('frenzy-results');
   log('frenzy', JSON.stringify(e.round), 'board', e.boards.frenzy);
   if (e.boards.frenzy < 1) throw new Error('Frenzy did not reach the board');
-  await w.back();
+  await closeCard();
   await settle();
   await w.call('debugShortRound', 0);
 }
@@ -475,7 +510,7 @@ if (stages.has('leave')) {
     const labels: string[] = await page.evaluate(() => [...document.querySelectorAll('.modal.in .btn')].map((b) => b.textContent ?? ''));
     const idx = labels.findIndex((l) => l.startsWith('Back to') && l.includes('room'));
     for (let i = 0; i < idx; i++) await w.dir('down');
-    await w.confirm();
+    await confirm();
   } else {
     await steer(async () => HUB.exit, async () => (await st()).prompt?.startsWith('Back to') ?? false, 'the exit vortex', 20000, 1.0);
     await act();

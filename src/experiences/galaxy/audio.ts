@@ -228,7 +228,7 @@ export const gsfx = {
   crunch(near: number): void {
     noise(0.5, { gain: 0.18 * near + 0.04, freq: 300, sweep: 80, q: 0.6 });
     tone(70, 0.4, { type: 'sine', gain: 0.25 * near + 0.05, slide: 0.5 });
-    for (let i = 0; i < 4; i++) noise(0.05, { gain: 0.05 * near, freq: 2000 + i * 600, q: 2, at: 0.08 + i * 0.05 });
+    for (let i = 0; i < 4; i++) noise(0.05, { gain: 0.05 * near + 0.004, freq: 2000 + i * 600, q: 2, at: 0.08 + i * 0.05 });
   },
   tileDrop(): void {
     noise(0.6, { gain: 0.06, freq: 500, sweep: 120, q: 1 });
