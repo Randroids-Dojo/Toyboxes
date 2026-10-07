@@ -544,7 +544,7 @@
 .nova-duel {
   position: absolute;
   left: 50%;
-  top: calc(66px + var(--safe-t));
+  top: calc(124px + var(--safe-t));
   transform: translateX(-50%);
   width: min(620px, 90vw);
   display: grid;

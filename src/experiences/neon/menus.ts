@@ -9,6 +9,7 @@ import { danceCeiling } from '../../shared/neon/judge';
 import { SONGS, type SongId } from '../../shared/neon/songs';
 import { LAYOUT_NAMES, type LayoutId } from '../../shared/neon/arena';
 import { TAG_DIFF_NAMES, type TagDiff } from '../../shared/neon/tag';
+import { DUELISTS as DUEL_LIST, type DuelistId } from '../../shared/neon/duel';
 import { songData } from './music';
 import type { Nova } from './world';
 
@@ -207,6 +208,54 @@ export function tagSetup(nova: Nova, onPick: (diff: TagDiff, layout: LayoutId) =
       if (!picked) onClose();
     },
     initial: () => diffBtns[1],
+  };
+  ui.open(panel);
+}
+
+/** Which night opens each duelist in free play. */
+export const DUEL_NIGHT: Record<DuelistId, number> = { sprocket: 0, twinkle: 1, brick: 2, mirage: 3, knight: 4 };
+
+/** The Blade Ring terminal: the Prism Five, Normal or Echo. */
+export function duelSelect(nova: Nova, onPick: (id: DuelistId, echo: boolean) => void, onClose: () => void, only?: DuelistId): void {
+  const ui = nova.ctx.ui;
+  const save = nova.save.data;
+  let picked = false;
+  let first: HTMLElement | null = null;
+  const rows = DUEL_LIST.filter((d) => !only || d.id === only).map((d) => {
+    const locked = save.nights < DUEL_NIGHT[d.id];
+    const beaten = !!save.duelsBeaten[d.id];
+    const mk = (echo: boolean) => {
+      const key = `duel:${d.id}:${echo ? 'echo' : 'normal'}`;
+      const b = button(`${echo ? 'Echo' : 'Normal'}  ${stars(save.stars[key] ?? 0, !!save.crowns[key])}`, () => {
+        picked = true;
+        ui.close(panel);
+        onPick(d.id, echo);
+      }, echo ? 'ghost' : 'primary');
+      b.disabled = locked || (echo && !beaten);
+      if (!first && !b.disabled) first = b;
+      return b;
+    };
+    return h(
+      'div',
+      { class: `nova-song${locked ? ' locked' : ''}` },
+      h('div', { class: 'nova-song-head' }, h('b', {}, d.name), h('small', {}, locked ? `Finish night ${DUEL_NIGHT[d.id]} to unlock` : `${d.idea} · ${d.need} tags to win`)),
+      h('div', { class: 'nova-song-diffs' }, mk(false), mk(true)),
+    );
+  });
+  const back = button('Back', () => ui.close(panel), 'ghost');
+  const panel: Panel = {
+    el: card(
+      only ? DUEL_LIST.find((d) => d.id === only)!.name : 'Prism blade duels',
+      'Blade Ring',
+      h('p', { class: 'xk-tagline' }, 'Press as the ring closes to parry. Hit the glowing crests when it is your turn. Echo hides the rings when you copy a rhythm.'),
+      h('div', { class: 'nova-songs' }, ...rows),
+      h('div', { class: 'actions' }, back),
+    ),
+    onBack: () => ui.close(panel),
+    onClose: () => {
+      if (!picked) onClose();
+    },
+    initial: () => first ?? back,
   };
   ui.open(panel);
 }

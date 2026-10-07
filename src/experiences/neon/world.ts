@@ -59,6 +59,8 @@ export interface Nova {
   bladeColor(): number;
   /** Shuts the Comet Yard airlock (during a match). */
   doorsShut: boolean;
+  /** Lights the Blade Ring for a duel with this duelist (null when it ends). */
+  duelRing(id: string | null): void;
 }
 
 export interface Mode {

@@ -7,6 +7,7 @@ import { chartFor } from './charts.js';
 import { danceCeiling, scoreDance } from './judge.js';
 import type { SongId } from './songs.js';
 import { tagBoardScore, tagCeiling } from './tag.js';
+import { DUELISTS, duelCeiling, scoreDuel, scriptFor, type DuelistId } from './duel.js';
 
 /** Board ids for the dance songs (normal charts only). */
 export const DANCE_BOARD: Partial<Record<SongId, string>> = {
@@ -46,6 +47,29 @@ function danceMode(song: SongId): ScoreMode | null {
   };
 }
 
+/** The board for a duelist (Normal and Echo bouts both count). */
+export function duelBoard(id: DuelistId): string {
+  return `duel-${id}`;
+}
+
+export function duelFromLog(id: DuelistId, log: unknown): number | null {
+  if (typeof log !== 'string') return null;
+  return scoreDuel(scriptFor(id), log)?.score ?? null;
+}
+
+/** The earliest a perfect bout could knock the duelist out, in seconds. */
+export function earliestKo(id: DuelistId): number {
+  const s = scriptFor(id);
+  let tags = 0;
+  for (const e of s.judged) if (e.kind === 'open' && ++tags >= s.duelist.need) return e.t;
+  return s.endT;
+}
+
+function duelMode(id: DuelistId): ScoreMode {
+  const s = scriptFor(id);
+  return { id: duelBoard(id), label: s.duelist.name, better: 'higher', unit: 'points', min: 0, max: duelCeiling(s), ticket: { minMs: Math.floor(earliestKo(id) * 950) }, fromLog: (log) => duelFromLog(id, log) };
+}
+
 /** Free play laser tag (Normal and Hard; Hard counts for a quarter more). */
 export const TAG_SECONDS = 120;
 
@@ -62,5 +86,6 @@ export function neonModes(): ScoreMode[] {
     const m = danceMode(song);
     if (m) out.push(m);
   }
+  for (const d of DUELISTS) out.push(duelMode(d.id));
   return out;
 }

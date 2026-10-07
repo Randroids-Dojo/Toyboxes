@@ -417,6 +417,13 @@ export class Robot {
     return this.face;
   }
 
+  /** A dark silhouette (a locked duelist) or back to normal. */
+  setDark(dark: boolean): void {
+    this.mat.color.setScalar(dark ? 0.06 : 1);
+    this.setGlow(dark ? 0 : 1);
+    this.setFace(dark ? 'off' : 'happy');
+  }
+
   /** 0 for lights out (tagged), 1 normal, above 1 brighter. */
   setGlow(v: number): void {
     this.glowTarget = v;

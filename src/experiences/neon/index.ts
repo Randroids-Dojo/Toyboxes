@@ -14,14 +14,16 @@ import { Hud, Particles, PostFX, Shockwaves } from '../kit';
 import { DIFF_NAMES, type Diff } from '../../shared/neon/charts';
 import { SONGS, type SongId } from '../../shared/neon/songs';
 import { BLADE_COLORS } from '../../shared/neon/progress';
-import { DANCE_BOARD, TAG_SECONDS } from '../../shared/neon/rules';
+import { DANCE_BOARD, duelBoard, TAG_SECONDS } from '../../shared/neon/rules';
 import { boardLine, Boards } from './boards';
 import { BeatClock } from './clock';
 import { NovaCore } from './core';
 import { Crowd } from './crowd';
 import { DanceMode, RIVALS, type DanceOutcome } from './dance';
 import { FLOOR_R, NovaFloor } from './floor';
-import { askSoundCheck, partySettings, songSelect, tagSetup } from './menus';
+import { askSoundCheck, DUEL_NIGHT, duelSelect, partySettings, songSelect, tagSetup } from './menus';
+import { DuelMode, type DuelOutcome } from './duel';
+import { duelist as duelMeta, duelStars, type DuelistId } from '../../shared/neon/duel';
 import { ArenaView } from './arena-view';
 import { TagMode, type TagOutcome } from './tag';
 import { tagStars, TAG_DIFF_NAMES, type TagDiff } from '../../shared/neon/tag';
@@ -29,10 +31,11 @@ import type { LayoutId } from '../../shared/neon/arena';
 import { songData } from './music';
 import { RhythmInput } from './rhythm-input';
 import { DUELISTS, judgeBot, orbitBot, Robot } from './robots';
+import { RING as RING_CENTER } from './station';
 import { NovaProgress } from './save';
 import { Sky } from './sky';
 import { nova as snd } from './sounds';
-import { BOOTH, buildStation, DOOR, JUDGES, JUKEBOX, ORBIT_SPOT, paintBoard, PEDESTALS, STAR_PAD, stationQuality, TAG_TERMINAL, type StationParts } from './station';
+import { BOOTH, buildStation, DOOR, DUEL_TERMINAL, JUDGES, JUKEBOX, ORBIT_SPOT, paintBoard, PEDESTALS, STAR_PAD, stationQuality, TAG_TERMINAL, type StationParts } from './station';
 import { SyncMode, type SyncResult } from './sync';
 import { Dancer, Fencer, Outfit, type SuitId } from './style';
 import { C } from './util';
@@ -152,6 +155,7 @@ export class NeonParty implements SpaceView, Nova {
       r.root.rotation.y = p.yaw;
       this.scene.add(r.root);
       this.duelists.push(r);
+      if (this.save.data.nights < DUEL_NIGHT[d.id as DuelistId]) r.setDark(true);
     });
     // A bartender and two loungers in the Glow Lab.
     const bar = new Robot({ head: 'bean', body: 0x3a2a6a, trim: C.pink, badge: 'star' });
@@ -209,6 +213,11 @@ export class NeonParty implements SpaceView, Nova {
     music.stop(0.05);
     music.play(data, { fadeIn: opts.fadeIn ?? 0.6 });
     this.clock.start(SONGS[id], music.playing === data.name ? data.name : null, 120);
+    // Supernova speeds up once, exactly on its bar line.
+    const ch = SONGS[id].change;
+    if (ch && music.playing === data.name) music.onBeat((b) => {
+      if (Math.abs(b - ch.bar * 4) < 0.01) music.tempo(ch.bpm);
+    });
   }
 
   /** The lounge song and the free roam. */
@@ -371,6 +380,13 @@ export class NeonParty implements SpaceView, Nova {
     out.push({ x: BOOTH.x, z: BOOTH.z + 1.6, range: 2.2, label: 'Dance off: pick a song', short: 'Songs', run: () => this.openSongs() });
     out.push({ x: STAR_PAD.x, z: STAR_PAD.z, range: 1.8, label: 'Dance off with Orbit', short: 'Dance', run: () => this.openSongs() });
     out.push({ x: TAG_TERMINAL.x, z: TAG_TERMINAL.z + 0.9, range: 1.8, label: 'Laser tag', short: 'Tag', run: () => this.openTag() });
+    out.push({ x: DUEL_TERMINAL.x + 0.9, z: DUEL_TERMINAL.z, range: 1.8, label: 'Choose a duel', short: 'Duel', run: () => this.openDuels() });
+    DUELISTS.forEach((d, i) => {
+      const p = PEDESTALS[i];
+      const id = d.id as DuelistId;
+      const open = this.save.data.nights >= DUEL_NIGHT[id];
+      out.push({ x: p.x + (RING_CENTER.x - p.x) * 0.22, z: p.z + (RING_CENTER.z - p.z) * 0.22, range: 1.5, label: open ? `Duel ${duelMeta(id).name}` : `${duelMeta(id).name}: finish night ${DUEL_NIGHT[id]}`, short: open ? 'Duel' : 'Locked', run: () => (open ? this.openDuels(id) : this.ctx.ui.toast(`Finish night ${DUEL_NIGHT[id]} to duel ${duelMeta(id).name}`)) });
+    });
     out.push({ x: JUKEBOX.x, z: JUKEBOX.z - 1.2, range: 1.8, label: 'Party settings and sound check', short: 'Settings', run: () => this.openSettings() });
     if (Math.hypot(p.x, p.z) < FLOOR_R - 0.3) out.push({ x: p.x, z: p.z, range: 0.5, label: 'Dance', short: 'Dance', run: () => this.queueFreeDance() });
     return out;
@@ -411,6 +427,75 @@ export class NeonParty implements SpaceView, Nova {
     const beat = this.clock.beatAt();
     this.freeDance = { beat: Math.floor(beat) + 1 };
     this.hint('hint-freedance', 'Dance on the beat!');
+  }
+
+  private openDuels(only?: DuelistId): void {
+    duelSelect(this, (id, echo) => this.startDuel(id, echo), () => undefined, only);
+  }
+
+  startDuel(id: DuelistId, echo: boolean, now = false): void {
+    if (!now) {
+      this.withSync(() => this.startDuel(id, echo, true));
+      return;
+    }
+    if (this.mode) this.endMode();
+    this.ticket = null;
+    this.mode = new DuelMode(this, { id, echo, drill: !this.save.seen('duel-drill'), onDone: (o) => void this.duelDone(id, o) });
+    void this.boards.start(duelBoard(id)).then((t) => (this.ticket = t));
+  }
+
+  private async duelDone(id: DuelistId, o: DuelOutcome): Promise<void> {
+    if (o.quit) {
+      this.endMode();
+      return;
+    }
+    const r = o.result;
+    const key = `duel:${id}:${o.echo ? 'echo' : 'normal'}`;
+    const won = r.outcome === 'ko' || r.outcome === 'win';
+    if (won) this.save.data.duelsBeaten[id] = true;
+    const newBest = this.save.best(key, r.score);
+    const stars = duelStars(r);
+    const gained = this.save.award(key, stars);
+    if (o.flawless) this.save.data.crowns[key] = true;
+    this.save.save();
+    let line = 'Saving your score...';
+    let rows: { name: string; value: string; you?: boolean }[] | null = null;
+    if (!this.save.data.sync.wide) {
+      const posted = await this.boards.submit(duelBoard(id), r.score, o.log, this.ticket);
+      line = boardLine(posted, false);
+      const b = await this.boards.fetch([duelBoard(id)], true);
+      rows = (b[duelBoard(id)]?.rows ?? []).slice(0, 5).map((x) => ({ name: x.name, value: x.value.toLocaleString('en-US'), you: x.you }));
+    } else line = boardLine(null, true);
+    const meta = duelMeta(id);
+    const choice = await this.hud.results({
+      title: r.outcome === 'ko' ? 'KO!' : won ? 'Bout won!' : 'Good bout!',
+      subtitle: `vs ${meta.name} · ${o.echo ? 'Echo' : 'Normal'}`,
+      stars,
+      rows: [
+        { label: 'Score', value: r.score.toLocaleString('en-US'), best: newBest },
+        { label: 'Tags', value: `${r.tags} of ${meta.need}` },
+        { label: 'Accuracy', value: `${Math.round(r.accuracy * 100)}%` },
+        { label: 'Perfect / Great / Good / Miss', value: `${r.counts.P} / ${r.counts.G} / ${r.counts.O} / ${r.counts.M}` },
+        { label: 'Feints read / Crushes held', value: `${r.reads} / ${r.crushes}` },
+      ],
+      badges: [...(o.flawless ? ['Flawless!'] : []), ...(newBest ? ['New best!'] : []), ...(gained ? [`+${gained} star${gained > 1 ? 's' : ''}`] : [])],
+      board: rows ? { title: line, rows } : undefined,
+      buttons: [
+        { id: 'again', label: won ? 'Duel again' : 'Try again', primary: true },
+        { id: 'pick', label: 'Choose a duel' },
+        { id: 'done', label: 'Done' },
+      ],
+    });
+    if (!rows) this.ctx.ui.toast(line);
+    this.endMode();
+    if (choice === 'again') this.startDuel(id, o.echo, true);
+    else if (choice === 'pick') this.openDuels();
+    else this.ctx.teleport(DUEL_TERMINAL.x + 1.2, DUEL_TERMINAL.z, Math.PI / 2);
+  }
+
+  duelRing(id: string | null): void {
+    this.station.ringMat.uniforms.uFight.value = id ? 1 : 0;
+    DUELISTS.forEach((d, i) => (this.duelists[i].root.visible = d.id !== id));
   }
 
   private openTag(): void {
@@ -545,6 +630,12 @@ export class NeonParty implements SpaceView, Nova {
     }
     if (m instanceof SyncMode) return [{ label: 'Skip the sound check', run: () => this.endMode() }];
     if (m instanceof TagMode && m.playing) return [{ label: 'Leave the match', run: () => m.abandon() }];
+    if (m instanceof DuelMode && m.playing) {
+      return [
+        { label: 'Restart the bout', run: () => this.startDuel(m.id, m.echo, true) },
+        { label: 'Leave the duel', run: () => m.abandon() },
+      ];
+    }
     return [];
   }
 
@@ -795,6 +886,11 @@ export class NeonParty implements SpaceView, Nova {
 
   debugSkipPractice(): void {
     this.save.markSeen('tag-practice');
+  }
+
+  debugDuel(id: DuelistId = 'sprocket', echo = false): void {
+    this.ctx.ui.closeAll();
+    this.startDuel(id, echo, true);
   }
 
   debugSkipIntro(): void {
