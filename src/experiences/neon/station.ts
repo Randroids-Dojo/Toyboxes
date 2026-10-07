@@ -41,9 +41,20 @@ const SEG = 96;
 // Floor shaders
 
 const DECK_FRAG = /* glsl */ `
-uniform vec3 uBase, uLine, uGlow;
+uniform vec3 uBase, uLine, uGlow, uGold, uLilac, uCyan;
 uniform float uBeat, uTime;
 varying vec2 vP;
+vec3 lane(vec2 p, vec2 a, vec2 b, vec3 c) {
+  vec2 ab = b - a;
+  float len = length(ab);
+  float t = clamp(dot(p - a, ab) / (len * len), 0.0, 1.0);
+  float d = length(p - a - ab * t);
+  float along = t * len;
+  float chev = smoothstep(0.55, 0.9, fract(along * 0.7 - uTime * 0.9 + d * 0.8));
+  float body = smoothstep(0.16, 0.04, d);
+  float edge = smoothstep(0.03, 0.0, abs(d - 0.22)) * 0.5;
+  return c * (body * (0.25 + chev * 0.75) + edge) * 0.55;
+}
 float hexLine(vec2 p) {
   vec2 s = vec2(1.0, 1.7320508);
   vec2 a = mod(p, s) - s * 0.5;
@@ -64,6 +75,12 @@ void main() {
   col += uGlow * hx * exp(-pow((r - wave) * 1.2, 2.0)) * (1.0 - ph) * 0.6 * step(r, 15.2);
   // The Core's light on the deck.
   col += uGlow * 0.12 * smoothstep(13.0, 4.0, r);
+  // Light lanes lead to each venue in its colour, with chevrons running along them.
+  col += lane(vP, vec2(0.0, 17.5), vec2(0.0, 10.0), uGold);
+  col += lane(vP, vec2(-6.9, 0.0), vec2(-14.6, 0.0), uLilac);
+  col += lane(vP, vec2(6.9, 0.0), vec2(14.6, 0.0), uGold);
+  col += lane(vP, vec2(-4.2, -5.6), vec2(-2.4, -14.4), uCyan);
+  col += lane(vP, vec2(4.2, -5.6), vec2(2.4, -14.4), uCyan);
   gl_FragColor = vec4(col, 1.0);
   ${OUTPUT_CHUNK}
 }`;
@@ -260,7 +277,16 @@ export function buildStation(scene: THREE.Scene, ownerName: string): StationPart
   const deckMat = new THREE.ShaderMaterial({
     vertexShader: PLAIN_VERT,
     fragmentShader: DECK_FRAG,
-    uniforms: { uBase: { value: new THREE.Color(0x120b2e) }, uLine: { value: new THREE.Color(C.violet) }, uGlow: { value: new THREE.Color(C.uv) }, uBeat: { value: 0 }, uTime: { value: 0 } },
+    uniforms: {
+      uBase: { value: new THREE.Color(0x120b2e) },
+      uLine: { value: new THREE.Color(C.violet) },
+      uGlow: { value: new THREE.Color(C.uv) },
+      uGold: { value: new THREE.Color(C.gold) },
+      uLilac: { value: new THREE.Color(C.lilac) },
+      uCyan: { value: new THREE.Color(C.cyan) },
+      uBeat: { value: 0 },
+      uTime: { value: 0 },
+    },
   });
   scene.add(floorFrom(deckOutline(), [ring(0, 0, FLOOR_R, SEG)], 0, deckMat));
 
@@ -547,6 +573,11 @@ export function buildStation(scene: THREE.Scene, ownerName: string): StationPart
     const fz = JUDGES.z + Math.cos(ang) * 0.52;
     G.add(new THREE.BoxGeometry(3.5, 0.06, 0.04), neonGold, fx, 1.0, fz, 0, ang, 0);
     G.add(new THREE.BoxGeometry(3.5, 0.06, 0.04), neonGold, fx, 0.15, fz, 0, ang, 0);
+    // Trim round the top and the back too, so it reads from every side.
+    const bx = JUDGES.x - Math.sin(ang) * 0.52;
+    const bz = JUDGES.z - Math.cos(ang) * 0.52;
+    G.add(new THREE.BoxGeometry(3.5, 0.05, 0.04), neonPink, bx, 1.0, bz, 0, ang, 0);
+    for (const side of [-1, 1]) G.add(new THREE.BoxGeometry(0.04, 0.05, 1.0), neonGold, JUDGES.x + Math.cos(ang) * 1.82 * side, 1.0, JUDGES.z - Math.sin(ang) * 1.82 * side, 0, ang, 0);
     colliders.push(box(JUDGES.x, JUDGES.z, 1.8, 0.5, ang, 1.1, 0.3, false));
     const label = new THREE.Mesh(new THREE.PlaneGeometry(3.0, 0.5), new THREE.MeshBasicMaterial({ map: neonTextTexture('Judges', { w: 512, h: 96, color: HEX.gold, size: 64 }), transparent: true, depthWrite: false }));
     label.position.set(fx + Math.sin(ang) * 0.03, 0.58, fz + Math.cos(ang) * 0.03);

@@ -37,6 +37,7 @@ import { Sky } from './sky';
 import { nova as snd } from './sounds';
 import { BOOTH, buildStation, DOOR, DUEL_TERMINAL, JUDGES, JUKEBOX, ORBIT_SPOT, paintBoard, PEDESTALS, STAR_PAD, stationQuality, TAG_TERMINAL, WARDROBE, type StationParts } from './station';
 import { SyncMode, type SyncResult } from './sync';
+import { AttractYard, nearYard, Spar } from './attract';
 import { NightRun } from './night';
 import { Dancer, Fencer, Outfit, type SuitId } from './style';
 import { C } from './util';
@@ -73,6 +74,8 @@ export class NeonParty implements SpaceView, Nova {
 
   private sky: Sky;
   private trail: Ribbon;
+  private attract: AttractYard;
+  private spar: Spar;
   private station: StationParts;
   private arena: ArenaView;
   private hemi: THREE.HemisphereLight;
@@ -177,7 +180,9 @@ export class NeonParty implements SpaceView, Nova {
       confetti: new Particles(this.scene, { max: 900, look: 'confetti' }),
       rings: new Shockwaves(this.scene),
     };
-    this.post = new PostFX(this.scene, { bloom: { strength: 0.9, radius: 0.55, threshold: 0.72 }, vignette: 0.38, saturation: 1.12, contrast: 1.06, aberration: 0.0025, grain: 0.025 });
+    this.attract = new AttractYard(this.scene, this.fx);
+    this.spar = new Spar(this.scene, this.fx);
+    this.post = new PostFX(this.scene, { bloom: { strength: 0.78, radius: 0.5, threshold: 0.8 }, vignette: 0.38, saturation: 1.12, contrast: 1.06, aberration: 0.0025, grain: 0.025 });
     this.hud = new Hud(ctx, { accent: '#b49cff', accent2: '#ff3dae', panel: 'dark', glow: true });
     this.layer = document.createElement('div');
     this.layer.className = 'nova-layer';
@@ -194,8 +199,10 @@ export class NeonParty implements SpaceView, Nova {
     // The hall of fame starts empty and fills from the server.
     void this.paintBoards();
 
-    // Roaming music and the arrival.
+    // Roaming music and the arrival: the music fades in from behind the door.
     this.roam();
+    music.filter(500, 0.01);
+    setTimeout(() => !this.disposed && music.filter(20000, 2.4), 300);
     this.hud.title('Club Nova', `${ctx.ownerName} presents`, 3200);
     if (!this.save.seen('flyover')) this.intro = { t: 0, on: true };
     else void this.introCard();
@@ -230,6 +237,7 @@ export class NeonParty implements SpaceView, Nova {
 
   endMode(): void {
     const m = this.mode;
+    if (this.arena.layout !== 'prism') this.arena.morphTo('prism');
     this.mode = null;
     m?.dispose();
     this.ctx.pose(null);
@@ -332,6 +340,7 @@ export class NeonParty implements SpaceView, Nova {
     this.floor.setLow(t === 'low');
     for (const p of [this.fx.sparks, this.fx.glow, this.fx.confetti]) p.setQuality(t);
     stationQuality(this.station, t);
+    this.attract.setQuality(t);
     this.arena.setQuality(t);
     this.sun.shadow.mapSize.set(t === 'high' ? 2048 : 1024, t === 'high' ? 2048 : 1024);
     this.sun.shadow.map?.dispose();
@@ -886,6 +895,11 @@ export class NeonParty implements SpaceView, Nova {
       void this.paintBoards();
     }
     this.arena.update(dt, beat, t);
+    // The robots play while you roam nearby.
+    const pp = this.player_;
+    this.attract.update(dt, beat, !this.mode && pp.z > -19.5 && nearYard(pp.x, pp.z));
+    this.spar.visible = !(this.mode instanceof DuelMode) && Math.hypot(pp.x - RING_CENTER.x, pp.z - RING_CENTER.z) < 32;
+    this.spar.update(dt, beat);
     st.lasers.visible = this.tierNow !== 'low' && (night > 0.35 || this.glowAmt > 0);
     if (st.lasers.visible) {
       st.lasers.children.forEach((hld, i) => {
@@ -898,7 +912,7 @@ export class NeonParty implements SpaceView, Nova {
         hld.rotateX(Math.PI / 2);
       });
     }
-    const signK = this.tierNow === 'low' ? 1.25 : 0.82;
+    const signK = this.tierNow === 'low' ? 1.25 : 0.72;
     for (const s of st.signs) {
       const m = s.mesh.material as THREE.MeshBasicMaterial;
       m.color.setScalar(signK * (0.92 + 0.08 * Math.exp(-(beat % 1) * 5)));
@@ -915,6 +929,9 @@ export class NeonParty implements SpaceView, Nova {
       mat.uniforms.uFade.value = near * (1 - this.doorOpen);
       mat.uniforms.uTime.value = t;
     }
+    // Robots step out of the way of the camera rather than fill the screen.
+    const camP = this.ctx.camera.position;
+    for (const r of [this.orbit, ...this.judges, ...this.extras]) r.root.visible = r.root.position.distanceTo(camP) > 1.4;
     this.fill.position.copy(this.ctx.camera.position).add(new THREE.Vector3(0, 2, 0));
     this.fill.target.position.set(focus.x, 1, focus.z);
     // Shadows follow the player.
@@ -984,6 +1001,8 @@ export class NeonParty implements SpaceView, Nova {
     for (const p of [this.fx.sparks, this.fx.glow, this.fx.confetti]) p.dispose();
     this.fx.rings.dispose();
     this.trail.dispose();
+    this.attract.dispose();
+    this.spar.dispose();
     for (const r of [this.orbit, ...this.judges, ...this.duelists, ...this.extras]) r.dispose();
     disposeTree(this.scene);
   }
