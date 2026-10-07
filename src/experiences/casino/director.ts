@@ -31,6 +31,9 @@ function smooth(x: number): number {
 
 export class Director {
   private seat: Framing | null = null;
+  /** A framing that applies when no seat is taken (standing at Old Lucky). */
+  private auto: Framing | null = null;
+  private autoMax = 0.85;
   private seatBlend = 0;
   private seatMax = 0.92;
   private cine: Cine | null = null;
@@ -48,6 +51,12 @@ export class Director {
     }
   }
 
+  /** A framing that holds only while no game panel has a seat. */
+  setAuto(f: Framing | null, strength = 0.85): void {
+    this.auto = f;
+    if (f) this.autoMax = strength;
+  }
+
   get seated(): boolean {
     return !!this.seat;
   }
@@ -59,7 +68,8 @@ export class Director {
   /** The point the cutaway should keep clear: the cinematic's subject, else null (the player). */
   get focus(): THREE.Vector3 | null {
     if (this.cine) return this.out.target;
-    if (this.seat && this.seatBlend > 0.5) return this.seat.target;
+    const f = this.seat ?? this.auto;
+    if (f && this.seatBlend > 0.5) return f.target;
     return null;
   }
 
@@ -123,10 +133,12 @@ export class Director {
         return this.out;
       }
     }
-    const want = this.seat ? this.seatMax : 0;
+    const active = this.seat ?? this.auto;
+    if (active) this.lastSeat = active;
+    const want = this.seat ? this.seatMax : this.auto ? this.autoMax : 0;
     this.seatBlend += (want - this.seatBlend) * Math.min(1, dt * 3.2);
     if (this.seatBlend < 0.01 || !this.lastSeat) return null;
-    const f = this.seat ?? this.lastSeat;
+    const f = active ?? this.lastSeat;
     this.out.position.copy(f.pos);
     this.out.target.copy(f.target);
     this.out.fov = f.fov;

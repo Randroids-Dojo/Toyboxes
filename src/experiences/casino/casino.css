@@ -635,7 +635,7 @@
 
 .rl-board.classic .rl-nums {
   grid-template-columns: 46px repeat(12, 1fr) 54px;
-  grid-template-rows: repeat(3, 40px);
+  grid-template-rows: repeat(3, 34px);
   grid-auto-flow: row;
 }
 
@@ -654,7 +654,7 @@
 
 .rl-board.compact .rl-nums {
   grid-template-columns: repeat(6, 1fr);
-  grid-auto-rows: 42px;
+  grid-auto-rows: 36px;
 }
 
 .rl-board.compact .rl-zero {
@@ -704,7 +704,7 @@
 
 .rl-outs .rl-cell,
 .rl-evens .rl-cell {
-  height: 38px;
+  height: 32px;
 }
 
 .gp-panel .rl-cell.red {
@@ -816,4 +816,163 @@
   .rl-evens .rl-cell {
     height: 34px;
   }
+}
+
+/* ---- blackjack panel */
+
+.bj-table {
+  display: grid;
+  gap: 6px;
+}
+
+.bj-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: 700 0.66rem/1 var(--body);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gp-brass);
+  min-width: 92px;
+}
+
+.bj-total {
+  display: inline-grid;
+  place-items: center;
+  min-width: 28px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #22394a;
+  color: #fff6e0;
+  font: 400 0.95rem/1 var(--display);
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+.bj-total:empty {
+  display: none;
+}
+
+.bj-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 66px;
+  padding: 4px 8px;
+  border-radius: 12px;
+  background: rgba(30, 122, 79, 0.28);
+  border: 1px solid rgba(255, 246, 224, 0.12);
+}
+
+.bj-dealer {
+  background: rgba(30, 122, 79, 0.18);
+}
+
+.bj-hands {
+  display: grid;
+  gap: 6px;
+}
+
+.bj-hand.active {
+  border-color: var(--gp-brass);
+  box-shadow: inset 0 0 0 1px var(--gp-brass);
+}
+
+.bj-card {
+  position: relative;
+  display: inline-grid;
+  justify-items: center;
+  align-content: center;
+  width: 42px;
+  height: 58px;
+  border-radius: 7px;
+  background: #fffaf0;
+  color: #1d1830;
+  border: 2px solid #c8b898;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+  line-height: 1;
+}
+
+.bj-card b {
+  font: 400 1.15rem/1 var(--display);
+}
+
+.bj-card i {
+  font-style: normal;
+  font-size: 1.1rem;
+}
+
+.bj-card.red {
+  color: #c0242c;
+}
+
+.bj-card.back {
+  background: repeating-linear-gradient(45deg, #1d2a5a 0 6px, #24346a 6px 12px);
+  border-color: #e0ac45;
+}
+
+.bj-card.fresh {
+  animation: bj-in 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes bj-in {
+  0% {
+    transform: translateY(-10px) rotateY(90deg);
+    opacity: 0;
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.bj-result {
+  margin-left: auto;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font: 700 0.78rem/1.2 var(--body);
+  background: #22394a;
+  color: var(--gp-ivory);
+}
+
+.bj-result.win,
+.bj-result.blackjack,
+.bj-result.charlie {
+  background: #d39a32;
+  color: #1d1408;
+}
+
+.bj-result.bust,
+.bj-result.lose {
+  background: rgba(240, 160, 138, 0.18);
+  color: var(--gp-down);
+}
+
+@media (max-width: 640px) {
+  .bj-row {
+    min-height: 54px;
+  }
+  .bj-card {
+    width: 34px;
+    height: 48px;
+  }
+  .bj-label {
+    min-width: 64px;
+  }
+}
+
+/* The roulette panel keeps its spin button in view: compact cells, actions on one row. */
+.gp-panel[data-panel='roulette'] .gp-actions {
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+.gp-panel[data-panel='roulette'] .rl-recent {
+  margin-right: auto;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+.gp-panel[data-panel='roulette'] .gp-actions .btn.tiny {
+  min-width: 0;
 }

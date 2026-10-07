@@ -83,10 +83,12 @@ export class Ceremonies {
     switch (tier) {
       case 'loss':
         return tier;
-      case 'back':
+      case 'back': {
         sound.betBack();
-        this.ctx.ui.toast(o.label ? `${o.label}: your bet comes back` : 'Your bet comes back');
+        const what = o.paid === o.staked ? 'your bet comes back' : `${formatCredits(o.paid)} of your ${formatCredits(o.staked)} comes back`;
+        this.ctx.ui.toast(o.label ? `${o.label}: ${what}` : what.charAt(0).toUpperCase() + what.slice(1));
         return tier;
+      }
       case 'small':
         if (!o.quiet) this.fx.coinBurst(o.at, 12, o.dir, { speed: 2.2, up: 2.4 });
         sound.coins(o.paid);

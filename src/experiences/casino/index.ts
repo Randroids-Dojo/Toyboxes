@@ -281,7 +281,7 @@ export class Casino implements SpaceView {
     const p = this.player;
     // Standing on Old Lucky's rug frames the whole machine; it eases back as you walk off.
     const atLever = !!p && Math.hypot(p.x - SPOTS.lever.x, p.z - SPOTS.lever.z) < 1.5;
-    this.director.setSeat(atLever || (this.lucky.spinning && !!p && Math.hypot(p.x - SPOTS.lever.x, p.z - SPOTS.lever.z) < 3) ? this.lucky.framing() : null, 0.85);
+    this.director.setAuto(atLever || (this.lucky.spinning && !!p && Math.hypot(p.x - SPOTS.lever.x, p.z - SPOTS.lever.z) < 3) ? this.lucky.framing() : null, 0.85);
     return this.director.shot(dt * this.scale);
   }
 
@@ -379,7 +379,9 @@ export class Casino implements SpaceView {
       const l2 = vx * vx + vz * vz || 1;
       const t = ((c.x - cam.x) * vx + (c.z - cam.z) * vz) / l2;
       const d = Math.hypot(cam.x + vx * t - c.x, cam.z + vz * t - c.z);
-      const want = t > 0.02 && t < 0.97 && d < 0.8 ? 0.18 : 1;
+      // Also fade a column right in front of the camera (seat framings come in close).
+      const near = Math.hypot(c.x - cam.x, c.z - cam.z) < 2.2 && t > 0;
+      const want = (t > 0.02 && t < 0.97 && d < 0.8) || near ? 0.18 : 1;
       c.fade += (want - c.fade) * 0.2;
       c.mat.opacity = c.fade;
       c.mesh.castShadow = c.fade > 0.5;

@@ -350,12 +350,13 @@ export class Roulette {
 
   // -------------------------------------------------------------------------
 
+  /** Framings aim below the table so it sits in the top of the screen, clear of the docked panel. */
   framing() {
-    return frame(ROULETTE.x + 0.4, 3.6, ROULETTE.z + 3.4, ROULETTE.x + 0.1, 0.1, ROULETTE.z - 0.4, 50);
+    return frame(ROULETTE.x + 0.3, 4.3, ROULETTE.z + 3.5, ROULETTE.x + 0.2, -0.85, ROULETTE.z - 0.1, 50);
   }
 
   private wheelFraming() {
-    return frame(ROULETTE.x + WHEEL_X + 0.9, 2.4, ROULETTE.z + 1.9, ROULETTE.x + WHEEL_X, 0.55, ROULETTE.z - 0.1, 46);
+    return frame(ROULETTE.x + WHEEL_X + 0.6, 2.9, ROULETTE.z + 2.0, ROULETTE.x + WHEEL_X, -0.55, ROULETTE.z - 0.3, 46);
   }
 
   actions(_p: PlayerState, act: (label: string, short: string, run: () => void) => SpaceAction): SpaceAction[] {
@@ -432,8 +433,9 @@ export class Roulette {
       },
       wide: !compact,
     });
-    panel.body.append(board, h('div', { class: 'rl-bar' }, this.recentEl, h('div', { class: 'rl-bar-btns' }, undo, clear)));
-    panel.actions.append(this.spinBtn);
+    panel.body.append(board);
+    panel.actions.prepend(this.recentEl);
+    panel.actions.append(undo, clear, this.spinBtn);
     this.panel = panel;
     this.paintBoard();
     this.paintRecent();

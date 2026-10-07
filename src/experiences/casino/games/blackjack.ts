@@ -21,8 +21,8 @@ import { TablePanel, oddsTable } from '../panel';
 import type { Staff, StaffId } from '../staff';
 
 const TOP = 0.95;
-const CW = 0.22;
-const CH = 0.31;
+const CW = 0.3;
+const CH = 0.42;
 
 // ---------------------------------------------------------------------------
 // Cards
@@ -323,9 +323,9 @@ export class Blackjack {
 
   /** Where card i of a hand lies on the felt (table local). */
   private slot(row: 'dealer' | number, i: number, hands: number): THREE.Vector3 {
-    if (row === 'dealer') return new THREE.Vector3(-0.25 + i * 0.17, TOP + 0.004 + i * 0.002, 0.62);
-    const cx = hands > 1 ? (row === 0 ? -0.48 : 0.48) : 0;
-    return new THREE.Vector3(cx - 0.12 + i * 0.13, TOP + 0.004 + i * 0.002, 1.18 - i * 0.04);
+    if (row === 'dealer') return new THREE.Vector3(-0.3 + i * 0.22, TOP + 0.004 + i * 0.002, 0.66);
+    const cx = hands > 1 ? (row === 0 ? -0.55 : 0.55) : 0;
+    return new THREE.Vector3(cx - 0.16 + i * 0.17, TOP + 0.004 + i * 0.002, 1.22 - i * 0.04);
   }
 
   /** Brings the cards on the felt in line with a hand view, dealing the new ones in order. */
@@ -383,8 +383,10 @@ export class Blackjack {
   // -------------------------------------------------------------------------
 
   framing(): Framing {
+    // From the open side, high enough to see over your own head, aimed low to clear the panel.
     const { x, z } = this.o;
-    return frame(x, 3.1, z + 4.7, x, 0.25, z + 0.2, 50);
+    const side = this.o.table === 'captain' ? 0.6 : -1.1;
+    return frame(x + side, 3.9, z + 4.2, x, -0.65, z + 0.7, 50);
   }
 
   actions(_p: PlayerState, act: (label: string, short: string, run: () => void) => SpaceAction): SpaceAction[] {
