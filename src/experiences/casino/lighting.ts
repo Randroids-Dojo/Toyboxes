@@ -14,6 +14,8 @@ export interface Chandelier {
   x: number;
   z: number;
   y: number;
+  /** Its bulbs in the shared bulb mesh, hidden with it. */
+  bulbs: [number, number];
 }
 
 /** A soft round glow painted on a floor or a felt. */
@@ -39,6 +41,7 @@ export class Lights {
   /** Every decorative bulb on the boat that is not part of a game. */
   readonly bulbs: THREE.InstancedMesh;
   private bulbBase: THREE.Color[] = [];
+  private bulbAt: THREE.Vector3[] = [];
   private festoon: number[] = [];
   private pools: THREE.Mesh[] = [];
   private poolMat: THREE.MeshBasicMaterial;
@@ -63,6 +66,7 @@ export class Lights {
 
     // Three chandeliers down the clerestory.
     for (const x of [-7, 0, 7]) {
+      const firstBulb = bulbSpots.length;
       const top = CLERESTORY.height - 0.12;
       // Hung low enough for the follow camera, which looks down from about 5 m, to see.
       const y = 4.25;
@@ -93,7 +97,7 @@ export class Lights {
       b.build(g);
       cb.build(g, { cast: false });
       this.group.add(g);
-      this.chandeliers.push({ group: g, x, z: 0, y });
+      this.chandeliers.push({ group: g, x, z: 0, y, bulbs: [firstBulb, bulbSpots.length] });
       const pl = new THREE.PointLight(C.chandelier, 18, 16, 1.6);
       pl.position.set(x, y + 0.2, 0);
       this.chandLights.push(pl);
@@ -171,6 +175,7 @@ export class Lights {
     const bulbGeo = own(new THREE.SphereGeometry(0.055, 10, 8));
     this.bulbs = new THREE.InstancedMesh(bulbGeo, m.bulb, bulbSpots.length);
     const mm = new THREE.Matrix4();
+    this.bulbAt = bulbSpots.map((s) => s.p.clone());
     bulbSpots.forEach((s, i) => {
       mm.makeTranslation(s.p.x, s.p.y, s.p.z);
       this.bulbs.setMatrixAt(i, mm);
@@ -209,7 +214,17 @@ export class Lights {
   update(t: number, night: number, cam: THREE.Vector3, beat: number): void {
     for (const ch of this.chandeliers) {
       const d = Math.hypot(cam.x - ch.x, cam.z - ch.z);
-      ch.group.visible = !(d < 2.4 && cam.y > ch.y - 1.5);
+      const show = !(d < 2.4 && cam.y > ch.y - 1.5);
+      if (show !== ch.group.visible) {
+        // Its bulbs live in the shared bulb mesh: shrink them away with it.
+        const mm = new THREE.Matrix4();
+        for (let i = ch.bulbs[0]; i < ch.bulbs[1]; i++) {
+          const p = this.bulbAt[i];
+          this.bulbs.setMatrixAt(i, show ? mm.makeTranslation(p.x, p.y, p.z) : mm.makeScale(0, 0, 0));
+        }
+        this.bulbs.instanceMatrix.needsUpdate = true;
+      }
+      ch.group.visible = show;
       ch.group.rotation.y = Math.sin(t * 0.3 + ch.x) * 0.04;
     }
     const swell = 1 + this.glow * 0.8;

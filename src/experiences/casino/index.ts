@@ -25,6 +25,7 @@ import { SAVE_DEFAULTS, type Host, type SaveData } from './host';
 import { CasinoHud } from './hud';
 import { ARRIVAL, BLACKJACK, CAPTAIN_TABLE, COLLIDERS, EXIT, OLD_LUCKY, SPOTS, STAGE, zoneAt, type ColliderDef, type ZoneId } from './layout';
 import { Lights } from './lighting';
+import { Logbook } from './logbook';
 import { makeMats, tierMats, type Mats } from './materials';
 import { River } from './river';
 import { Staff, type StaffId } from './staff';
@@ -70,6 +71,7 @@ export class Casino implements SpaceView {
   private lucky: OldLucky;
   private roulette: Roulette;
   private wheel: RiverWheel;
+  private logbook: Logbook;
   private doors: { left: THREE.Group; right: THREE.Group; open: number } | null = null;
   private blackjack: Blackjack;
   private captain: Blackjack;
@@ -163,6 +165,7 @@ export class Casino implements SpaceView {
     this.wheel = new RiverWheel(this.host);
     this.lucky.onBonus = (b) => this.wheel.bonus(b.segment, b.value, b.mult, this.lucky.framing(), this.lucky.framing());
     this.doors = this.buildDoors();
+    this.logbook = new Logbook(this.host, this.boat.walls.find((w) => w.def.id === 'port')?.full ?? null);
 
     this.eco.onChange(() => this.paintHud());
     this.eco.onStamps = (ids, rankUp, rank) => this.stamped(ids, rankUp, rank);
@@ -292,7 +295,7 @@ export class Casino implements SpaceView {
   actions(player: PlayerState): SpaceAction[] {
     if (player.riding) return [];
     const act = (label: string, short: string, run: () => void) => ({ label, short, run }) as SpaceAction;
-    return [...this.lucky.actions(player, act), ...this.roulette.actions(player, act), ...this.blackjack.actions(player, act), ...this.wheel.actions(player, act), ...this.captain.actions(player, act)];
+    return [...this.lucky.actions(player, act), ...this.roulette.actions(player, act), ...this.blackjack.actions(player, act), ...this.wheel.actions(player, act), ...this.logbook.actions(player, act), ...this.captain.actions(player, act)];
   }
 
   kickAction(player: PlayerState): { label: string; run: () => void } | null {
@@ -446,6 +449,7 @@ export class Casino implements SpaceView {
     this.lucky.update(dt, { night: this.river.night, near, boost: this.cer.boost });
     this.roulette.update(dt);
     this.wheel.update(dt, { boost: this.cer.boost });
+    this.logbook.update(raw);
     this.updateDoors(raw);
     this.blackjack.update(dt);
     this.captain.update(dt);
@@ -485,6 +489,7 @@ export class Casino implements SpaceView {
     this.lucky.dispose();
     this.roulette.dispose();
     this.wheel.dispose();
+    this.logbook.dispose();
     this.blackjack.dispose();
     this.captain.dispose();
     this.staff.dispose();
