@@ -168,8 +168,21 @@
 }
 
 .kz-item.empty .kz-item-art {
-  box-shadow: 0 5px 0 #05030b;
-  opacity: 0.55;
+  box-shadow: 0 5px 0 #05030b, inset 0 0 0 3px rgba(255, 255, 255, 0.08);
+  opacity: 0.5;
+}
+
+/* An empty slot shows a faint question mark: drive through a capsule. */
+.kz-item.empty::after {
+  content: '?';
+  position: absolute;
+  top: 0;
+  width: 84px;
+  height: 84px;
+  display: grid;
+  place-items: center;
+  font: 400 2.6rem var(--display);
+  color: rgba(255, 250, 240, 0.35);
 }
 
 .kz-item.rolling .kz-item-art {

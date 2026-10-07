@@ -293,21 +293,22 @@ export function dressPicnic(d: Dresser, scene: CircuitScene, tex: TexCache): The
     const inSide = -c.paddock.side;
     const s = c.length - 20;
     const f = c.frame(s);
-    const q = { x: f.x + f.nx * inSide * (EDGE + 11), z: f.z + f.nz * inSide * (EDGE + 11) };
+    const q = { x: f.x + f.nx * inSide * (EDGE + 15), z: f.z + f.nz * inSide * (EDGE + 15) };
     const yaw = Math.atan2(-f.nx * inSide, -f.nz * inSide);
     const stand = new Shape();
-    stand.at(cyl(15, 15, 0.6, 32), '#fffaf0', 0, 1.6, -1.6);
+    stand.at(cyl(12.5, 12.5, 0.6, 32), '#fffaf0', 0, 1.6, -1.6);
     stand.at(cyl(1.4, 2.4, 1.6, 16), '#fffaf0', 0, 0.8, -1.6);
-    for (let i = 0; i < 24; i++) {
-      const a = (i / 24) * Math.PI * 2;
-      stand.at(ball(0.7, 8, 6), '#ef6fa0', Math.cos(a) * 14.8, 2.0, -1.6 + Math.sin(a) * 14.8);
+    // Icing piped round the plate's rim.
+    for (let i = 0; i < 28; i++) {
+      const a = (i / 28) * Math.PI * 2;
+      stand.at(ball(0.45, 8, 6), '#ef6fa0', Math.cos(a) * 12.3, 2.0, -1.6 + Math.sin(a) * 12.3, 0, 0, 0, 1, 0.8, 1);
     }
     const gs = grandstand(22, 4, { frame: '#f6c0d0', seat: '#fffaf0', roofA: '#ef6fa0', roofB: '#fffaf0' });
     stand.put(gs.shape, xform(0, 1.9, 0));
     const mm = xform(q.x, 0, q.z, 0, yaw, 0);
     batch.shape(stand, mm);
-    d.wallBox(q.x - Math.sin(yaw) * 1.6, q.z - Math.cos(yaw) * 1.6, 15, 6, yaw, 8, true);
-    d.claim(q.x, q.z, 16);
+    d.wallBox(q.x - Math.sin(yaw) * 1.6, q.z - Math.cos(yaw) * 1.6, 12.5, 6, yaw, 8, true);
+    d.claim(q.x, q.z, 13.5);
     fans = crowd(d.group, gs.seats.map((v) => v.clone().add(new THREE.Vector3(0, 1.9, 0))), mm, 80);
     standAt = { x: q.x, z: q.z };
     // A cherry on the roof.
