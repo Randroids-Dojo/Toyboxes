@@ -1,6 +1,6 @@
 // Pause menu, settings and the controls card.
 
-import { setVolume } from '../audio/sfx';
+import { setMusicVolume, setVolume } from '../audio/sfx';
 import * as local from '../core/local';
 import { canPromptInstall, isInstalled, isIos, onInstallChange, promptInstall } from '../core/pwa';
 import { IS_TV } from '../input/input';
@@ -83,6 +83,10 @@ export function settingsPanel(ui: UI, onChange: (s: local.Settings) => void): Pa
     slider('Sound', 0, 1, 0.1, s.volume, (v) => {
       set('volume', v);
       setVolume(v);
+    }),
+    slider('Music', 0, 1, 0.1, s.music, (v) => {
+      set('music', v);
+      setMusicVolume(v);
     }),
     slider('Camera speed', 0.4, 2, 0.1, s.lookSpeed, (v) => set('lookSpeed', v)),
     toggle('Camera follows behind', s.autoCamera, (v) => set('autoCamera', v)),

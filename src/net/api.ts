@@ -71,6 +71,19 @@ export const api = {
     call<{ pocket: number; win: number; stats: CasinoStats }>('POST', '/api/scores', { action: 'roulette', roomId, areaId, browserId, name, bet, pick }),
   blackjack: (roomId: string, areaId: string, browserId: string, name: string, move: 'deal' | 'hit' | 'stand' | 'double', bet?: number) =>
     call<{ hand: BjView; stats: CasinoStats }>('POST', '/api/scores', { action: 'blackjack', roomId, areaId, browserId, name, move, bet }),
+  /** A result on one of a world's boards (src/shared/score-modes.ts). */
+  score: (roomId: string, areaId: string, browserId: string, name: string, mode: string, value: number, extra: { ticket?: string; log?: unknown } = {}) =>
+    call<{ best: number; improved: boolean; rank: number | null }>('POST', '/api/scores', { action: 'score', roomId, areaId, browserId, name, mode, value, ...extra }),
+  /** Starts a run on a board that needs a ticket (ScoreMode.ticket). */
+  runStart: (roomId: string, areaId: string, browserId: string, mode: string) => call<{ ticket: string }>('POST', '/api/scores', { action: 'run', roomId, areaId, browserId, mode }),
+  /** Several of a world's boards at once. */
+  modeBoards: (roomId: string, areaId: string, modes: string[], browserId: string) =>
+    call<{ kind: 'modes'; boards: Record<string, { board: BoardRow[]; best: number | null }> }>(
+      'GET',
+      `/api/scores?roomId=${encodeURIComponent(roomId)}&areaId=${encodeURIComponent(areaId)}&modes=${encodeURIComponent(modes.join(','))}`,
+      undefined,
+      { 'x-browser-id': browserId },
+    ),
   scoreName: (browserId: string, name: string) => call<{ ok: true }>('POST', '/api/scores', { action: 'name', browserId, name }),
 };
 

@@ -2,8 +2,11 @@
 // the game, time formatting and small canvas helpers.
 
 import * as THREE from 'three';
+import type { Input } from '../input/input';
 import type { Area } from '../shared/model';
 import type { UI } from '../ui/ui';
+import type { Pose } from '../world/avatar';
+import type { Tier } from '../world/space';
 import { DISPLAY_FONT, BODY_FONT, keep, roundRect } from '../world/kit';
 
 export interface ExperienceCtx {
@@ -16,6 +19,34 @@ export interface ExperienceCtx {
   name(): string;
   /** Snap the follow camera after teleporting the player. */
   snapCamera(yaw: number): void;
+  /** The game camera, for projecting world points to the screen. Do not move it; use `cameraShot`. */
+  camera: THREE.PerspectiveCamera;
+  /** Shake the camera: 0.2 is a bump, 0.6 a crash, 1 an explosion. Softened by Reduce motion. */
+  shake(amount: number): void;
+  /** Read input directly while `captureInput` is active (take, isHeld, move). */
+  input: Input;
+  /** The player's Reduce motion setting. */
+  reduceMotion(): boolean;
+  /** The current graphics tier. */
+  tier(): Tier;
+  /** Which way the camera faces (radians, 0 faces +z), for camera-relative controls. */
+  cameraYaw(): number;
+  /** Holds an avatar pose on foot (dance, crouch, aim...); null returns to walking. Carry poses win while carrying. */
+  pose(p: Pose | null): void;
+  /** A quick right-arm swing. */
+  swing(): void;
+  /** Puts an object in the avatar's right hand (null empties it). The experience owns and disposes it. */
+  hold(obj: THREE.Object3D | null): void;
+  /** Cartoon squash (positive) or stretch (negative) of the avatar, about 0.1 to 0.4. */
+  squash(amount: number): void;
+  /** Moves the player (feet at height `y`, default the floor) and snaps the camera behind them. */
+  teleport(x: number, z: number, yaw: number, y?: number): void;
+  /**
+   * Pushes the player. `vy` sets the vertical speed (a launch, m/s); `vx` and
+   * `vz` add to the walking speed, which walking control soon takes back over,
+   * so use `carry` for long flights.
+   */
+  impulse(vx: number, vy: number, vz: number): void;
 }
 
 export function formatLap(ms: number | null | undefined): string {

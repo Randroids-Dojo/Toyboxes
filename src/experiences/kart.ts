@@ -1437,7 +1437,7 @@ export class KartTrack implements SpaceView {
 
   /** Runs the computer drivers at race pace for a while without drawing, for playtests. */
   debugSimulate(seconds: number) {
-    const idle: PlayerState = { x: this.arrival.x, z: this.arrival.z, yaw: 0, vx: 0, vz: 0, riding: null };
+    const idle: PlayerState = { x: this.arrival.x, z: this.arrival.z, y: 0, vy: 0, grounded: true, yaw: 0, vx: 0, vz: 0, riding: null };
     this.simPace = true;
     for (const c of this.cpus) {
       c.laps = 0;

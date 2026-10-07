@@ -52,7 +52,7 @@ export class TouchControls {
       e.preventDefault();
       el.setPointerCapture(e.pointerId);
       el.classList.add('down');
-      this.input.touchDown(a);
+      this.input.touchDown(a, e.timeStamp || performance.now());
     });
     const release = () => {
       el.classList.remove('down');
@@ -95,7 +95,10 @@ export class TouchControls {
     }
   }
 
-  setJump(show: boolean): void {
+  /** true shows the Jump button, a string shows it with that label, false hides it. */
+  setJump(show: boolean | string): void {
+    const label = typeof show === 'string' ? show : 'Jump';
+    if (show && this.jumpBtn.textContent !== label) this.jumpBtn.textContent = label;
     this.jumpBtn.classList.toggle('gone', !show);
   }
 

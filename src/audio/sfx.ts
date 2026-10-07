@@ -8,6 +8,8 @@ let master: GainNode | null = null;
 let noiseBuf: AudioBuffer | null = null;
 let volume = 0.7;
 let lastAt = new Map<string, number>();
+let musicBus: GainNode | null = null;
+let musicVolume = 0.6;
 
 function ac(): Ctx | null {
   if (ctx) return ctx;
@@ -21,6 +23,9 @@ function ac(): Ctx | null {
   master = ctx.createGain();
   master.gain.value = volume;
   master.connect(ctx.destination);
+  musicBus = ctx.createGain();
+  musicBus.gain.value = musicVolume;
+  musicBus.connect(master);
   noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
   const d = noiseBuf.getChannelData(0);
   for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
@@ -38,6 +43,22 @@ export function setVolume(v: number): void {
   if (master && ctx) master.gain.setTargetAtTime(v, ctx.currentTime, 0.02);
 }
 
+/** Music sits under the sound effects on its own level. */
+export function setMusicVolume(v: number): void {
+  musicVolume = v;
+  if (musicBus && ctx) musicBus.gain.setTargetAtTime(v, ctx.currentTime, 0.05);
+}
+
+/**
+ * The shared audio graph for experiences that synthesise their own sounds
+ * and music: `out` is the effects level, `music` the music level.
+ */
+export function audioGraph(): { ctx: AudioContext; out: GainNode; music: GainNode; noise: AudioBuffer } | null {
+  const c = ac();
+  if (!c || !master || !musicBus || !noiseBuf) return null;
+  return { ctx: c, out: master, music: musicBus, noise: noiseBuf };
+}
+
 export function suspendAudio(on: boolean): void {
   if (!ctx) return;
   if (on) void ctx.suspend();
@@ -52,7 +73,7 @@ function gate(name: string, ms: number): boolean {
   return true;
 }
 
-function tone(freq: number, dur: number, opts: { type?: OscillatorType; gain?: number; at?: number; slide?: number; attack?: number } = {}): void {
+export function tone(freq: number, dur: number, opts: { type?: OscillatorType; gain?: number; at?: number; slide?: number; attack?: number; to?: AudioNode; detune?: number } = {}): void {
   const c = ac();
   if (!c || !master || volume <= 0) return;
   const t0 = c.currentTime + (opts.at ?? 0);
@@ -60,17 +81,18 @@ function tone(freq: number, dur: number, opts: { type?: OscillatorType; gain?: n
   const g = c.createGain();
   o.type = opts.type ?? 'sine';
   o.frequency.setValueAtTime(freq, t0);
+  if (opts.detune) o.detune.value = opts.detune;
   if (opts.slide) o.frequency.exponentialRampToValueAtTime(Math.max(20, freq * opts.slide), t0 + dur);
   const peak = opts.gain ?? 0.2;
   g.gain.setValueAtTime(0.0001, t0);
   g.gain.exponentialRampToValueAtTime(peak, t0 + (opts.attack ?? 0.008));
   g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-  o.connect(g).connect(master);
+  o.connect(g).connect(opts.to ?? master);
   o.start(t0);
   o.stop(t0 + dur + 0.02);
 }
 
-function noise(dur: number, opts: { gain?: number; at?: number; freq?: number; q?: number; type?: BiquadFilterType; sweep?: number } = {}): void {
+export function noise(dur: number, opts: { gain?: number; at?: number; freq?: number; q?: number; type?: BiquadFilterType; sweep?: number; to?: AudioNode } = {}): void {
   const c = ac();
   if (!c || !master || !noiseBuf || volume <= 0) return;
   const t0 = c.currentTime + (opts.at ?? 0);
@@ -85,7 +107,7 @@ function noise(dur: number, opts: { gain?: number; at?: number; freq?: number; q
   g.gain.setValueAtTime(0.0001, t0);
   g.gain.exponentialRampToValueAtTime(opts.gain ?? 0.2, t0 + 0.01);
   g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-  src.connect(f).connect(g).connect(master);
+  src.connect(f).connect(g).connect(opts.to ?? master);
   src.start(t0, Math.random() * 0.5);
   src.stop(t0 + dur + 0.02);
 }

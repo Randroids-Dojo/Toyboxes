@@ -2,7 +2,7 @@
 // your toy figure, the vehicles, and the flows for claiming and editing rooms.
 
 import * as THREE from 'three';
-import { Engine, setVolume, sfx, suspendAudio, unlockAudio } from '../audio/sfx';
+import { Engine, setMusicVolume, setVolume, sfx, suspendAudio, unlockAudio } from '../audio/sfx';
 import * as local from '../core/local';
 import { IS_TV, type Input } from '../input/input';
 import type { TouchControls } from '../input/touch';
@@ -11,7 +11,7 @@ import { ARCADES, EMPTY_CONTENT, exhibitsIn, type Area, type ArcadeId, type Exhi
 import { askName, choose, confirmBox, pinPad } from '../ui/dialogs';
 import { openSketchbook, type EditSession } from '../ui/sketchbook';
 import { h, type UI } from '../ui/ui';
-import { Avatar, shirtFor } from '../world/avatar';
+import { Avatar, shirtFor, type Pose } from '../world/avatar';
 import { Interior } from '../world/interior';
 import { disposeTree } from '../world/kit';
 import { circle, clamp, damp, groundHeight, resolveCircle, wrapAngle, type Collider } from '../world/physics';
@@ -25,7 +25,7 @@ import { Galaxy } from '../experiences/galaxy';
 import { NeonParty } from '../experiences/neon';
 import { FartSimulator } from '../experiences/fart';
 import { KartTrack } from '../experiences/kart';
-import type { PlayerState, SpaceView, Tier } from '../world/space';
+import type { CameraShot, CaptureLabels, PlayerState, SpaceView, Tier } from '../world/space';
 import { Arranger } from './arrange';
 import { CameraRig } from './camera';
 import { controlsPanel, pauseMenu, settingsPanel } from './menus';
@@ -87,6 +87,13 @@ export class Game {
   private current: Interactable | null = null;
   private fadeEl: HTMLElement;
   private renderScale = 1;
+  /** The experience's directed camera and input capture this frame. */
+  private shot: CameraShot | null = null;
+  /** Set while the experience carries the player (see SpaceView.carry). */
+  private carrying: { pose: Pose; speed: number } | null = null;
+  /** A pose the experience asked for on foot. */
+  private worldPose: Pose | null = null;
+  private capture: CaptureLabels | null = null;
   private frameTimes: number[] = [];
   private lastScaleChange = 0;
   /** Graphics tier: fixed by the settings, or measured on Auto. */
@@ -187,6 +194,7 @@ export class Game {
   applySettings(s: local.Settings): void {
     this.settings = s;
     setVolume(s.volume);
+    setMusicVolume(s.music);
     document.documentElement.classList.toggle('large-text', s.largeText || IS_TV);
     document.documentElement.classList.toggle('reduce-motion', s.reduceMotion);
     const q: Tier = s.quality === 'auto' ? (IS_TV || matchMedia('(pointer: coarse)').matches ? 'medium' : 'high') : s.quality;
@@ -399,11 +407,17 @@ export class Game {
   }
 
   private playerState(): PlayerState {
-    return { x: this.pos.x, z: this.pos.z, yaw: this.yaw, vx: this.vel.x, vz: this.vel.y, riding: this.riding };
+    return { x: this.pos.x, z: this.pos.z, y: this.pos.y, vy: this.vy, grounded: this.grounded, yaw: this.yaw, vx: this.vel.x, vz: this.vel.y, riding: this.riding };
   }
 
   private setScene(space: Space): void {
     const old = this.space;
+    // Whatever the last world set on the player goes with it.
+    this.avatar.hold(null);
+    this.worldPose = null;
+    this.carrying = null;
+    this.shot = null;
+    this.capture = null;
     if (old.kind !== 'hub') {
       old.interior.scene.remove(this.toys.group, this.avatar.root);
       disposeTree(this.toys.group);
@@ -482,6 +496,34 @@ export class Game {
       browserId: local.identity().browserId,
       name: () => local.identity().name ?? 'Player',
       snapCamera: (yaw) => this.rig.snap(this.follow(), yaw),
+      camera: this.camera,
+      shake: (amount) => this.rig.shake(amount),
+      input: this.input,
+      reduceMotion: () => this.settings.reduceMotion,
+      tier: () => this.tier,
+      cameraYaw: () => this.controlYaw(),
+      pose: (p) => (this.worldPose = p),
+      swing: () => this.avatar.swing(),
+      hold: (obj) => this.avatar.hold(obj),
+      squash: (amount) => this.avatar.squash(amount),
+      teleport: (x, z, yaw, y = 0) => {
+        this.placePlayer(x, z, yaw);
+        if (y) {
+          this.pos.y = y;
+          this.groundY = groundHeight(x, z, PLAYER_R * 0.7, this.colliders(), y + 0.01);
+          this.grounded = y <= this.groundY + 0.02;
+          this.avatar.root.position.copy(this.pos);
+        }
+        this.rig.snap(this.follow(), yaw);
+      },
+      impulse: (vx, vy, vz) => {
+        this.vel.x += vx;
+        this.vel.y += vz;
+        if (vy) {
+          this.vy = vy;
+          this.grounded = false;
+        }
+      },
     };
   }
 
@@ -1025,7 +1067,7 @@ export class Game {
       z: v ? v.pos.z : this.pos.z,
       height: v ? 1.35 : 1.25 + this.pos.y,
       heading: v ? v.yaw : this.yaw,
-      speed: v ? Math.abs(v.speed) : this.vel.length(),
+      speed: v ? Math.abs(v.speed) : this.carrying ? this.carrying.speed : this.vel.length(),
       riding: !!v,
     };
   }
@@ -1078,6 +1120,14 @@ export class Game {
       }
     }
     const control = !menu && !this.busy && !this.paused;
+    // An experience can direct the camera (and freeze the player for it), or
+    // read the controls itself for a mini-game.
+    const svNow = this.view();
+    const shot = this.arranger ? null : (svNow?.cameraShot?.(dt) ?? null);
+    const capture = shot?.lockPlayer || this.arranger ? null : (svNow?.captureInput?.() ?? null);
+    const steer = control && !shot?.lockPlayer && !capture;
+    this.shot = shot;
+    this.capture = capture;
 
     this.worldTimer -= dt;
     if (this.worldTimer <= 0 && this.space.kind === 'hub') void this.loadWorld();
@@ -1094,11 +1144,11 @@ export class Game {
       if (this.arranger || frozen) break;
       if (this.riding) {
         const v = this.riding;
-        const mx = control ? this.input.move.x : 0;
-        const my = control ? this.input.move.y : 0;
-        const throttle = control ? clamp(my + this.input.throttle - this.input.brake, -1, 1) : 0;
+        const mx = steer ? this.input.move.x : 0;
+        const my = steer ? this.input.move.y : 0;
+        const throttle = steer ? clamp(my + this.input.throttle - this.input.brake, -1, 1) : 0;
         // Kick or jump held brakes (and drifts on a race track).
-        const brake = control && (this.input.isHeld('kick') || this.input.isHeld('jump')) ? 1 : 0;
+        const brake = steer && (this.input.isHeld('kick') || this.input.isHeld('jump')) ? 1 : 0;
         v.drive(h, throttle, -mx, brake, cols);
         if (v.bumped) {
           sfx.bump(Math.min(1, v.bumped / 10));
@@ -1107,16 +1157,19 @@ export class Game {
         }
         this.pos.copy(v.pos);
         this.yaw = v.yaw;
+      } else if (this.carryStep(sv, h, steer, cols)) {
+        // The world carried the player this step.
       } else {
         // Camera-relative walking.
-        const mx = control ? this.input.move.x : 0;
-        const my = control ? this.input.move.y : 0;
-        const fx = Math.sin(this.rig.yaw);
-        const fz = Math.cos(this.rig.yaw);
+        const mx = steer ? this.input.move.x : 0;
+        const my = steer ? this.input.move.y : 0;
+        const camYaw = this.controlYaw();
+        const fx = Math.sin(camYaw);
+        const fz = Math.cos(camYaw);
         const rx = -fz;
         const rz = fx;
         const mag = Math.min(1, Math.hypot(mx, my));
-        const speed = WALK * mag * (this.input.isHeld('run') ? 1.3 : 1);
+        const speed = WALK * mag * (this.input.isHeld('run') ? (sv?.runScale?.() ?? 1.3) : 1);
         let wx = fx * my + rx * mx;
         let wz = fz * my + rz * mx;
         const wl = Math.hypot(wx, wz);
@@ -1147,7 +1200,9 @@ export class Game {
         }
         if (sp > 1) this.movedFor += h;
         // Jumping, falling and landing on top of low things like toy blocks.
-        if (i === 0 && control && this.grounded && this.input.take('jump')) {
+        const spaceJump = sv?.jumpAction?.(this.playerState()) ?? null;
+        if (i === 0 && steer && spaceJump && this.input.take('jump')) spaceJump.run();
+        else if (i === 0 && steer && this.grounded && this.input.take('jump')) {
           this.vy = JUMP_SPEED;
           this.grounded = false;
           this.avatar.jump();
@@ -1181,8 +1236,8 @@ export class Game {
         }
       }
       const spaceKick = !this.riding ? sv?.kickAction?.(this.playerState()) : null;
-      if (i === 0 && control && spaceKick && this.input.take('kick')) spaceKick.run();
-      else if (i === 0 && control && !this.riding && this.input.take('kick')) {
+      if (i === 0 && steer && spaceKick && this.input.take('kick')) spaceKick.run();
+      else if (i === 0 && steer && !this.riding && this.input.take('kick')) {
         this.avatar.kick();
         const hitBall = this.toys.kick(this.pos.x, this.pos.z, this.yaw);
         sfx.kick(hitBall);
@@ -1193,8 +1248,10 @@ export class Game {
     this.handleEvents(events);
 
     // ---- interactions
-    this.current = control && !this.arranger ? this.pickInteractable() : null;
-    if (control && this.input.take('interact')) {
+    this.current = steer && !this.arranger ? this.pickInteractable() : null;
+    if (control && shot?.lockPlayer) {
+      if (this.input.take('interact') && shot.skip) shot.skip();
+    } else if (steer && this.input.take('interact')) {
       if (this.riding) {
         const act = sv?.rideAction?.(this.playerState());
         if (act) act.run();
@@ -1204,7 +1261,7 @@ export class Game {
         this.current.run();
       }
     }
-    if (control && this.riding && this.input.take('back')) this.dismount();
+    if (steer && this.riding && this.input.take('back')) this.dismount();
 
     // ---- avatar, vehicles and the camera
     if (!this.riding) {
@@ -1212,6 +1269,7 @@ export class Game {
       this.avatar.root.rotation.y = this.yaw;
     }
     this.avatar.setAir(this.riding ? 0 : this.pos.y - this.groundY, !this.riding && !this.grounded);
+    this.avatar.setPose(this.riding ? null : (this.carrying?.pose ?? (this.space.kind === 'area' ? this.worldPose : null)));
     this.avatar.animate(dt, this.riding ? 0 : this.vel.length(), this.riding ? this.riding.kind : 'none', this.settings.reduceMotion);
     if (this.riding) this.engine.set(Math.min(1, Math.abs(this.riding.speed) / this.riding.t.maxSpeed), this.riding.kind);
 
@@ -1220,8 +1278,10 @@ export class Game {
     if (this.arranger) {
       this.arranger.update(dt);
     } else {
-      const look = control ? this.input.look : { x: 0, y: 0 };
+      const look = steer ? this.input.look : { x: 0, y: 0 };
       this.rig.update(dt, now, look, this.follow(), cols, this.settings);
+      this.applyShot(shot);
+      this.rig.applyShake(dt, this.settings.reduceMotion);
       if (this.space.kind !== 'hub') this.space.interior.cutaway(this.camera.position);
     }
     this.sky.update(phase, this.pos);
@@ -1236,6 +1296,69 @@ export class Game {
     if (!this.view()?.render?.(this.renderer, this.camera)) this.renderer.render(scene, this.camera);
   }
 
+  /** Which way "forward" points for the controls: the directed shot's view, else the follow camera's. */
+  private controlYaw(): number {
+    if (this.shot && (this.shot.blend ?? 1) >= 0.5) {
+      const d = this.camera.getWorldDirection(new THREE.Vector3());
+      if (Math.hypot(d.x, d.z) > 0.05) return Math.atan2(d.x, d.z);
+    }
+    return this.rig.yaw;
+  }
+
+  /** Lets the experience carry the player for one step. Returns true when it did. */
+  private carryStep(sv: SpaceView | null, h: number, steer: boolean, cols: Collider[]): boolean {
+    if (!sv?.carry) {
+      this.carrying = null;
+      return false;
+    }
+    const mx = steer ? this.input.move.x : 0;
+    const my = steer ? this.input.move.y : 0;
+    const yaw = this.controlYaw();
+    const fx = Math.sin(yaw);
+    const fz = Math.cos(yaw);
+    const c = sv.carry(h, this.playerState(), { x: mx, y: my, wx: fx * my - fz * mx, wz: fz * my + fx * mx });
+    if (!c) {
+      if (this.carrying) {
+        // Hand back without leftover walking speed.
+        this.vel.set(0, 0);
+        this.vy = Math.min(this.vy, 0);
+      }
+      this.carrying = null;
+      return false;
+    }
+    const lx = this.pos.x;
+    const lz = this.pos.z;
+    const ly = this.pos.y;
+    this.pos.set(c.x, c.y, c.z);
+    this.yaw = c.yaw;
+    this.vy = h > 0 ? (c.y - ly) / h : 0;
+    this.vel.set(0, 0);
+    this.grounded = false;
+    this.groundY = groundHeight(c.x, c.z, PLAYER_R * 0.7, cols, c.y);
+    this.carrying = { pose: c.pose ?? 'fly', speed: c.speed ?? (h > 0 ? Math.hypot(c.x - lx, c.z - lz) / h : 0) };
+    return true;
+  }
+
+  /** Blends the follow camera toward an experience's directed shot. */
+  private applyShot(shot: CameraShot | null): void {
+    const base = innerWidth < innerHeight ? 68 : 55;
+    let fov = base;
+    if (shot) {
+      const b = clamp(shot.blend ?? 1, 0, 1);
+      if (b > 0) {
+        this.camera.position.lerp(shot.position, b);
+        const from = this.camera.quaternion.clone();
+        this.camera.lookAt(shot.target);
+        this.camera.quaternion.copy(from.slerp(this.camera.quaternion, b));
+        fov = base + ((shot.fov ?? base) - base) * b;
+      }
+    }
+    if (Math.abs(this.camera.fov - fov) > 0.01) {
+      this.camera.fov = fov;
+      this.camera.updateProjectionMatrix();
+    }
+  }
+
   private updateHud(dt: number, control: boolean): void {
     const ui = this.ui;
     const place = this.space.kind === 'hub' ? 'Toyboxes town' : this.space.kind === 'room' ? `${this.roomTitle(this.space.room)} · Room ${this.space.room.slot + 1}` : `${this.space.area.name} · ${this.space.room.ownerName}'s room`;
@@ -1248,6 +1371,23 @@ export class Game {
       return;
     }
     const sv = this.view();
+    if (this.shot?.lockPlayer) {
+      ui.prompt(this.shot.skip ? (this.shot.skipLabel ?? 'Skip') : null);
+      this.touch.setAction(this.shot.skip ? (this.shot.skipLabel ?? 'Skip') : null);
+      this.touch.setKick(null);
+      this.touch.setJump(false);
+      ui.hint(null);
+      return;
+    }
+    if (this.capture) {
+      const c = this.capture;
+      ui.prompt(c.prompt ?? null);
+      this.touch.setAction(c.action);
+      this.touch.setKick(c.kick);
+      this.touch.setJump(c.jump ?? false);
+      ui.hint(null);
+      return;
+    }
     if (this.riding) {
       const act = sv?.rideAction?.(this.playerState());
       const label = act ? act.label : 'Get off';
@@ -1262,7 +1402,8 @@ export class Game {
       this.touch.setAction(it ? it.short : null);
       const ball = this.toys.nearestBall(this.pos.x, this.pos.z);
       this.touch.setKick(kick ? kick.label : 'Kick');
-      this.touch.setJump(true);
+      const jumpAct = sv?.jumpAction?.(this.playerState()) ?? null;
+      this.touch.setJump(jumpAct ? jumpAct.label : true);
       if (!it && !kick && ball && ball.dist < 1.8) ui.prompt('Kick', 'kick');
     }
     if (this.hintTimer > 0) {
@@ -1294,6 +1435,8 @@ export class Game {
       z: this.pos.z,
       y: this.pos.y,
       grounded: this.grounded,
+      carried: !!this.carrying,
+      camYaw: this.controlYaw(),
       yaw: this.yaw,
       riding: this.riding?.kind ?? null,
       speed: this.riding ? this.riding.speed : this.vel.length(),

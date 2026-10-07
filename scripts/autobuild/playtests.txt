@@ -1,5 +1,9 @@
 # Extra playtests the QA gate runs, one per line: [ENV=VALUE ...] script.ts [args]
 # Every built experience adds its own lines here.
+kittest.ts
+PHONE=1 kittest.ts
+PAD=1 kittest.ts
+REMOTE=1 kittest.ts
 experiencetest.ts
 PHONE=1 experiencetest.ts
 galaxytest.ts

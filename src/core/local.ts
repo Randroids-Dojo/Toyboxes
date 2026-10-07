@@ -74,6 +74,8 @@ export type TimeMode = 'cycle' | 'day' | 'sunset' | 'night';
 
 export interface Settings {
   volume: number;
+  /** Music in the worlds, under the sound effects. */
+  music: number;
   lookSpeed: number;
   invertY: boolean;
   autoCamera: boolean;
@@ -88,6 +90,7 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
   volume: 0.7,
+  music: 0.6,
   lookSpeed: 1,
   invertY: false,
   autoCamera: true,

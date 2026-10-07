@@ -43,6 +43,28 @@ export class CameraRig {
     this.nudge = Math.max(this.nudge, amount);
   }
 
+  private trauma = 0;
+  private shakeT = 0;
+
+  /** Adds camera shake, 0 to 1; it fades by itself. */
+  shake(amount: number): void {
+    this.trauma = Math.min(1, this.trauma + Math.max(0, amount));
+  }
+
+  /** Offsets the finished camera by the current shake. */
+  applyShake(dt: number, reduceMotion: boolean): void {
+    if (this.trauma <= 0) return;
+    this.shakeT += dt;
+    const s = this.trauma * this.trauma * (reduceMotion ? 0.2 : 1);
+    const t = this.shakeT;
+    const n = (f: number, o: number) => Math.sin(t * f + o) * 0.6 + Math.sin(t * f * 2.31 + o * 1.7) * 0.4;
+    const right = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 0);
+    const up = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 1);
+    this.camera.position.addScaledVector(right, n(31, 1) * 0.32 * s).addScaledVector(up, n(37, 2) * 0.26 * s);
+    this.camera.rotateZ(n(23, 3) * 0.045 * s);
+    this.trauma = Math.max(0, this.trauma - dt * 1.5);
+  }
+
   update(dt: number, now: number, look: { x: number; y: number }, follow: Follow, colliders: Collider[], opts: { lookSpeed: number; invertY: boolean; autoCamera: boolean; reduceMotion: boolean }): void {
     const sens = opts.lookSpeed;
     if (look.x !== 0 || look.y !== 0) {

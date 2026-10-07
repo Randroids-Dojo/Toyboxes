@@ -8,10 +8,14 @@
 // POST /api/scores {action:'roulette', roomId, areaId, browserId, name, bet, pick:{type, number?}}
 // POST /api/scores {action:'blackjack', roomId, areaId, browserId, name, move:'deal'|'hit'|'stand'|'double', bet?}
 // POST /api/scores {action:'name', browserId, name}
+// POST /api/scores {action:'run', roomId, areaId, browserId, mode}                   -> {ticket} for boards that need one
+// POST /api/scores {action:'score', roomId, areaId, browserId, name, mode, value, ticket?, log?}   (world boards, src/shared/score-modes.ts)
+// GET  /api/scores?roomId=<id>&areaId=<id>&modes=a,b,c                               -> {kind:'modes', boards}
 
 import { z } from 'zod';
 import { clientIp, header, limit, parseBody, parseQuery, route } from '../server/http.js';
-import { blackjack, board, recordFrenzy, recordLap, refill, renameScores, roulette, spin } from '../server/scores.js';
+import { blackjack, board, modeBoards, recordFrenzy, recordLap, recordScore, refill, renameScores, roulette, spin, startRun } from '../server/scores.js';
+import { MODE_ID } from '../src/shared/score-modes.js';
 import * as s from '../server/schemas.js';
 
 const areaId = z.string().regex(/^[a-zA-Z0-9_-]{1,24}$/);
@@ -22,6 +26,18 @@ const body = z.discriminatedUnion('action', [
   z.object({ action: z.literal('refill'), roomId: s.roomId, areaId, browserId: s.browserId, name: s.name }),
   z.object({ action: z.literal('frenzy'), roomId: s.roomId, areaId, browserId: s.browserId, name: s.name, score: z.number().int() }),
   z.object({ action: z.literal('name'), browserId: s.browserId, name: s.name }),
+  z.object({
+    action: z.literal('score'),
+    roomId: s.roomId,
+    areaId,
+    browserId: s.browserId,
+    name: s.name,
+    mode: z.string().regex(MODE_ID),
+    value: z.number().int().min(-1_000_000_000).max(1_000_000_000),
+    ticket: z.string().regex(/^[A-Za-z0-9_-]{10,40}$/).optional(),
+    log: z.unknown().optional(),
+  }),
+  z.object({ action: z.literal('run'), roomId: s.roomId, areaId, browserId: s.browserId, mode: z.string().regex(MODE_ID) }),
   z.object({
     action: z.literal('roulette'),
     roomId: s.roomId,
@@ -36,9 +52,14 @@ const body = z.discriminatedUnion('action', [
 
 export default route({
   GET: async (req) => {
-    const q = parseQuery(req, z.object({ roomId: s.roomId, areaId }));
+    const q = parseQuery(req, z.object({ roomId: s.roomId, areaId, modes: z.string().max(400).optional() }));
     const id = header(req, 'x-browser-id');
-    return board(q.roomId, q.areaId, id && s.browserId.safeParse(id).success ? id : undefined);
+    const who = id && s.browserId.safeParse(id).success ? id : undefined;
+    if (q.modes !== undefined) {
+      const modes = q.modes.split(',').filter((m) => MODE_ID.test(m));
+      return modeBoards(q.roomId, q.areaId, modes, who);
+    }
+    return board(q.roomId, q.areaId, who);
   },
   POST: async (req) => {
     const b = parseBody(req, body);
@@ -58,6 +79,10 @@ export default route({
         return roulette(b.roomId, b.areaId, b.browserId, b.name, b.bet, b.pick);
       case 'blackjack':
         return blackjack(b.roomId, b.areaId, b.browserId, b.name, b.move, b.bet);
+      case 'score':
+        return recordScore(b.roomId, b.areaId, b.browserId, b.name, b.mode, b.value, { ticket: b.ticket, log: b.log });
+      case 'run':
+        return startRun(b.roomId, b.areaId, b.browserId, b.mode);
     }
   },
 });

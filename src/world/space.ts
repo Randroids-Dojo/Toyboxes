@@ -4,6 +4,7 @@
 import type * as THREE from 'three';
 import type { Area, Exhibit } from '../shared/model';
 import type { Collider } from './physics';
+import type { Pose } from './avatar';
 import type { Vehicle } from './vehicles';
 
 export interface Spot {
@@ -24,11 +25,61 @@ export interface SpaceAction {
 export interface PlayerState {
   x: number;
   z: number;
+  /** Height of the feet above the floor (0 on the ground floor). */
+  y: number;
+  /** Vertical speed, m/s (up is positive). */
+  vy: number;
+  grounded: boolean;
   /** Facing, radians (0 faces +z). */
   yaw: number;
   vx: number;
   vz: number;
   riding: Vehicle | null;
+}
+
+/** Where the world puts the player this step while it carries them (slings, rides, flights). */
+export interface Carry {
+  x: number;
+  y: number;
+  z: number;
+  /** Facing, radians (0 faces +z). */
+  yaw: number;
+  /** Body pose while carried. Defaults to 'fly'. */
+  pose?: Pose;
+  /** Speed for the follow camera, m/s. */
+  speed?: number;
+}
+
+/** The move input this step: the raw stick (x right, y forward) and the same as a world direction relative to the camera. */
+export interface MoveInput {
+  x: number;
+  y: number;
+  wx: number;
+  wz: number;
+}
+
+/** A camera the experience directs: intro flyovers, podiums, replays. */
+export interface CameraShot {
+  position: THREE.Vector3;
+  target: THREE.Vector3;
+  /** Vertical field of view in degrees. Defaults to the normal view. */
+  fov?: number;
+  /** 0 keeps the follow camera, 1 is fully this shot. Ease it for smooth cuts. */
+  blend?: number;
+  /** Freezes the player (no moving, looking, jumping or actions) while it plays. */
+  lockPlayer?: boolean;
+  /** Interact skips a locked shot. */
+  skip?: () => void;
+  skipLabel?: string;
+}
+
+/** Touch button labels while an experience reads input itself; null hides a button. */
+export interface CaptureLabels {
+  action: string | null;
+  kick: string | null;
+  jump: string | null;
+  /** The desktop prompt, e.g. "Hit the arrows on the beat". */
+  prompt?: string | null;
 }
 
 export interface SpaceView {
@@ -64,6 +115,28 @@ export interface SpaceView {
   holdsTime?(): boolean;
   /** Gravity for jumps here, as a share of normal (low in space). */
   gravity?(): number;
+  /**
+   * A directed camera for this frame, or null for the follow camera. Called
+   * once per frame, before input, even while a menu is open.
+   */
+  cameraShot?(dt: number): CameraShot | null;
+  /**
+   * While this returns labels, the game stops moving the player and stops
+   * handling interact, kick and jump; the experience reads `ctx.input`
+   * itself (rhythm games, aiming, menus in the world). Pause and Back still work.
+   */
+  captureInput?(): CaptureLabels | null;
+  /**
+   * Called every step before walking. Return a position to carry the player
+   * there instead of walking, jumping and gravity (slings, scripted rides,
+   * your own flight model). Return null to hand control back; normal physics
+   * resumes from that spot.
+   */
+  carry?(h: number, player: PlayerState, move: MoveInput): Carry | null;
+  /** Speed multiplier for Run here (default 1.3). Return 1 to make running no faster, e.g. in a timed round. */
+  runScale?(): number;
+  /** The jump button on foot. Return a label to use it for something else here. */
+  jumpAction?(player: PlayerState): { label: string; run: () => void } | null;
   /** Graphics tier from the settings and measured frame times. */
   setQuality?(tier: Tier): void;
   /** Draw the frame itself (post-processing). Return true when it did. */

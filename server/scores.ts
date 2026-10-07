@@ -6,16 +6,18 @@
 //   casinoboard:<roomId>:<areaId>  sorted set, browser key -> balance
 //   galaxy:<roomId>:<areaId>       sorted set, browser key -> best frenzy score
 //   bj:<roomId>:<areaId>:<bk>      the player's blackjack hand and shoe
+//   modeboard:<roomId>:<areaId>:<mode>  sorted set, browser key -> best on that world board
 //   scorename:<bk>                 the name boards show for that browser
 //
 // Players are anonymous browsers, so scores follow the browser's current
 // name. The casino decides every spin here; the browser only animates it.
 
-import { randomInt } from 'node:crypto';
+import { randomBytes, randomInt } from 'node:crypto';
 import { EMPTY_CONTENT, GALAXY_MAX_SCORE, cleanName, publishedContent, type Area, type RoomContent } from '../src/shared/model.js';
 import { BETS, REEL_STRIP, START_CREDITS, freshStats, payout, pushHistory, type CasinoStats, type SlotSymbol } from '../src/shared/slots.js';
 import { handValue, isBlackjack, newShoe, rouletteReturn, settle, type BjResult, type BjView, type Card, type RouletteBet } from '../src/shared/casino-games.js';
 import { minLapMs } from '../src/shared/track.js';
+import { MAX_LOG, SCORE_MODES, beats, scoreMode, scoreProblem } from '../src/shared/score-modes.js';
 import { browserKey } from './crypto.js';
 import { ApiError, limit } from './http.js';
 import { loadRoom } from './rooms.js';
@@ -104,6 +106,90 @@ export async function recordFrenzy(roomId: string, areaId: string, browserId: st
   return { best: improved ? score : before!, improved };
 }
 
+async function publishedArea(roomId: string, areaId: string): Promise<Area & { experience: NonNullable<Area['experience']> }> {
+  await loadRoom(roomId);
+  const content = (await getStore().get<RoomContent>(`content:${roomId}`)) ?? EMPTY_CONTENT;
+  const area = publishedContent(content).areas.find((a) => a.id === areaId);
+  if (!area?.experience) throw new ApiError(404, 'no_area', 'That place is closed');
+  return area as Area & { experience: NonNullable<Area['experience']> };
+}
+
+interface RunTicket {
+  roomId: string;
+  areaId: string;
+  mode: string;
+  key: string;
+  at: number;
+}
+
+/** Starts a timed run on a board that needs tickets. */
+export async function startRun(roomId: string, areaId: string, browserId: string, modeId: string) {
+  const area = await publishedArea(roomId, areaId);
+  const mode = scoreMode(area.experience.kind, modeId);
+  if (!mode?.ticket) throw new ApiError(400, 'bad_mode', 'There is no timed board for that here');
+  const key = browserKey(browserId);
+  await limit(`runstart:${key}`, 30, 60, 'Too many runs at once');
+  const ticket = randomBytes(16).toString('base64url');
+  const run: RunTicket = { roomId, areaId, mode: mode.id, key, at: Date.now() };
+  await getStore().set(`run:${ticket}`, run, { ex: 3 * 60 * 60 });
+  return { ticket };
+}
+
+/** A result on one of a world's boards (src/shared/score-modes.ts): keeps each player's best. */
+export async function recordScore(roomId: string, areaId: string, browserId: string, name: string, modeId: string, posted: number, opts: { ticket?: string; log?: unknown } = {}) {
+  const area = await publishedArea(roomId, areaId);
+  const mode = scoreMode(area.experience.kind, modeId);
+  if (!mode) throw new ApiError(400, 'bad_mode', 'There is no board for that here');
+  const key = browserKey(browserId);
+  await limit(`score:${key}`, 30, 60, 'Too many results at once');
+  if (mode.ticket) {
+    const run = opts.ticket ? await getStore().get<RunTicket>(`run:${opts.ticket}`) : null;
+    if (!run || run.roomId !== roomId || run.areaId !== areaId || run.mode !== mode.id || run.key !== key) throw new ApiError(400, 'bad_ticket', 'That run was not started here');
+    await getStore().del(`run:${opts.ticket}`);
+    if (Date.now() - run.at < mode.ticket.minMs) throw new ApiError(400, 'bad_score', 'That run was too quick');
+  }
+  let value = posted;
+  if (mode.fromLog) {
+    if (opts.log === undefined || JSON.stringify(opts.log).length > MAX_LOG) throw new ApiError(400, 'bad_log', 'That run log is missing or too long');
+    let computed: number | null = null;
+    try {
+      computed = mode.fromLog(opts.log);
+    } catch {
+      computed = null;
+    }
+    if (computed === null) throw new ApiError(400, 'bad_score', 'That run does not add up');
+    value = computed;
+  }
+  const problem = scoreProblem(mode, value);
+  if (problem) throw new ApiError(400, 'bad_score', problem);
+  const store = getStore();
+  const z = `modeboard:${roomId}:${areaId}:${mode.id}`;
+  const before = await store.zscore(z, key);
+  const improved = beats(mode, value, before);
+  if (improved) await store.zadd(z, value, key);
+  await rememberName(key, name);
+  const best = improved ? value : before!;
+  const top = mode.better === 'higher' ? await store.zrevrange(z, 0, BOARD_SIZE - 1) : await store.zrange(z, 0, BOARD_SIZE - 1);
+  const rank = top.indexOf(key);
+  return { best, improved, rank: rank >= 0 ? rank + 1 : null };
+}
+
+/** Several of a world's boards at once, with this browser's bests. */
+export async function modeBoards(roomId: string, areaId: string, modeIds: string[], browserId: string | undefined) {
+  const area = await publishedArea(roomId, areaId);
+  const store = getStore();
+  const me = browserId ? browserKey(browserId) : '';
+  const boards: Record<string, { board: BoardRow[]; best: number | null }> = {};
+  for (const id of modeIds.slice(0, 12)) {
+    const mode = scoreMode(area.experience.kind, id);
+    if (!mode) continue;
+    const z = `modeboard:${roomId}:${areaId}:${mode.id}`;
+    const ids = mode.better === 'higher' ? await store.zrevrange(z, 0, BOARD_SIZE - 1) : await store.zrange(z, 0, BOARD_SIZE - 1);
+    boards[mode.id] = { board: await rows(z, ids, me), best: me ? await store.zscore(z, me) : null };
+  }
+  return { kind: 'modes' as const, boards };
+}
+
 async function updateStats(roomId: string, areaId: string, key: string, fn: (s: CasinoStats) => CasinoStats): Promise<CasinoStats> {
   const store = getStore();
   const k = `casino:${roomId}:${areaId}:${key}`;
@@ -171,7 +257,14 @@ export async function renameScores(browserId: string, name: string) {
 export async function clearScores(roomId: string, areaId: string) {
   const store = getStore();
   const ids = await store.zrange(`casinoboard:${roomId}:${areaId}`, 0, -1);
-  await store.del(`lap:${roomId}:${areaId}`, `galaxy:${roomId}:${areaId}`, `casinoboard:${roomId}:${areaId}`, ...ids.map((id) => `casino:${roomId}:${areaId}:${id}`));
+  const modes = [...new Set(Object.values(SCORE_MODES).flatMap((list) => list.map((m) => m.id)))];
+  await store.del(
+    `lap:${roomId}:${areaId}`,
+    `galaxy:${roomId}:${areaId}`,
+    `casinoboard:${roomId}:${areaId}`,
+    ...ids.map((id) => `casino:${roomId}:${areaId}:${id}`),
+    ...modes.map((m) => `modeboard:${roomId}:${areaId}:${m}`),
+  );
   return { ok: true };
 }
 

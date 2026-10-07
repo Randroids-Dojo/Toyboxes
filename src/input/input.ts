@@ -17,6 +17,8 @@ export type Action =
   | 'remove'
   | 'reset';
 
+export type Dir = 'up' | 'down' | 'left' | 'right';
+
 export type MenuAction = 'up' | 'down' | 'left' | 'right' | 'confirm' | 'back' | 'pause' | 'prev' | 'next' | 'alt';
 
 /** Samsung Tizen and LG webOS remotes report Back with these key codes; the red colour key (403) works as a menu key too. */
@@ -102,6 +104,11 @@ export class Input {
   touchMove = { x: 0, y: 0 };
   touchLook = { dx: 0, dy: 0 };
   private touchHeld = new Set<Action>();
+  /** When each action was last pressed (performance.now time base), for rhythm timing. */
+  private stamps = new Map<Action, number>();
+  /** Directional presses since the last takeDirs(), with their times. */
+  private dirs: { dir: Dir; at: number }[] = [];
+  private stickDir: Dir | null = null;
 
   constructor(canvas: HTMLElement) {
     addEventListener('keydown', (e) => this.keydown(e));
@@ -146,6 +153,27 @@ export class Input {
     return this.held.has(a) || this.touchHeld.has(a);
   }
 
+  /** When `a` was last pressed (performance.now time base), or null. Event times, not frame times. */
+  pressedAt(a: Action): number | null {
+    return this.stamps.get(a) ?? null;
+  }
+
+  /**
+   * Directional presses (arrows, WASD, d-pad, or a flick of the stick) since
+   * the last call, oldest first, with their event times. For rhythm games and
+   * in-world menus; walking still reads `move`.
+   */
+  takeDirs(): { dir: Dir; at: number }[] {
+    const out = this.dirs;
+    this.dirs = [];
+    return out;
+  }
+
+  private dirPress(dir: Dir, at: number): void {
+    this.dirs.push({ dir, at });
+    if (this.dirs.length > 16) this.dirs.shift();
+  }
+
   /** True once per press. */
   take(a: Action): boolean {
     if (!this.pressed.has(a)) return false;
@@ -157,9 +185,12 @@ export class Input {
     this.incoming.add(a);
   }
 
-  touchDown(a: Action): void {
+  touchDown(a: Action, at = performance.now()): void {
     this.setDevice('touch');
-    if (!this.touchHeld.has(a)) this.incoming.add(a);
+    if (!this.touchHeld.has(a)) {
+      this.incoming.add(a);
+      this.stamps.set(a, at);
+    }
     this.touchHeld.add(a);
   }
 
@@ -204,10 +235,13 @@ export class Input {
     if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab', 'Backspace'].includes(e.code)) e.preventDefault();
     if (e.repeat) return;
     this.keys.add(e.code);
+    const dir: Dir | undefined = ({ ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down', ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right' } as Record<string, Dir>)[e.code];
+    if (dir) this.dirPress(dir, e.timeStamp || performance.now());
     const a = KEY_ACTIONS[e.code];
     if (a) {
       this.held.add(a);
       this.incoming.add(a);
+      this.stamps.set(a, e.timeStamp || performance.now());
     }
   }
 
@@ -317,9 +351,14 @@ export class Input {
         ly += ry * 1.8 * dt;
         this.throttle = v(PAD.RT);
         this.brake = v(PAD.LT);
+        const stamp = p.timestamp || performance.now();
+        for (const [i, d] of [[PAD.UP, 'up'], [PAD.DOWN, 'down'], [PAD.LEFT, 'left'], [PAD.RIGHT, 'right']] as const) if (b(i) && !this.padPrev[i]) this.dirPress(d, stamp);
         for (const [i, a] of PAD_ACTIONS) {
           const down = b(i);
-          if (down && !this.padPrev[i]) this.pressed.add(a);
+          if (down && !this.padPrev[i]) {
+            this.pressed.add(a);
+            this.stamps.set(a, stamp);
+          }
           if (down) this.held.add(a);
           else if (this.padPrev[i]) this.held.delete(a);
         }
@@ -331,6 +370,12 @@ export class Input {
       mx = this.touchMove.x;
       my = this.touchMove.y;
     }
+    // A flick of a stick (pad or touch) past most of its travel counts as a directional press.
+    const sx = this.touchMove.x || (this.pad() ? dz(this.pad()!.axes[0] ?? 0) : 0);
+    const sy = this.touchMove.y || (this.pad() ? -dz(this.pad()!.axes[1] ?? 0) : 0);
+    const flick: Dir | null = Math.hypot(sx, sy) < 0.6 ? null : Math.abs(sx) > Math.abs(sy) ? (sx > 0 ? 'right' : 'left') : sy > 0 ? 'up' : 'down';
+    if (flick && flick !== this.stickDir && !this.menuMode) this.dirPress(flick, performance.now());
+    this.stickDir = flick;
     const len = Math.hypot(mx, my);
     if (len > 1) {
       mx /= len;

@@ -31,6 +31,7 @@ npx tsx scripts/playtest.ts phone     # same with touch input at 390x844
 npx tsx scripts/padtest.ts            # injected gamepad: on-screen keyboard, PIN pad, pen mode, disconnect
 npx tsx scripts/admintest.ts          # creator loop: review, publish, PIN reset, second browser
 npx tsx scripts/arcadetest.ts         # arcade round trip with Back
+npx tsx scripts/kittest.ts            # the worlds kit: HUD, particles, post, music clock, camera shots, capture, carry; PHONE=1, PAD=1, REMOTE=1
 npx tsx scripts/experiencetest.ts     # kart circuit (AI fast-forward, lap, drift, race, results) and the casino (slots, roulette, blackjack, credits); PHONE=1 for touch
 npm run build && npx vite preview --port 4317 & npx tsx scripts/updatetest.ts   # update banner, refresh back to the same spot, install row
 ```
@@ -46,3 +47,25 @@ The playtests claim rooms in the dev server's memory store; restart `npm run dev
 - `src/experiences/` holds built experiences (kart track, casino). They implement `SpaceView` (`src/world/space.ts`); the game handles entering, riding, interacting, kicking and pausing through its optional hooks.
 - `src/shared/track.ts` turns a sketch into a track and validates it (corner radius, curb folds, overlaps); `src/shared/circuits.ts` builds designed circuits; `src/experiences/kart-drivers.ts` holds the computer drivers; `src/shared/slots.ts` holds the reels and paytable (the server decides spins; keep the return near 95%, `tests/scores.test.ts`). `src/shared/casino-games.ts` holds the roulette and blackjack rules; the server decides those too.
 - `docs/VERB_SHEET.md` describes the core interactions; keep it in step with gameplay changes.
+
+## Building a world
+
+Each experience is meant to feel like its own game. New and rebuilt worlds live in their own folder (`src/experiences/<kind>/`, with a CSS file imported from TypeScript) and use the shared kit in `src/experiences/kit/`:
+
+- `Hud` (`kit/hud.ts`): a themed HUD layer. Title sweep on arrival, stat strip and bars, objective line, banners, judgements ("Perfect"), score pops at world points, flashes that work on every tier, letterboxing, a 3-2-1 countdown, and the intro and results cards (through `UI.open`, so every input path works). Call `hud.update(dt)` from `step` so timers pause with the game.
+- `Particles`, `Ribbon`, `Shockwaves` (`kit/particles.ts`): one draw call per system, budgets scaled by `setQuality`. Call `update(dt)` every frame.
+- `PostFX` (`kit/post.ts`): tiered bloom and a colour grade through the `render` hook. The low tier draws plainly, so nothing essential may depend on it.
+- `music` (`src/audio/music.ts`): songs as data on a procedural sequencer, with layers, section queueing and looping, ducking, a muffling filter, pause and resume, and an audio-clock `beat()` corrected for output latency. It plays on the Music level in Settings. Stop it in `dispose`. `tone` and `noise` in `src/audio/sfx.ts` make one-off effects.
+- `Progress` (`kit/progress.ts`): stars, unlocks and choices saved on this device.
+- World boards: list modes in `src/shared/score-modes.ts`, post with `api.score` and read with `api.modeBoards`. The server checks each result against the mode's range, so set `min` and `max` from what a perfect run can do. A mode can also require a run ticket (`ticket.minMs`, started with `api.runStart`) and can have the server work the score out from a run log (`fromLog`, pure shared code).
+
+Engine hooks for worlds (`src/world/space.ts`, `ExperienceCtx` in `src/experiences/common.ts`):
+
+- `cameraShot(dt)` directs the camera (flyovers, podiums, chase or fixed framing); `lockPlayer` freezes the player and Interact runs `skip`. While a shot is in charge, walking is relative to the shot's view.
+- `captureInput()` stops the game moving the player and handling interact, kick and jump; read `ctx.input` yourself (rhythm games, aiming) and give the touch buttons labels.
+- `carry(h, player, move)` puts the player on a scripted path or your own flight model, with a body pose; return null to hand back to normal physics.
+- `jumpAction` repurposes Jump; `runScale` turns off the run bonus in timed rounds so every device competes fairly.
+- `ctx.teleport`, `ctx.impulse` (launches), `ctx.shake`, `ctx.squash`, `ctx.pose` (dance, crouch, aim, cheer, float...), `ctx.swing`, `ctx.hold` (something in the right hand), `ctx.cameraYaw`, `ctx.tier`, `ctx.reduceMotion`. `PlayerState` carries height, vertical speed and grounded.
+- Rhythm timing: `ctx.input.pressedAt(action)` gives the event time of the last press and `ctx.input.takeDirs()` the directional presses (arrows, WASD, d-pad, stick flicks) with their times; compare them with `music.beat()`.
+
+A TV remote has arrows, OK and Back only, so a world's core game must be playable with move and interact. Playtests use `scripts/lib/world.ts` (claims a local room, publishes the area, drives real input on desktop, `PHONE=1`, `PAD=1` and `REMOTE=1`); `scripts/kittest.ts` checks the kit itself.
