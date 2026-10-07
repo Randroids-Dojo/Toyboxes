@@ -20,6 +20,7 @@ import { Fx } from './fx';
 import { Blackjack } from './games/blackjack';
 import { OldLucky } from './games/oldlucky';
 import { Roulette } from './games/roulette';
+import { RiverWheel } from './games/riverwheel';
 import { SAVE_DEFAULTS, type Host, type SaveData } from './host';
 import { CasinoHud } from './hud';
 import { ARRIVAL, BLACKJACK, CAPTAIN_TABLE, COLLIDERS, EXIT, OLD_LUCKY, SPOTS, STAGE, zoneAt, type ColliderDef, type ZoneId } from './layout';
@@ -68,6 +69,8 @@ export class Casino implements SpaceView {
   private host: Host;
   private lucky: OldLucky;
   private roulette: Roulette;
+  private wheel: RiverWheel;
+  private doors: { left: THREE.Group; right: THREE.Group; open: number } | null = null;
   private blackjack: Blackjack;
   private captain: Blackjack;
   private staff: Staff;
@@ -157,11 +160,9 @@ export class Casino implements SpaceView {
     this.roulette = new Roulette(this.host, this.staff);
     this.blackjack = new Blackjack(this.host, this.staff, { table: 'saloon', x: BLACKJACK.x, z: BLACKJACK.z, dealer: 'rivet', title: "Rivet's Twenty-One", spot: SPOTS.blackjack, label: 'Play blackjack', short: 'Cards' });
     this.captain = new Blackjack(this.host, this.staff, { table: 'captain', x: CAPTAIN_TABLE.x, z: CAPTAIN_TABLE.z, dealer: 'captain', title: "The Captain's Table", spot: SPOTS.captain, label: "Sit at the Captain's Table", short: 'Captain' });
-    this.lucky.onBonus = async (b) => {
-      // The River Wheel's bonus ring lands here once it is built; until then the marquee shows it.
-      this.kit.banner(typeof b.value === 'number' ? `${b.value}x` : `${b.value}!`, { sub: 'The bonus wheel', color: '#ffd24a', ms: 1800 });
-      await new Promise((r) => setTimeout(r, 1800 / this.scale));
-    };
+    this.wheel = new RiverWheel(this.host);
+    this.lucky.onBonus = (b) => this.wheel.bonus(b.segment, b.value, b.mult, this.lucky.framing(), this.lucky.framing());
+    this.doors = this.buildDoors();
 
     this.eco.onChange(() => this.paintHud());
     this.eco.onStamps = (ids, rankUp, rank) => this.stamped(ids, rankUp, rank);
@@ -251,13 +252,47 @@ export class Casino implements SpaceView {
     }
   }
 
+  /** Glass doors onto the stern deck: they slide open as you come near and never block you. */
+  private buildDoors(): { left: THREE.Group; right: THREE.Group; open: number } {
+    const mk = (side: 1 | -1) => {
+      const g = new THREE.Group();
+      const glass = new THREE.Mesh(new THREE.BoxGeometry(0.02, 2.6, 2.2), this.mats.glass);
+      glass.position.y = 1.47;
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.06, 2.3), this.mats.brass);
+      bar.position.y = 1.1;
+      g.add(glass, bar);
+      // A brass frame of four rails round the glass.
+      for (const [y, hh, d, z] of [[0.06, 0.12, 2.5, 0], [2.88, 0.12, 2.5, 0], [1.47, 2.9, 0.12, 1.19], [1.47, 2.9, 0.12, -1.19]] as const) {
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(0.09, hh, d), this.mats.brass);
+        rail.position.set(0, y, z);
+        g.add(rail);
+      }
+      g.position.set(12.0, 0, side * 1.25);
+      this.scene.add(g);
+      return g;
+    };
+    return { left: mk(-1), right: mk(1), open: 0 };
+  }
+
+  private updateDoors(dt: number): void {
+    const d = this.doors;
+    const p = this.player;
+    if (!d || !p) return;
+    const near = Math.hypot(p.x - 12.15, p.z) < 3.2 || this.director.playing;
+    const was = d.open;
+    d.open += ((near ? 1 : 0) - d.open) * Math.min(1, dt * 5);
+    if (was < 0.05 && d.open >= 0.05) sound.door();
+    d.left.position.z = -1.25 - d.open * 2.3;
+    d.right.position.z = 1.25 + d.open * 2.3;
+  }
+
   // -------------------------------------------------------------------------
   // SpaceView
 
   actions(player: PlayerState): SpaceAction[] {
     if (player.riding) return [];
     const act = (label: string, short: string, run: () => void) => ({ label, short, run }) as SpaceAction;
-    return [...this.lucky.actions(player, act), ...this.roulette.actions(player, act), ...this.blackjack.actions(player, act), ...this.captain.actions(player, act)];
+    return [...this.lucky.actions(player, act), ...this.roulette.actions(player, act), ...this.blackjack.actions(player, act), ...this.wheel.actions(player, act), ...this.captain.actions(player, act)];
   }
 
   kickAction(player: PlayerState): { label: string; run: () => void } | null {
@@ -410,6 +445,8 @@ export class Casino implements SpaceView {
     const near = !!p && Math.hypot(p.x - SPOTS.lever.x, p.z - SPOTS.lever.z) < 3;
     this.lucky.update(dt, { night: this.river.night, near, boost: this.cer.boost });
     this.roulette.update(dt);
+    this.wheel.update(dt, { boost: this.cer.boost });
+    this.updateDoors(raw);
     this.blackjack.update(dt);
     this.captain.update(dt);
     this.staff.update(dt, beat, p ? new THREE.Vector3(p.x, 1.4, p.z) : null);
@@ -447,6 +484,7 @@ export class Casino implements SpaceView {
     this.lights.dispose();
     this.lucky.dispose();
     this.roulette.dispose();
+    this.wheel.dispose();
     this.blackjack.dispose();
     this.captain.dispose();
     this.staff.dispose();
@@ -485,6 +523,8 @@ export class Casino implements SpaceView {
       oldLucky: { x: OLD_LUCKY.x, z: OLD_LUCKY.z },
       roulette: { spinning: this.roulette.spinning, shownPocket: this.roulette.shownPocket, lastPocket: this.roulette.lastPocket, history: this.roulette.history.slice(0, 8) },
       blackjack: this.blackjack.debug(),
+      wheel: { spinning: this.wheel.spinning, shownSegment: this.wheel.shownSegment, lastSegment: this.wheel.lastSegment, shownBonus: this.wheel.shownBonus },
+      doors: this.doors?.open ?? 0,
       captain: this.captain.debug(),
     };
   }
@@ -497,5 +537,14 @@ export class Casino implements SpaceView {
 
   debugSkipCeremony(): void {
     this.director.skip();
+  }
+
+  /** Plays the bonus flight and ring for a made-up segment: visuals only, no server, no credits. */
+  async debugBonus(segment: number): Promise<void> {
+    const { BONUS_RING } = await import('../../shared/slots');
+    const v = BONUS_RING[segment];
+    const mult = typeof v === 'number' ? v : v === 'MINI' ? 20 : v === 'MAJOR' ? 100 : this.eco.jackpots.grand;
+    await this.wheel.bonus(segment, v, mult, this.lucky.framing(), this.lucky.framing());
+    if (typeof v === 'string') await this.cer.jackpot({ kind: v, mult, credits: mult * 10, bet: 10, orbit: this.lucky.orbit(), at: new THREE.Vector3(0, 0.75, OLD_LUCKY.z + 1.4) });
   }
 }

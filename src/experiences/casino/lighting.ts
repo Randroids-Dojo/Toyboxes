@@ -188,8 +188,8 @@ export class Lights {
     bay.position.set(0, 8.2, -5.5);
     bay.target.position.set(0, 1.8, OLD_LUCKY.z + 1);
     this.group.add(bay.target);
-    const wheel = new THREE.PointLight('#ffd27a', 14, 12, 1.6);
-    wheel.position.set(RIVER_WHEEL.x - 2.2, RIVER_WHEEL.y, 0);
+    const wheel = new THREE.PointLight('#ffd27a', 5, 10, 1.8);
+    wheel.position.set(RIVER_WHEEL.x - 3.6, RIVER_WHEEL.y + 2.4, 0);
     const lounge = new THREE.PointLight('#9fb7e8', 16, 14, 1.6);
     lounge.position.set(-16.5, 3.6, 0);
     this.extra.push(bay as unknown as THREE.PointLight, wheel, lounge);

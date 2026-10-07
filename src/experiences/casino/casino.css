@@ -976,3 +976,97 @@
 .gp-panel[data-panel='roulette'] .gp-actions .btn.tiny {
   min-width: 0;
 }
+
+/* ---- River Wheel rail */
+
+.rw-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.gp-panel .rw-sym {
+  position: relative;
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 10px;
+  min-height: 60px;
+  padding: 6px 10px;
+  text-align: left;
+  border-left: 6px solid var(--sym);
+}
+
+.rw-sym img {
+  grid-row: 1 / span 2;
+  width: 44px;
+  height: 44px;
+}
+
+.rw-sym b {
+  font: 400 1.05rem/1.1 var(--display);
+  letter-spacing: 0.02em;
+}
+
+.rw-sym small {
+  font-size: 0.74rem;
+  color: var(--gp-muted);
+  font-weight: 700;
+}
+
+.gp-panel .rw-sym.has-bet {
+  border-color: var(--gp-brass);
+  border-left-color: var(--sym);
+  box-shadow: inset 0 0 0 2px rgba(224, 172, 69, 0.55);
+}
+
+.rw-history {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: auto;
+  overflow: hidden;
+}
+
+.rw-history small {
+  font: 700 0.6rem/1 var(--body);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gp-brass);
+  margin-right: 4px;
+}
+
+.rw-hist {
+  width: 24px;
+  height: 24px;
+}
+
+.rw-hist:first-of-type {
+  outline: 2px solid var(--gp-brass);
+  border-radius: 50%;
+}
+
+.gp-panel[data-panel='wheel'] .gp-actions {
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+@media (max-width: 640px) {
+  .rw-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .gp-panel .rw-sym {
+    min-height: 52px;
+    grid-template-columns: 34px 1fr;
+  }
+  .rw-sym img {
+    width: 34px;
+    height: 34px;
+  }
+}
+
+/* Big banners sit higher while a table panel is docked, so they never cover it. */
+body:has(.gp-panel) .xk-banner {
+  inset: 0 0 52% 0;
+}
