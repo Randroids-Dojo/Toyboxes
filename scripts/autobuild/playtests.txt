@@ -6,6 +6,10 @@ PAD=1 kittest.ts
 REMOTE=1 kittest.ts
 experiencetest.ts
 PHONE=1 experiencetest.ts
+karttest.ts
+PHONE=1 karttest.ts
+PAD=1 karttest.ts
+REMOTE=1 karttest.ts
 galaxytest.ts
 PHONE=1 galaxytest.ts
 neontest.ts
