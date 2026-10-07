@@ -84,10 +84,10 @@ export class TagMode implements Mode {
   private teles: { bot: number; until: number }[] = [];
   private countBeat = -1;
   private lastBeat = -1;
+  /** The lock-on framing, relative to you so it moves with you (a respawn, a dash, a teleport). */
   private camPos = new THREE.Vector3();
   private camTarget = new THREE.Vector3();
-  /** Where you stood when the lock-on framing was last placed. */
-  private camFrom = new THREE.Vector3();
+  private camOn = false;
   private lockBlend = 0;
   private practiceTags = 0;
   private endT = 0;
@@ -810,18 +810,12 @@ export class TagMode implements Mode {
     const want = this.lock && sync.lockCam ? (device === 'kbm' ? 0.4 : 0.9) : 0;
     this.lockBlend += (want - this.lockBlend) * Math.min(1, dt * 3);
     if (this.lockBlend < 0.02) {
-      this.camPos.set(0, 0, 0);
+      this.camOn = false;
       return null;
     }
     const t = this.lock ? this.live.agents[this.lock.id] : null;
-    if (!t && this.camPos.lengthSq() === 0) return null;
-    if (!t) {
-      // The lock is gone and the framing fades: carry it with you (a respawn or a dash) while it does.
-      this.camPos.x += p.x - this.camFrom.x;
-      this.camPos.z += p.z - this.camFrom.z;
-      this.camTarget.x += p.x - this.camFrom.x;
-      this.camTarget.z += p.z - this.camFrom.z;
-    } else {
+    if (!t && !this.camOn) return null;
+    if (t) {
       const dx = t.x - p.x;
       const dz = t.z - p.z;
       const l = Math.hypot(dx, dz) || 1;
@@ -840,19 +834,20 @@ export class TagMode implements Mode {
       const m = 0.5;
       const cx = Math.min(ARENA.x1 - m, Math.max(ARENA.x0 + m, p.x - ux * back - uz * 1.1 * k));
       const cz = Math.min(ARENA.z1 - m, Math.max(ARENA.z0 + m, p.z - uz * back + ux * 1.1 * k));
-      const want3 = new THREE.Vector3(cx, back > 1.6 ? 2.4 + 0.9 * k : 3.6, cz);
+      const want3 = new THREE.Vector3(cx - p.x, back > 1.6 ? 2.4 + 0.9 * k : 3.6, cz - p.z);
       // Pulled in close, aim nearer too, so you stay in the frame below the target.
       const ahead = Math.min(4, l * 0.4) * k;
-      const look = new THREE.Vector3(p.x + ux * ahead, 1.2, p.z + uz * ahead);
-      if (this.camPos.lengthSq() === 0) {
+      const look = new THREE.Vector3(ux * ahead, 1.2, uz * ahead);
+      if (!this.camOn) {
         this.camPos.copy(want3);
         this.camTarget.copy(look);
+        this.camOn = true;
       }
       this.camPos.lerp(want3, Math.min(1, dt * 4));
       this.camTarget.lerp(look, Math.min(1, dt * 6));
     }
-    this.camFrom.set(p.x, 0, p.z);
-    return { position: this.camPos.clone(), target: this.camTarget.clone(), blend: this.lockBlend, pivot: new THREE.Vector3(p.x, p.y + 1.25, p.z) };
+    const at = new THREE.Vector3(p.x, 0, p.z);
+    return { position: this.camPos.clone().add(at), target: this.camTarget.clone().add(at), blend: this.lockBlend, pivot: new THREE.Vector3(p.x, p.y + 1.25, p.z) };
   }
 
   private finish(quit: boolean): void {
