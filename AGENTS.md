@@ -31,6 +31,7 @@ npx tsx scripts/playtest.ts phone     # same with touch input at 390x844
 npx tsx scripts/padtest.ts            # injected gamepad: on-screen keyboard, PIN pad, pen mode, disconnect
 npx tsx scripts/admintest.ts          # creator loop: review, publish, PIN reset, second browser
 npx tsx scripts/arcadetest.ts         # arcade round trip with Back
+npx tsx scripts/gatetest.ts           # each world's door in a room: views by day and night, floor colliders, draw calls
 npx tsx scripts/kittest.ts            # the worlds kit: HUD, particles, post, music clock, camera shots, capture, carry; PHONE=1, PAD=1, REMOTE=1
 npx tsx scripts/experiencetest.ts     # kart circuit (AI fast-forward, lap, drift, race, results) and the casino (slots, roulette, blackjack, credits); PHONE=1 for touch
 npm run build && npx vite preview --port 4317 & npx tsx scripts/updatetest.ts   # update banner, refresh back to the same spot, install row

@@ -33,7 +33,7 @@ export function placeColliders(local: LocalCollider[], px: number, pz: number, r
 }
 
 /** Collects static parts by material and merges each material's parts into one mesh, to keep draw calls low. */
-class Batch {
+export class Batch {
   private parts = new Map<THREE.Material, THREE.BufferGeometry[]>();
 
   add(geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number, rx = 0, ry = 0, rz = 0): void {

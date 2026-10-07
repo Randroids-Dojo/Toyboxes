@@ -4,6 +4,7 @@ kittest.ts
 PHONE=1 kittest.ts
 PAD=1 kittest.ts
 REMOTE=1 kittest.ts
+gatetest.ts
 experiencetest.ts
 PHONE=1 experiencetest.ts
 galaxytest.ts

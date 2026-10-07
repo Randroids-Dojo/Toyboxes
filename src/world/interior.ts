@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { FLOOR_COLORS, ROOM, TRIM_COLORS, WALL_COLORS, areaDoorX, type Area, type Exhibit, type RoomTheme } from '../shared/model';
 import { cached, disposeTree, mesh, plastic, roundBox, sign, signTexture } from './kit';
-import { QUAD_VERT, VORTEX_FRAG } from '../experiences/galaxy-shaders';
+import { buildGateway, type Gateway } from './gateways';
 import { box, circle, type Collider } from './physics';
 import type { SpaceView } from './space';
 
@@ -80,7 +80,8 @@ export class Interior implements SpaceView {
   private hemi: THREE.HemisphereLight;
   readonly sun: THREE.DirectionalLight;
   private book: THREE.Group | null = null;
-  private portalTime = { value: 0 };
+  /** Themed doors into worlds, with the spot the player stands at to enter. */
+  private gateways: { gate: Gateway; x: number; z: number }[] = [];
 
   constructor(readonly spec: InteriorSpec) {
     const s = this.scene;
@@ -252,22 +253,27 @@ export class Interior implements SpaceView {
 
   private buildAreaDoor(area: Area, dx: number): void {
     const back = this.walls.get('back')!.full;
+    const spot = { area, x: dx, z: -D + 1.1 };
+    this.areaDoors.push(spot);
+    // A world gets a door in its own style; a plain area keeps the painted one.
+    const gate = buildGateway(area, dx, -D);
+    if (gate) {
+      gate.wall.position.set(dx, 0, T / 2);
+      back.add(gate.wall);
+      this.scene.add(gate.floor);
+      this.colliders.push(...gate.colliders);
+      this.gateways.push({ gate, x: spot.x, z: spot.z });
+      return;
+    }
     const color = TRIM_COLORS[area.theme.trim] ?? '#8a6bd1';
     back.add(mesh(roundBox(1.9, 2.7, T + 0.12, 0.07), plastic(color, { rough: 0.5 }), dx, 1.35, 0));
     back.add(mesh(roundBox(1.5, 2.45, T + 0.18, 0.08), plastic('#2b2340', { rough: 0.4 }), dx, 1.22, 0));
-    if (area.experience?.kind === 'galaxy') {
-      // A swirling portal fills the doorway to the other dimension.
-      const portal = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 2.3), new THREE.ShaderMaterial({ vertexShader: QUAD_VERT, fragmentShader: VORTEX_FRAG, uniforms: { uTime: this.portalTime }, transparent: true }));
-      portal.position.set(dx, 1.2, T / 2 + 0.13);
-      back.add(portal);
-    }
     const s = sign(area.name, 2.4, 0.6, { bg: '#fffaf0', fg: '#2b2340', border: color, radius: 0.14 }, 0.2);
     s.position.set(dx, 3.05, T / 2 + 0.04);
     back.add(s);
     // Glowing threshold.
     const glow = mesh(roundBox(1.4, 0.04, 0.5, 0.02), new THREE.MeshStandardMaterial({ color, emissive: new THREE.Color(color), emissiveIntensity: 0.9 }), dx, 0.03, -D + 0.4, { cast: false });
     this.scene.add(glow);
-    this.areaDoors.push({ area, x: dx, z: -D + 1.1 });
   }
 
   private buildCabinet(e: Exhibit): void {
@@ -314,8 +320,11 @@ export class Interior implements SpaceView {
     set('right', cam.x > W - 0.3);
   }
 
-  update(night: number, t: number): void {
-    this.portalTime.value = t;
+  update(night: number, t: number, _phase?: number, focus?: { x: number; z: number }): void {
+    for (const g of this.gateways) {
+      const d = focus ? Math.hypot(focus.x - g.x, focus.z - g.z) : 99;
+      g.gate.update(t, night, THREE.MathUtils.clamp((3.5 - d) / 2.3, 0, 1));
+    }
     const day = new THREE.Color('#cfeaff');
     const dusk = new THREE.Color('#2a3570');
     for (const m of this.windowMats) {
