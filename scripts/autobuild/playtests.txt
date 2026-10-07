@@ -8,3 +8,8 @@ neontest.ts
 PHONE=1 neontest.ts
 PAD=1 neontest.ts
 REMOTE=1 neontest.ts
+
+farttest.ts
+PHONE=1 farttest.ts
+PAD=1 farttest.ts
+REMOTE=1 farttest.ts

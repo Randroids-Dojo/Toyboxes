@@ -23,6 +23,7 @@ import type { ExperienceCtx } from '../experiences/common';
 import { Casino } from '../experiences/casino';
 import { Galaxy } from '../experiences/galaxy';
 import { NeonParty } from '../experiences/neon';
+import { FartSimulator } from '../experiences/fart';
 import { KartTrack } from '../experiences/kart';
 import type { PlayerState, SpaceView, Tier } from '../world/space';
 import { Arranger } from './arrange';
@@ -491,6 +492,10 @@ export class Game {
     }
     if (area.experience?.kind === 'casino') {
       this.setScene({ kind: 'area', room, area, interior: new Casino(this.experienceCtx(room, area)) });
+      return;
+    }
+    if (area.experience?.kind === 'fart') {
+      this.setScene({ kind: 'area', room, area, interior: new FartSimulator(this.experienceCtx(room, area)) });
       return;
     }
     if (area.experience?.kind === 'neon') {

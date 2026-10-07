@@ -65,3 +65,7 @@ Room 12 (estevan) asked for a "black hole galaxy" (page 1, with a drawing of a r
 ## Room 11: Neon space party
 
 Built from page 1 (revision 1): a neon space arena, moving laser-tag drones, a close-range glowing baton, and a floor-panel dance final against a 160-point robot benchmark. Round points are local feedback, never shared or persistent scores. The arena is solo, with a replay pad and a clear exit. `tests/neon.test.ts` checks aiming and one-score-per-beat timing. `scripts/neontest.ts` drives laser, baton, dance, result, replay and exit via desktop, touch and remote Action mappings. The same neon test runs with an injected standard controller as well, including laser, baton, dance, replay and exit. Desktop tests use the day view and touch tests use the night view.
+
+### Room 2: Fart simulator
+
+Built from page 1 (revision 1): a cartoon target course with cycling pressure, aimed puffs, five hoops, a 30-second round, local results, replay and exit. No visitor or shared scores are written during a round. Rule tests check direction, pressure and reach. The dedicated playtest drives actual desktop, touch, controller and remote inputs, tests misses and hits, short puffs, results, replay and exit, and captures day/night screenshots.

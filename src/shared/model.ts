@@ -125,9 +125,9 @@ export interface Exhibit {
 }
 
 /** A built game an inner area can hold instead of a plain toy room. */
-export type Experience = { kind: 'kart'; track: number[]; laps: number } | { kind: 'casino' } | { kind: 'galaxy' } | { kind: 'neon' };
+export type Experience = { kind: 'kart'; track: number[]; laps: number } | { kind: 'casino' } | { kind: 'galaxy' } | { kind: 'neon' } | { kind: 'fart' };
 
-export const EXPERIENCE_KINDS = ['kart', 'casino', 'galaxy', 'neon'] as const;
+export const EXPERIENCE_KINDS = ['kart', 'casino', 'galaxy', 'neon', 'fart'] as const;
 
 /** The most orbs anyone could feed the black hole in one frenzy. */
 export const GALAXY_MAX_SCORE = 150;

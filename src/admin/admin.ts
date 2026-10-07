@@ -590,6 +590,7 @@ function renderExperienceFields(a: Area): HTMLElement {
     ['casino', 'Casino'],
     ['galaxy', 'Black hole galaxy'],
     ['neon', 'Neon space party'],
+    ['fart', 'Fart simulator'],
   ]) kind.append(el('option', { value: v, selected: (a.experience?.kind ?? 'room') === v }, label));
   const sketched = detail!.pages.filter((p) => p.sketch.length);
   const pickTrack = (pageId: string): number[] | null => {
@@ -620,6 +621,7 @@ function renderExperienceFields(a: Area): HTMLElement {
     else if (v === 'casino') a.experience = { kind: 'casino' };
     else if (v === 'galaxy') a.experience = { kind: 'galaxy' };
     else if (v === 'neon') a.experience = { kind: 'neon' };
+    else if (v === 'fart') a.experience = { kind: 'fart' };
     else {
       // The designed circuit unless a drawing is picked below.
       a.experience = { kind: 'kart', track: grandPrixTrack(), laps: 3 };
@@ -687,6 +689,9 @@ function renderAreaPages(a: Area): HTMLElement | null {
 /** A kart track's shape, or a note for a casino. */
 function renderExperiencePreview(a: Area): HTMLElement {
   const exp = a.experience!;
+  if (exp.kind === 'fart') {
+    return el('div', { class: 'inspector' }, el('h4', {}, 'Fart simulator'), el('p', { class: 'row-sub' }, 'Time cartoon puffs to clear five gold hoops in thirty seconds. Local solo rounds with a pressure meter, sound, results and replay.'));
+  }
   if (exp.kind === 'neon') {
     return el('div', { class: 'inspector' }, el('h4', {}, 'Neon space party'), el('p', { class: 'row-sub' }, 'Tag moving drones with lasers and glowing batons, then dance on the lit floor panels. One local round against robot dancers.'));
   }

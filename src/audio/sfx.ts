@@ -91,6 +91,11 @@ function noise(dur: number, opts: { gain?: number; at?: number; freq?: number; q
 }
 
 export const sfx = {
+  puff(power: number): void {
+    if (!gate('puff', 300)) return;
+    tone(85 + power * 35, 0.28, { type: 'sawtooth', gain: 0.06, slide: 0.45 });
+    noise(0.25, { gain: 0.08, freq: 180, sweep: 70, q: 0.5 });
+  },
   step(): void {
     if (!gate('step', 150)) return;
     noise(0.05, { gain: 0.035, freq: 900 + Math.random() * 400, q: 0.8 });

@@ -50,3 +50,7 @@ Remaining human judgment: vehicle handling feel, camera comfort, and play on the
 ## Neon space party
 
 Start on the white pad with Action. Face a moving drone and press Action to laser-tag it; press Kick for a close-range glowing baton tag. A hit removes the drone briefly, flashes a beam and awards 10 or 15 round points. Misses and a firing cooldown prevent repeated automatic hits. After 24 seconds, move to the named, lit dance panel and press Action or Kick during NOW. A correct step awards 20 points once per beat. After 21 seconds compare your round points with the robot dancers' 160-point target, then return to the launch pad to replay. Points belong to this solo round and are not a shared leaderboard. All actions use the common touch, keyboard, controller and remote mappings; Back and the exit portal return to the room.
+
+### Room 2: Fart simulator
+
+A solo cartoon puff challenge. Start on the white pad with Action. The pressure meter cycles from weak to strong; face a gold hoop and use Action to launch a puff at that pressure. Kick makes a fixed short puff. Clear five hoops within 30 seconds. Visible clouds, a brief sound and hit/miss feedback make aiming and timing readable. Results show hoops and attempts; restart at the pad or leave through the purple exit. All points remain local.
