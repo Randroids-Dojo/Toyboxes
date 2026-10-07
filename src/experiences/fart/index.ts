@@ -23,6 +23,10 @@ import { Mover, type TootEvent } from './moves';
 import { GAS, type Gas } from './sim/gas';
 import { fx, type Voice } from './toots';
 import { C } from './palette';
+import { Village3 } from './town';
+import { music } from '../../audio/music';
+import { PUFFINGTON_MARCH } from './songs';
+import { BANDSTAND } from './layout';
 
 const DAY = {
   hemiSky: new THREE.Color(0xcfefff),
@@ -79,6 +83,8 @@ export class FartSimulator implements SpaceView {
   private player: PlayerState | null = null;
   private voice: Voice = 'classic';
   private canopyList = canopies();
+  readonly vil: Village3;
+  private musicNear = -1;
 
   constructor(private ctx: ExperienceCtx) {
     this.tier = ctx.tier();
@@ -113,6 +119,7 @@ export class FartSimulator implements SpaceView {
     this.scene.add(this.crumbMesh);
 
     this.words = new Words(ctx.ui.hud);
+    this.vil = new Village3(this.figures, this.words, (x, z) => this.clouds.stinkAt(x, 1.5, z), (x, z) => this.clouds.strongestAt(x, 1.5, z), this.tier);
     this.ph = new PuffHud(ctx.ui.hud);
     this.hud = new Hud(ctx, { accent: '#e8574a', accent2: '#6fbf3b', panel: 'light' });
     this.post = new PostFX(this.scene, { bloom: { strength: 0.35, radius: 0.5, threshold: 0.86 }, vignette: 0.28, saturation: 1.08, contrast: 1.04, lift: 0.02 });
@@ -139,15 +146,31 @@ export class FartSimulator implements SpaceView {
     this.mover.tapMode = IS_TV;
     this.hud.title('Little Puffington', 'A fart simulator');
     this.setQuality(this.tier);
+    music.play(PUFFINGTON_MARCH, { fadeIn: 2 });
   }
 
   // ---------------------------------------------------------------------------
   // Toots and the world
 
   private onToot(e: TootEvent, kind: string): void {
-    void kind;
-    void e;
+    if (kind === 'hover') {
+      // A hover is heard as a steady drone: a soft hearing check now and then.
+      this.hoverHeard -= 1 / 60;
+      if (this.hoverHeard > 0) return;
+      this.hoverHeard = 1.2;
+      this.vil.hear({ x: e.x, z: e.z, noise: e.gas === 'fizzy' ? 5 : 8, gas: e.gas, big: false });
+      return;
+    }
+    if (e.noise > 0) this.vil.hear({ x: e.x, z: e.z, noise: e.noise, gas: e.gas, big: kind === 'rocket' });
+    const scare = Math.max(e.push * 2.4, e.noise * 0.5);
+    const n = this.vil.flock.scatter(e.x, e.z, scare) + this.vil.flock2.scatter(e.x, e.z, scare);
+    if (n > 0) {
+      fx.flap();
+      this.sparks.burst({ at: { x: e.x, y: 0.6, z: e.z }, count: 4, speed: [1, 2], color: [0xd8d8e0, 0x9aa3b5], size: [0.06, 0.1], life: [0.6, 1], gravity: 2 });
+    }
+    if (this.vil.ducks.startle(e.x, e.z, e.noise * 0.6) + this.vil.fountainDucks.startle(e.x, e.z, e.noise * 0.6) > 0) fx.quack();
   }
+  private hoverHeard = 0;
 
   private onLand(fall: number): void {
     void fall;
@@ -202,6 +225,12 @@ export class FartSimulator implements SpaceView {
     const out: Collider[] = [];
     const p = this.player;
     if (p) {
+      // Townsfolk near you are solid (you bump round them).
+      for (const a of this.vil.actors.values()) {
+        const b = a.brain;
+        if (b.mood === 'away' || Math.abs(b.x - p.x) > 5 || Math.abs(b.z - p.z) > 5) continue;
+        out.push(circle(b.x, b.z, b.spec.id === 'biscuit' ? 0.3 : b.spec.id === 'pip' ? 0.3 : 0.38, a.y + (b.spec.id === 'biscuit' ? 0.5 : 1.7), 0.2, false));
+      }
       // The balloon envelope: a slice at your height pushes you out sideways
       // (the top half is bouncy instead, handled in step).
       const r = balloonSlice(p.y + 0.8);
@@ -224,6 +253,8 @@ export class FartSimulator implements SpaceView {
   step(h: number, p: PlayerState): void {
     this.player = p;
     this.time += h;
+    this.vil.setPlayer(p.x, p.y, p.z);
+    this.vil.step(h);
     if (this.tootOnInteract && this.mover.enabled && this.ctx.input.take('kick')) this.mover.press('kick');
     this.mover.step(h, p);
     this.bounces(h, p);
@@ -321,6 +352,8 @@ export class FartSimulator implements SpaceView {
       this.crumbMesh.setMatrixAt(i, m);
     });
     this.crumbMesh.instanceMatrix.needsUpdate = true;
+    this.vil.update(dt, music.beat());
+    this.musicLevel(focus);
     this.cloudFx.update(dt, this.clouds.list, t);
     this.dust.update(dt);
     this.sparks.update(dt);
@@ -331,6 +364,18 @@ export class FartSimulator implements SpaceView {
     this.ph.gauge(tk.gas, tk.amount, { cost: this.mover.previewCost });
   }
   private lastT = 0;
+
+  /** The band is heard clearly near the bandstand and muffled across town. */
+  private musicLevel(focus: THREE.Vector3): void {
+    const d = Math.hypot(focus.x - BANDSTAND.x, focus.z - BANDSTAND.z);
+    const near = d < 9 ? 1 : d < 30 ? 1 - (d - 9) / 21 : 0;
+    const q = Math.round(near * 10) / 10;
+    if (q === this.musicNear) return;
+    this.musicNear = q;
+    music.filter(900 + q * 19000, 0.6);
+    music.layer('drums', q > 0.3 && this.night < 0.6);
+    music.layer('glock', q > 0.5 && this.tier === 'high');
+  }
 
   private dayNight(night: number, focus: THREE.Vector3): void {
     const n = night;
@@ -399,6 +444,7 @@ export class FartSimulator implements SpaceView {
   cutaway(_cam: THREE.Vector3): void {}
 
   dispose(): void {
+    music.stop();
     this.mover.dispose();
     this.hud.dispose();
     this.ph.dispose();

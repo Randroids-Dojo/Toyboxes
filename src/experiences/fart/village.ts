@@ -391,8 +391,7 @@ export function buildVillage(parent: THREE.Object3D, tier: Tier, owner: string):
     for (const dz of [-1.75, 1.75]) for (const dx of [-0.65, 0.65]) P.add(new THREE.CylinderGeometry(0.06, 0.06, 2.5, 8), M.wood, 0xfff1d6, mtx(x + dx, 1.25, z + dz));
     // Sign: "Gran's beans".
     const gs = atlas.rect(560, 180, plaque("Gran's beans", { bg: hex(C.butter), border: hex(C.tomato), sub: 'Free beans, dearie!' }));
-    addSign(gs, 2.4, 0.78, x - 0.73, 1.55, z, -Math.PI / 2);
-    P.box(M.paint, C.timber, x - 0.7, 1.12, z, 0.04, 0.86, 2.5, { base: null });
+    addSign(gs, 2.3, 0.72, x - 0.74, 0.55, z, -Math.PI / 2);
     // The giant bean-can sign on its pole.
     P.add(new THREE.CylinderGeometry(0.12, 0.14, 4.0, 8), M.paint, 0x2f3a4a, mtx(6.6, 2.0, z));
     const can = atlas.rect(512, 256, (g, w, h) => {
@@ -829,8 +828,7 @@ export function buildVillage(parent: THREE.Object3D, tier: Tier, owner: string):
     for (let i = 0; i < 6; i++) P.add(new THREE.ConeGeometry(0.06, 0.32, 6), M.paint, 0xf58a3b, mtx(x + 0.3, 1.12, z + 0.6 + i * 0.16, Math.PI / 2, 0, 0), { base: null });
     for (const dz of [-1.75, 1.75]) for (const dx of [-0.65, 0.65]) P.add(new THREE.CylinderGeometry(0.06, 0.06, 2.5, 8), M.wood, 0xfff1d6, mtx(x + dx, 1.25, z + dz));
     const sp = atlas.rect(560, 180, plaque("Sprout's veg", { bg: '#eaf7d8', border: '#3f8f4a', sub: 'Prize cabbages' }));
-    addSign(sp, 2.4, 0.78, x + 0.73, 1.55, z, Math.PI / 2);
-    P.box(M.paint, C.timber, x + 0.7, 1.12, z, 0.04, 0.86, 2.5, { base: null });
+    addSign(sp, 2.3, 0.72, x + 0.74, 0.55, z, Math.PI / 2);
     const pp = atlas.rect(560, 180, plaque('Picnic panic', { bg: '#f3eaff', border: '#9b7bd6', sub: 'Clear my prize lawn!' }));
     P.box(M.wood, C.timber, -15.4, 0, 13.6, 0.12, 1.7, 0.12, { tile: 1 });
     P.box(M.paint, C.cream, -15.4, 1.2, 13.6, 1.5, 0.5, 0.05, { base: null });
