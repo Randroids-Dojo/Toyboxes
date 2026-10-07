@@ -178,7 +178,7 @@ export class Frenzy implements Round {
     void p;
     if (this.state === 'run') {
       this.t += dt;
-      while (this.next < this.schedule.length && this.schedule[this.next].t <= this.t * (FRENZY_SECONDS / this.seconds)) {
+      while (this.next < this.schedule.length && this.schedule[this.next].t <= this.t) {
         const o = this.schedule[this.next++];
         this.g.orbs.spawn(o.x, o.z, o.kind, false, true);
       }

@@ -134,8 +134,7 @@ export class Storm implements Round {
   }
 
   private scale(t: number): number {
-    // Shortened rounds (playtests) squeeze the schedule.
-    return (t * STORM_SECONDS) / this.seconds;
+    return t;
   }
 
   step(dt: number, p: PlayerState): void {

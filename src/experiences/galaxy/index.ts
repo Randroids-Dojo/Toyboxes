@@ -996,7 +996,8 @@ export class Galaxy implements SpaceView {
 
   /** After five orbs: the black hole burps out the first star onto the hub. */
   burpWakeStar(): void {
-    const land = new THREE.Vector3(HUB.slings.ring.x + 2.2, 0, HUB.slings.ring.z + 2.4);
+    // Out in the open, ahead of you, between the shrine and the Ringworld pad.
+    const land = new THREE.Vector3(-1.5, 0, -5.5);
     const mesh = glowSprite('#f4b740', 2.2, 1.5);
     this.scene.add(mesh);
     this.wakeStar = { mesh, pos: land, t: 0, landed: false };
@@ -1104,6 +1105,7 @@ export class Galaxy implements SpaceView {
       pad.holo.position.y = 2.2 + Math.sin(this.time * 1.4 + pad.spot.x) * 0.12;
     }
     for (const pad of [this.hub.pads.ring, this.hub.pads.storm, this.hub.pads.comet, this.ring.start, this.ring.back, this.cinder.start, this.cinder.back, this.dock.back]) padNear(pad, cam.position, dt);
+    this.hub.fade.update(cam.position, dt);
     this.round?.update(dt, this.time);
 
     // Flying stars.

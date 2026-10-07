@@ -398,6 +398,8 @@ export class Comet implements Round {
   }
 
   debug() {
-    return { state: this.state, t: this.t, u: this.u, score: this.score, ox: this.ox, oy: this.oy, ribbons: this.ribbonsDone, cooldown: this.cooldown };
+    // The next stardust ahead, for scripted steering.
+    const next = this.motes.find((m) => !m.taken && m.u > this.u + 0.001);
+    return { state: this.state, t: this.t, u: this.u, score: this.score, ox: this.ox, oy: this.oy, ribbons: this.ribbonsDone, cooldown: this.cooldown, next: next ? { u: next.u, ox: next.ox, oy: next.oy } : null };
   }
 }

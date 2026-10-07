@@ -200,13 +200,20 @@ export class Orbs {
           this.onLaunch(o);
         }
       } else {
-        // Pulled in, swirling round the disk's axis, with a little fall near the hub.
+        // Pulled in, swirling round the disk's axis. The pull tightens the
+        // longer it flies, so every kicked orb ends up in the black hole.
         toHole.subVectors(hole.centre, o.pos);
         const dist = toHole.length();
         const pull = hole.pull / Math.max(dist, 6);
-        o.vel.addScaledVector(toHole.normalize(), pull * dt);
+        toHole.normalize();
+        o.vel.addScaledVector(toHole, pull * dt);
         swirl.crossVectors(DISK_NORMAL, toHole).normalize();
-        o.vel.addScaledVector(swirl, (110 / Math.max(dist, 6)) * dt);
+        o.vel.addScaledVector(swirl, (60 / Math.max(dist, 6)) * dt * Math.max(0, 1 - o.t / 4));
+        const home = Math.min(1, dt * (0.4 + o.t * 1.2));
+        const want = 14 + o.t * 9;
+        o.vel.x += (toHole.x * want - o.vel.x) * home;
+        o.vel.y += (toHole.y * want - o.vel.y) * home;
+        o.vel.z += (toHole.z * want - o.vel.z) * home;
         if (Math.hypot(o.pos.x, o.pos.z) < HUB_R + 1 && o.pos.y > R) o.vel.y -= 3.8 * dt;
         o.pos.addScaledVector(o.vel, dt);
         if (o.pos.y < R && Math.hypot(o.pos.x, o.pos.z) < HUB_R) {
@@ -216,7 +223,7 @@ export class Orbs {
           o.vel.multiplyScalar(0.6);
           o.state = 'ground';
         }
-        if (dist < hole.radius * 1.05 || o.t > 14) {
+        if (dist < hole.radius * 1.05 || o.t > 10) {
           o.state = 'gone';
           this.onSwallow(o);
         }

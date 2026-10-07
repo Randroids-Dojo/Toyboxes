@@ -72,7 +72,7 @@ void main() {
   col += gold * pow(smoothstep(0.72, 1.0, w), 3.0) * 0.8;
   // Brighter towards the black hole.
   float toward = max(0.0, dot(d, uHoleDir));
-  col += vec3(0.5, 0.32, 0.9) * pow(toward, 14.0) * (0.45 + uFlare * 0.8);
+  col += vec3(0.5, 0.32, 0.9) * (pow(toward, 30.0) * 0.4 + pow(toward, 6.0) * 0.06) * (1.0 + uFlare * 0.8);
   // After the bloom: a spiral galaxy where the black hole was.
   if (uBloom > 0.0) {
     vec3 up = vec3(0.0, 1.0, 0.0);
@@ -282,7 +282,7 @@ void main() {
   float r = length(vWorld.xz - uCenter.xz);
   float wave = 0.5 + 0.5 * sin(r * 0.9 - uTime * 2.4);
   vec3 col = mix(uA, uB, 0.5 + 0.5 * sin(uTime * 0.4 + r * 0.25));
-  gl_FragColor = vec4(col * (0.35 + wave * 0.9 + uFlare * 1.4), 1.0);
+  gl_FragColor = vec4(col * (0.35 + wave * 0.9 + uFlare * 0.55), 1.0);
   ${OUT}
 }`;
 
@@ -402,12 +402,17 @@ uniform float uOn;
 uniform float uCharge;
 uniform float uStar;
 varying vec2 vUv;
-float star(vec2 p, float r) {
-  float a = atan(p.y, p.x) + 1.5708;
-  float k = 6.2831 / 5.0;
-  float m = cos(floor(0.5 + a / k) * k - a) * length(p);
-  float s = 0.5 + 0.5 * cos(5.0 * a);
-  return smoothstep(r * (0.55 + 0.45 * s) + 0.02, r * (0.55 + 0.45 * s), length(p));
+float sdStar5(vec2 p, float r, float rf) {
+  const vec2 k1 = vec2(0.809016994375, -0.587785252292);
+  const vec2 k2 = vec2(-0.809016994375, -0.587785252292);
+  p.x = abs(p.x);
+  p -= 2.0 * max(dot(k1, p), 0.0) * k1;
+  p -= 2.0 * max(dot(k2, p), 0.0) * k2;
+  p.x = abs(p.x);
+  p.y -= r;
+  vec2 ba = rf * vec2(-k1.y, k1.x) - vec2(0.0, 1.0);
+  float h = clamp(dot(p, ba) / dot(ba, ba), 0.0, r);
+  return length(p - ba * h) * sign(p.y * ba.x - p.x * ba.y);
 }
 void main() {
   vec2 p = vUv * 2.0 - 1.0;
@@ -419,7 +424,8 @@ void main() {
   vec2 q = mat2(ca, -sa, sa, ca) * p;
   float outer = smoothstep(0.06, 0.0, abs(r - 0.92));
   float inner = smoothstep(0.04, 0.0, abs(r - 0.68)) * (0.6 + 0.4 * sin(atan(q.y, q.x) * 8.0));
-  float st = uStar > 0.5 ? star(q, 0.5) : smoothstep(0.08, 0.0, abs(r - 0.3));
+  float sd = sdStar5(q, 0.48, 0.42);
+  float st = uStar > 0.5 ? smoothstep(0.03, 0.0, sd) * 0.7 + smoothstep(0.035, 0.0, abs(sd)) * 0.6 : smoothstep(0.08, 0.0, abs(r - 0.3));
   float glow = (1.0 - r) * 0.35;
   vec3 col = mix(vec3(0.35, 0.33, 0.45), uColor, uOn);
   float a = (outer + inner * 0.8 + st * 0.9 + glow) * (0.35 + 0.65 * uOn) * (1.0 + uCharge * 1.5);

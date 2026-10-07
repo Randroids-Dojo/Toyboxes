@@ -75,6 +75,33 @@ function slingPad(x: number, y: number, z: number, color: string, uniforms: Unif
   return { spot: { x, y, z }, shown: 1, decal, beacon, holo, sign, group };
 }
 
+/** Things that fade out when the camera comes close (signs, rings), so they never fill the screen. */
+export class NearFade {
+  private items: { obj: THREE.Object3D; near: number; far: number; shown: number }[] = [];
+  private v = new THREE.Vector3();
+
+  add(obj: THREE.Object3D, near = 3, far = 5.5): void {
+    this.items.push({ obj, near, far, shown: 1 });
+  }
+
+  update(cam: THREE.Vector3, dt: number): void {
+    for (const it of this.items) {
+      it.obj.getWorldPosition(this.v);
+      const d = this.v.distanceTo(cam);
+      const want = d < it.near ? 0 : d < it.far ? (d - it.near) / (it.far - it.near) : 1;
+      it.shown += (want - it.shown) * Math.min(1, dt * 8);
+      it.obj.visible = it.shown > 0.02;
+      it.obj.traverse((m) => {
+        const mat = (m as THREE.Mesh).material as THREE.Material | undefined;
+        if (mat && 'opacity' in mat) {
+          mat.transparent = true;
+          mat.opacity = it.shown * ((mat.userData.alpha as number | undefined) ?? 1);
+        }
+      });
+    }
+  }
+}
+
 /** Fades a pad's hologram and sign when the camera comes close, so they never fill the screen. */
 export function padNear(p: SlingPad, cam: THREE.Vector3, dt: number): void {
   const d = Math.hypot(cam.x - p.spot.x, cam.z - p.spot.z, (cam.y - p.spot.y - 2.4) * 0.6);
@@ -141,6 +168,7 @@ export class Hub {
   readonly seamMat: THREE.ShaderMaterial;
   private fenceMat: THREE.ShaderMaterial;
   private shrineRing: THREE.Mesh;
+  readonly fade = new NearFade();
   private shrineBeam: ReturnType<typeof beam>;
   private chartTop: THREE.Group;
   private horizonBeam: ReturnType<typeof beam>;
@@ -247,6 +275,8 @@ export class Hub {
     shrineLabel.set('Feeding frenzy', null, false);
     shrineLabel.sprite.position.y = 3.7;
     sh.add(shrineLabel.sprite);
+    this.fade.add(shrineLabel.sprite, 3.5, 6);
+    this.fade.add(this.shrineRing, 2.5, 4.5);
     this.shrineBoard = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 2.94), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.94, depthWrite: false, side: THREE.DoubleSide }));
     this.shrineBoard.position.set(0, 5.8, 0);
     this.shrineBoard.renderOrder = 6;
@@ -293,6 +323,7 @@ export class Hub {
     chartLabel.set('Star chart', null, false);
     chartLabel.sprite.position.y = 2.9;
     ch.add(chartLabel.sprite);
+    this.fade.add(chartLabel.sprite, 3, 5.5);
     s.add(ch);
     this.colliders.push(circle(HUB.chart.x, HUB.chart.z, 1.2, 1.1, 0.5, false));
 
