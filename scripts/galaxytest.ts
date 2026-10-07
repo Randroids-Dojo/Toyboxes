@@ -69,6 +69,15 @@ async function input(mx: number, my: number): Promise<void> {
 
 const stop = () => input(0, 0);
 
+/** Phones: make sure no finger is left on the stick (a held pointer is captured and blocks the buttons). */
+async function release(): Promise<void> {
+  if (device !== 'phone' || !touch) return;
+  // Chromium refuses a touchEnd with no touch down; that just means none is held.
+  await touch.cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }).catch(() => {});
+  touch.down = false;
+  await page.waitForTimeout(120);
+}
+
 /** Walks toward a moving target until `done` says so. */
 async function steer(target: () => Promise<{ x: number; z: number } | null>, done: () => Promise<boolean>, what: string, ms = 30000, near = 0.4): Promise<void> {
   const end = Date.now() + ms;
@@ -117,7 +126,7 @@ async function settle(): Promise<void> {
 
 /** Confirms the focused card button (a tap on a phone lifts the stick finger too). */
 async function confirm(): Promise<void> {
-  if (touch?.down) await stop();
+  await release();
   if (device === 'pad') {
     await w.hold('interact', 280);
     await page.waitForTimeout(200);
@@ -125,9 +134,25 @@ async function confirm(): Promise<void> {
   if (touch) touch.down = false;
 }
 
+/** After starting a round: confirm its first-time card when it shows (it can take a moment). */
+async function openCard(): Promise<void> {
+  const end = Date.now() + 4000;
+  while (Date.now() < end) {
+    if (await w.menuOpen()) {
+      await page.waitForTimeout(250);
+      await confirm();
+      return;
+    }
+    const r = (await exp()).round;
+    if (r && r.state !== 'intro') return;
+    await page.waitForTimeout(120);
+  }
+}
+
 /** Closes a results card without playing again: Back, or on a phone a tap on its quiet button. */
 async function closeCard(): Promise<void> {
   if (device === 'phone') {
+    await release();
     const btn = page.locator('.modal.in .btn').filter({ hasText: /Stay here|Done/ });
     await btn.first().tap();
     if (touch) touch.down = false;
@@ -148,14 +173,14 @@ const back = async () => {
 };
 const act = async () => {
   // Lift the stick finger first: the harness's tap ends every touch at once.
-  if (touch?.down) await stop();
+  await release();
   await press('interact');
   // A tap lifts every finger, including the one on the stick.
   if (touch) touch.down = false;
 };
 /** Kick: F, X, the Kick button; the remote kicks with OK. */
 const kick = async () => {
-  if (touch?.down) await stop();
+  await release();
   await (device === 'remote' ? w.act('interact') : press('kick'));
   if (touch) touch.down = false;
 };
@@ -258,11 +283,9 @@ if (stages.has('ring')) {
     await steer(async () => sp, async () => (await st()).prompt === 'Start the ring run', 'start pad', 15000, 0.3);
   });
   await act();
-  await page.waitForTimeout(400);
-  if (await w.menuOpen()) {
-    await shot('ring-intro');
-    await confirm();
-  }
+  await until(async () => (await w.menuOpen()) || (await exp()).round?.state !== 'intro', 'ring card', 5000);
+  if (await w.menuOpen()) await shot('ring-intro');
+  await openCard();
   await until(async () => (await exp()).round?.state === 'run', 'ring run starts', 10000);
   await shot('ring-go');
   const t0 = Date.now();
@@ -333,8 +356,7 @@ if (stages.has('storm')) {
   const sp = (await exp()).spark;
   await steer(async () => sp, async () => (await st()).prompt === 'Start the rock rain', 'rock rain pad', 15000, 0.3);
   await act();
-  await page.waitForTimeout(400);
-  if (await w.menuOpen()) await confirm();
+  await openCard();
   await until(async () => (await exp()).round?.state === 'run', 'rock rain starts', 10000);
   await page.waitForTimeout(3500);
   await shot('rock-rain');
@@ -388,8 +410,7 @@ if (stages.has('comet')) {
   const ride = (await exp()).spark;
   await steer(async () => ride, async () => (await st()).prompt === 'Ride the comet', 'the comet', 15000, 0.3);
   await act();
-  await page.waitForTimeout(400);
-  if (await w.menuOpen()) await confirm();
+  await openCard();
   await until(async () => (await exp()).round?.state === 'run', 'comet ride starts', 10000);
   let spun = false;
   const shots = new Set<number>();
@@ -436,8 +457,7 @@ if (stages.has('frenzy')) {
   await w.call('debugShortRound', 20);
   await steer(async () => HUB.shrine, async () => (await st()).prompt === 'Start a feeding frenzy', 'the frenzy shrine', 20000, 1.2);
   await act();
-  await page.waitForTimeout(400);
-  if (await w.menuOpen()) await confirm();
+  await openCard();
   await until(async () => (await exp()).round?.state === 'run', 'frenzy starts', 10000);
   await shot('frenzy');
   const BH = { x: 24, z: -62 };
@@ -542,6 +562,7 @@ if (stages.has('horizon')) {
   e = await exp();
   if (!e.bloomed) throw new Error('The galaxy did not bloom');
   await page.waitForTimeout(800);
+  if ((await exp()).carry === 'net') throw new Error('The star net caught you after the finale');
   await shot('after-bloom');
 }
 

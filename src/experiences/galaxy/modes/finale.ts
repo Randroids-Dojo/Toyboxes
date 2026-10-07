@@ -155,6 +155,7 @@ export class Finale implements Round {
     g.fade.tunnel = 0;
     g.hud.letterbox(false);
     const a = HUB.arrival;
+    g.landOn(0);
     g.ctx.teleport(a.x, a.z, a.yaw, 0);
     g.endRound();
     g.ctx.ui.toast('Nova medals are out there now. Try every challenge again.', 'good', 5000);

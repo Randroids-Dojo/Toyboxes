@@ -343,6 +343,12 @@ export class Galaxy implements SpaceView {
     this.freeOrbsFor = 0;
   }
 
+  /** Where you now stand, after a teleport, so the star net does not think you fell. */
+  landOn(y: number): void {
+    this.lastTop = y;
+    this.roundCarried = false;
+  }
+
   /** After a bloom a small new black hole grows again from nothing. */
   holeFed(n: number): number {
     return this.save.data.reborn ? Math.max(0, n - STAR_GOAL) : n;

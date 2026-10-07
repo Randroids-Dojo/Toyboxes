@@ -63,6 +63,7 @@ export class Storm implements Round {
     const sp = g.cinder.startSpot;
     this.start = { x: sp.x + 1.5, y: CINDER.top, z: sp.z, yaw: Math.PI / 2 };
     g.cinder.reset();
+    g.landOn(CINDER.top);
     g.ctx.teleport(this.start.x, this.start.z, this.start.yaw, CINDER.top);
     // Warnings: one draw call, progress per instance.
     const wg = new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2);

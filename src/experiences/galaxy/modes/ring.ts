@@ -41,6 +41,7 @@ export class RingRun implements Round {
     const p = ringPoint(RING_START_S, RING.mid);
     const th = RING_THETA0 - (RING_START_S * Math.PI) / 180;
     this.startSpot = { x: p.x, y: RING.top, z: p.z, yaw: Math.atan2(Math.sin(th), -Math.cos(th)) };
+    g.landOn(RING.top);
     g.ctx.teleport(p.x, p.z, this.startSpot.yaw, RING.top);
     g.ring.setGates(0, this.gateStates());
     void g.hud
