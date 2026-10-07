@@ -371,7 +371,12 @@ export class Staff {
       v.project(this.camera);
       const behind = v.z > 1 || Math.abs(v.x) > 1.2 || Math.abs(v.y) > 1.2;
       b.el.style.opacity = behind ? '0' : String(Math.min(1, b.left * 3));
-      b.el.style.transform = `translate(${((v.x + 1) / 2) * W}px, ${((1 - v.y) / 2) * H}px) translate(-50%, -100%)`;
+      // Kept wholly on screen, even when the speaker is at the edge of the view.
+      const bw = b.el.offsetWidth / 2 + 8;
+      const x = Math.min(W - bw, Math.max(bw, ((v.x + 1) / 2) * W));
+      // Above the prompt pill along the bottom.
+      const y = Math.min(H - 90, Math.max(b.el.offsetHeight + 8, ((1 - v.y) / 2) * H));
+      b.el.style.transform = `translate(${x}px, ${y}px) translate(-50%, -100%)`;
       return true;
     });
   }
