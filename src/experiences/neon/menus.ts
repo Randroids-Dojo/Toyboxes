@@ -82,3 +82,82 @@ export function chartMax(song: SongId, diff: Diff): number {
   const c = chartFor(song, diff);
   return c ? danceCeiling(c) : 0;
 }
+
+/** Party settings at the Glow Lab jukebox: sound check, timing nudges and assists. */
+export function partySettings(nova: Nova, onSoundCheck: () => void, onClose: () => void): void {
+  const ui = nova.ctx.ui;
+  const sync = nova.save.data.sync;
+  let checking = false;
+  const offsetText = () => `${sync.offset > 0 ? '+' : ''}${Math.round(sync.offset)} ms`;
+  const value = h('b', {}, offsetText());
+  const nudge = (d: number) => {
+    sync.offset = Math.max(-60, Math.min(300, sync.offset + d));
+    nova.clock.inputOffset = sync.offset;
+    nova.save.save();
+    value.textContent = offsetText();
+  };
+  const toggle = (label: string, key: 'hitSound' | 'beatBar' | 'easyHolds' | 'wide' | 'lockCam', note: string) => {
+    const b = button(`${label}: ${sync[key] ? 'On' : 'Off'}`, () => {
+      sync[key] = !sync[key];
+      nova.save.save();
+      b.textContent = `${label}: ${sync[key] ? 'On' : 'Off'}`;
+    }, 'ghost');
+    return h('div', { class: 'nova-row' }, b, h('small', { class: 'muted' }, note));
+  };
+  const check = button('Run the sound check', () => {
+    checking = true;
+    ui.close(panel);
+    onSoundCheck();
+  }, 'primary');
+  const done = button('Done', () => ui.close(panel), 'ghost');
+  const panel: Panel = {
+    el: card(
+      'Party settings',
+      'Jukebox',
+      h('p', { class: 'xk-tagline' }, 'If your presses feel early or late, run the sound check or nudge your timing.'),
+      h('div', { class: 'actions' }, check),
+      h('div', { class: 'nova-row' }, button('Earlier', () => nudge(-10), 'ghost'), h('span', {}, 'Timing ', value), button('Later', () => nudge(10), 'ghost')),
+      toggle('Hit sounds', 'hitSound', 'A clap on every hit'),
+      toggle('Beat bar', 'beatBar', 'Notes on screen'),
+      toggle('Easy holds', 'easyHolds', 'Holds count once you hit them'),
+      toggle('Wide timing', 'wide', 'Easier windows, bests stay here'),
+      toggle('Lock-on camera', 'lockCam', 'Laser tag frames your target'),
+      h('div', { class: 'actions' }, done),
+    ),
+    onBack: () => ui.close(panel),
+    onClose: () => {
+      if (!checking) onClose();
+    },
+    initial: () => check,
+  };
+  ui.open(panel);
+}
+
+/** Asks before a first rhythm game whether to run the 20 second sound check. */
+export function askSoundCheck(nova: Nova, onYes: () => void, onSkip: () => void, onCancel: () => void): void {
+  const ui = nova.ctx.ui;
+  let chose = false;
+  const yes = button('Sound check', () => {
+    chose = true;
+    ui.close(panel);
+    onYes();
+  }, 'primary');
+  const skip = button('Skip', () => {
+    chose = true;
+    ui.close(panel);
+    onSkip();
+  }, 'ghost');
+  const panel: Panel = {
+    el: card('Quick sound check?', 'Orbit', h('p', { class: 'xk-tagline' }, 'Clap along with Orbit for 20 seconds so your timing feels right on this screen.'), h('div', { class: 'actions' }, yes, skip)),
+    onBack: () => {
+      chose = true;
+      ui.close(panel);
+      onCancel();
+    },
+    onClose: () => {
+      if (!chose) onSkip();
+    },
+    initial: () => yes,
+  };
+  ui.open(panel);
+}

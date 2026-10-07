@@ -14,20 +14,22 @@ import { Hud, Particles, PostFX, Shockwaves } from '../kit';
 import { DIFF_NAMES, type Diff } from '../../shared/neon/charts';
 import { SONGS, type SongId } from '../../shared/neon/songs';
 import { BLADE_COLORS } from '../../shared/neon/progress';
+import { DANCE_BOARD } from '../../shared/neon/rules';
 import { boardLine, Boards } from './boards';
 import { BeatClock } from './clock';
 import { NovaCore } from './core';
 import { Crowd } from './crowd';
 import { DanceMode, RIVALS, type DanceOutcome } from './dance';
 import { FLOOR_R, NovaFloor } from './floor';
-import { songSelect } from './menus';
+import { askSoundCheck, partySettings, songSelect } from './menus';
 import { songData } from './music';
 import { RhythmInput } from './rhythm-input';
 import { DUELISTS, judgeBot, orbitBot, Robot } from './robots';
 import { NovaProgress } from './save';
 import { Sky } from './sky';
 import { nova as snd } from './sounds';
-import { BOOTH, buildStation, DOOR, JUDGES, ORBIT_SPOT, paintBoard, PEDESTALS, STAR_PAD, stationQuality, type StationParts } from './station';
+import { BOOTH, buildStation, DOOR, JUDGES, JUKEBOX, ORBIT_SPOT, paintBoard, PEDESTALS, STAR_PAD, stationQuality, type StationParts } from './station';
+import { SyncMode, type SyncResult } from './sync';
 import { Dancer, Fencer, Outfit, type SuitId } from './style';
 import { C } from './util';
 import type { Mode, Nova } from './world';
@@ -64,6 +66,7 @@ export class NeonParty implements SpaceView, Nova {
   private sky: Sky;
   private station: StationParts;
   private hemi: THREE.HemisphereLight;
+  private fill: THREE.DirectionalLight;
   private duelists: Robot[] = [];
   private extras: Robot[] = [];
   private mode: Mode | null = null;
@@ -94,8 +97,11 @@ export class NeonParty implements SpaceView, Nova {
     this.clock.videoOffset = this.save.data.sync.video;
 
     // Light: low violet ambient, the Core's light from above, glow everywhere else.
-    this.hemi = new THREE.HemisphereLight(0x4a36a8, 0x0a0620, 0.9);
+    this.hemi = new THREE.HemisphereLight(0x5a46b8, 0x0a0620, 1.0);
     this.scene.add(this.hemi);
+    // A soft light from the camera so faces read anywhere in the club.
+    this.fill = new THREE.DirectionalLight(0xd8ccff, 0.55);
+    this.scene.add(this.fill, this.fill.target);
     this.sun.position.set(3, 22, 4);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(1024, 1024);
@@ -357,6 +363,7 @@ export class NeonParty implements SpaceView, Nova {
     const out: SpaceAction[] = [];
     out.push({ x: BOOTH.x, z: BOOTH.z + 1.6, range: 2.2, label: 'Dance off: pick a song', short: 'Songs', run: () => this.openSongs() });
     out.push({ x: STAR_PAD.x, z: STAR_PAD.z, range: 1.8, label: 'Dance off with Orbit', short: 'Dance', run: () => this.openSongs() });
+    out.push({ x: JUKEBOX.x, z: JUKEBOX.z - 1.2, range: 1.8, label: 'Party settings and sound check', short: 'Settings', run: () => this.openSettings() });
     if (Math.hypot(p.x, p.z) < FLOOR_R - 0.3) out.push({ x: p.x, z: p.z, range: 0.5, label: 'Dance', short: 'Dance', run: () => this.queueFreeDance() });
     return out;
   }
@@ -406,12 +413,68 @@ export class NeonParty implements SpaceView, Nova {
     );
   }
 
-  startDance(song: SongId, diff: Diff): void {
+  private openSettings(): void {
+    partySettings(
+      this,
+      () => this.runSync(() => this.roam()),
+      () => undefined,
+    );
+  }
+
+  /** Runs the sound check, then `after`. */
+  runSync(after: () => void): void {
+    if (this.mode) this.endMode();
+    this.mode = new SyncMode(this, (r) => {
+      this.applySync(r);
+      this.endMode();
+      after();
+    });
+  }
+
+  private applySync(r: SyncResult): void {
+    const sync = this.save.data.sync;
+    if (r.offset !== null) {
+      sync.offset = r.offset;
+      sync.checked = true;
+    }
+    if (r.holdOk === false) sync.easyHolds = true;
+    this.clock.inputOffset = sync.offset;
+    this.save.save();
+    this.ctx.ui.toast(r.offset === null ? 'No claps heard. Try again any time at the jukebox.' : r.holdOk === false ? "You've got rhythm! Easy holds are on for this screen." : "You've got rhythm!", r.offset === null ? 'info' : 'good', 3200);
+  }
+
+  /** Starts a rhythm game, offering the sound check the first time. */
+  private withSync(start: () => void): void {
+    if (this.save.data.sync.checked || this.save.seen('ask-sync')) {
+      start();
+      return;
+    }
+    this.save.markSeen('ask-sync');
+    askSoundCheck(this, () => this.runSync(start), start, () => this.roam());
+  }
+
+  pauseItems(): { label: string; run: () => void }[] {
+    const m = this.mode;
+    if (m instanceof DanceMode && m.playing) {
+      return [
+        { label: 'Restart the song', run: () => this.startDance(m.song, m.diff, true) },
+        { label: 'Leave the dance off', run: () => this.endMode() },
+      ];
+    }
+    if (m instanceof SyncMode) return [{ label: 'Skip the sound check', run: () => this.endMode() }];
+    return [];
+  }
+
+  startDance(song: SongId, diff: Diff, now = false): void {
+    if (!now) {
+      this.withSync(() => this.startDance(song, diff, true));
+      return;
+    }
     if (this.mode) this.endMode();
     const rival = diff === 'nova' ? RIVALS.orbit : song === 'lights' ? RIVALS.twirl : song === 'glitter' ? RIVALS.shimmer : song === 'heart' ? RIVALS.boogie : RIVALS.strobe;
     const mode = new DanceMode(this, { song, diff, rival, seed: Date.now() & 0xffff, onDone: (o) => void this.danceDone(song, diff, o) });
     this.mode = mode;
-    const modeId = diff === 'normal' ? `dance-${song === 'glitter' ? 'glitter-gravity' : song === 'lights' ? 'nova-lights' : song === 'heart' ? 'neon-heart' : 'supernova'}` : null;
+    const modeId = diff === 'normal' ? (DANCE_BOARD[song] ?? null) : null;
     this.ticket = null;
     if (modeId && !this.save.data.sync.wide) void this.boards.start(modeId).then((t) => (this.ticket = t));
   }
@@ -425,7 +488,7 @@ export class NeonParty implements SpaceView, Nova {
     const gained = this.save.award(key, o.stars);
     if (r.cards.total >= 30) this.save.data.crowns[key] = true;
     this.save.save();
-    const modeId = diff === 'normal' ? `dance-${song === 'glitter' ? 'glitter-gravity' : song === 'lights' ? 'nova-lights' : song === 'heart' ? 'neon-heart' : 'supernova'}` : null;
+    const modeId = diff === 'normal' ? (DANCE_BOARD[song] ?? null) : null;
     let line = diff === 'normal' ? 'Saving your score...' : `${DIFF_NAMES[diff]} bests stay on this device.`;
     let boardRows: { name: string; value: string; you?: boolean }[] | null = null;
     if (modeId && !o.wide) {
@@ -525,6 +588,8 @@ export class NeonParty implements SpaceView, Nova {
       mat.uniforms.uFade.value = near * (1 - this.doorOpen);
       mat.uniforms.uTime.value = t;
     }
+    this.fill.position.copy(this.ctx.camera.position).add(new THREE.Vector3(0, 2, 0));
+    this.fill.target.position.set(focus.x, 1, focus.z);
     // Shadows follow the player.
     this.sun.position.set(focus.x + 3, 22, focus.z + 4);
     this.sun.target.position.set(focus.x, 0, focus.z);
@@ -630,6 +695,11 @@ export class NeonParty implements SpaceView, Nova {
     this.clock.inputOffset = ms;
     this.save.data.sync.offset = ms;
     this.save.save();
+  }
+
+  debugSync(): void {
+    this.ctx.ui.closeAll();
+    this.runSync(() => this.roam());
   }
 
   debugSkipIntro(): void {

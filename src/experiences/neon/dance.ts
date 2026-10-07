@@ -130,6 +130,11 @@ export class DanceMode implements Mode {
 
   private onDone: (o: DanceOutcome) => void;
 
+  /** The song is running (not the cards or results). */
+  get playing(): boolean {
+    return this.phase === 'play';
+  }
+
   capture(): CaptureLabels | null {
     if (this.phase === 'done') return null;
     return { action: null, kick: null, jump: null, prompt: this.phase === 'play' ? null : null };
@@ -382,6 +387,9 @@ export class DanceMode implements Mode {
     music.stop(2.2);
     this.nova.clock.stop();
     this.bar.show(false);
+    this.rivalMeter.remove();
+    this.comboEl.remove();
+    this.nova.hud.strip([]);
     const r = this.judge.result()!;
     this.result = r;
     this.cardsEl = buildCards(this.nova.layer, r);
@@ -448,9 +456,9 @@ export class DanceMode implements Mode {
       target = new THREE.Vector3(6.8, 1.5 - k * 0.1, 6.2);
     } else if (glow || this.shotCut > 0) {
       // Crane round the floor.
-      const a = this.camT * 0.22;
-      pos = new THREE.Vector3(Math.sin(a) * 7.5, 3.6 + Math.sin(this.camT * 0.4) * 0.6, Math.cos(a) * 7.5 + 1);
-      target = new THREE.Vector3(-0.8, 1.6, -0.4);
+      const a = Math.sin(this.camT * 0.3) * 0.8;
+      pos = new THREE.Vector3(Math.sin(a) * 8 + 1, 4.6 + Math.sin(this.camT * 0.4) * 0.5, Math.cos(a) * 8);
+      target = new THREE.Vector3(-1, 1.4, -0.6);
     } else if (this.spotActive) {
       pos = new THREE.Vector3(0.6, 1.5, 4.4);
       target = new THREE.Vector3(0, 1.1, 0);

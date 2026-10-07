@@ -6,6 +6,7 @@
 // reach (or for times, `min` is the fastest a perfect run can be).
 
 import type { Experience } from './model';
+import { neonModes } from './neon/rules.js';
 
 export interface ScoreMode {
   /** Lowercase letters, digits and hyphens, up to 24 characters. */
@@ -41,7 +42,7 @@ export const SCORE_MODES: Record<Experience['kind'], ScoreMode[]> = {
   kart: [],
   casino: [],
   galaxy: [],
-  neon: [],
+  neon: neonModes(),
   fart: [],
 };
 
