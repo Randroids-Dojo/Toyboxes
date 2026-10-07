@@ -393,7 +393,6 @@ body[data-device='touch'] .kz-item {
 
 .km-art {
   width: 100%;
-  max width: 260px;
   max-width: 260px;
   height: auto;
   border-radius: 16px;
