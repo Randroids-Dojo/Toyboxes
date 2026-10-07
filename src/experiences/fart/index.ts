@@ -34,6 +34,7 @@ import type { Trial, TrialWorld } from './modes/trial';
 import type { BrainEvent } from './sim/people';
 import { Boards } from './boards';
 import { RocketRings } from './modes/rings';
+import { LibraryTrial } from './modes/library';
 
 const DAY = {
   hemiSky: new THREE.Color(0xcfefff),
@@ -56,6 +57,7 @@ const NIGHT = {
 export type TrialFactory = (w: TrialWorld, opts: Record<string, unknown>) => Trial;
 export const TRIALS: Partial<Record<TrialId, TrialFactory>> = {
   rings: (w, o) => new RocketRings(w, o),
+  library: (w, o) => new LibraryTrial(w, o),
 };
 
 export class FartSimulator implements SpaceView {
@@ -432,6 +434,7 @@ export class FartSimulator implements SpaceView {
   }
 
   kickAction(p: PlayerState): { label: string; run: () => void } | null {
+    if (this.trial?.kickAction) return this.trial.kickAction(p);
     if (!this.tooting() || this.tootOnInteract) return null;
     return { label: this.mover.label(p), run: () => this.press('kick') };
   }

@@ -56,6 +56,8 @@ export interface Trial {
   step(h: number, p: PlayerState): void;
   update(dt: number, t: number): void;
   actions?(p: PlayerState): SpaceAction[];
+  /** The trial's own use of the Kick button (touch Toot). */
+  kickAction?(p: PlayerState): { label: string; run: () => void } | null;
   captureInput?(): CaptureLabels | null;
   cameraShot?(dt: number): CameraShot | null;
   gravity?(): number;

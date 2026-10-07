@@ -14,7 +14,7 @@ const JAR = '<svg viewBox="0 0 30 34"><rect x="7" y="2" width="16" height="5" rx
 
 export class PuffHud {
   readonly root: HTMLElement;
-  private tummy: HTMLElement;
+  private tummy_: HTMLElement;
   private icon: HTMLElement;
   private fill: HTMLElement;
   private cost: HTMLElement;
@@ -35,14 +35,14 @@ export class PuffHud {
     this.cost = h('b');
     this.tank = h('div', { class: 'pf-tank' }, this.fill, this.cost);
     this.label = h('div', { class: 'pf-tank-label' }, 'Tummy: empty');
-    this.tummy = h('div', { class: 'pf-tummy off', 'aria-label': 'Tummy gauge' }, this.icon, h('div', { class: 'pf-tank-wrap' }, this.label, this.tank));
+    this.tummy_ = h('div', { class: 'pf-tummy off', 'aria-label': 'Tummy gauge' }, this.icon, h('div', { class: 'pf-tank-wrap' }, this.label, this.tank));
     this.jarText = h('span', {}, '0/27');
     this.jar = h('div', { class: 'pf-jar', 'aria-label': 'Golden beans' });
     this.jar.innerHTML = JAR;
     this.jar.append(this.jarText);
     this.chip = h('div', { class: 'pf-chip hidden' });
     this.note = h('div', { class: 'pf-note' });
-    this.root.append(this.tummy, this.jar, this.chip, this.note);
+    this.root.append(this.tummy_, this.jar, this.chip, this.note);
     parent.appendChild(this.root);
   }
 
@@ -50,7 +50,7 @@ export class PuffHud {
   gauge(gas: Gas | null, amount: number, opts: { cost?: number } = {}): void {
     if (gas !== this.lastGas) {
       this.lastGas = gas;
-      this.tummy.classList.toggle('off', !gas);
+      this.tummy_.classList.toggle('off', !gas);
       this.icon.dataset.gas = gas ?? '';
       this.tank.dataset.gas = gas ?? '';
       this.icon.innerHTML = gas ? ICONS[gas] : '?';
@@ -74,15 +74,15 @@ export class PuffHud {
   }
 
   shake(): void {
-    this.tummy.classList.remove('shake');
-    void this.tummy.offsetWidth;
-    this.tummy.classList.add('shake');
+    this.tummy_.classList.remove('shake');
+    void this.tummy_.offsetWidth;
+    this.tummy_.classList.add('shake');
   }
 
   flash(): void {
-    this.tummy.classList.remove('flash');
-    void this.tummy.offsetWidth;
-    this.tummy.classList.add('flash');
+    this.tummy_.classList.remove('flash');
+    void this.tummy_.offsetWidth;
+    this.tummy_.classList.add('flash');
   }
 
   beans(n: number, total: number, bump = false): void {
@@ -128,6 +128,11 @@ export class PuffHud {
       el.remove();
       done();
     }, 900);
+  }
+
+  /** Hides the tummy gauge (the library has its own pressure meter). */
+  tummy(on: boolean): void {
+    this.tummy_.style.display = on ? '' : 'none';
   }
 
   trial(on: boolean): void {

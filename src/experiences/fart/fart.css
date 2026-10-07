@@ -397,7 +397,7 @@
 .pf-meter {
   position: absolute;
   left: 50%;
-  bottom: calc(86px + var(--safe-b));
+  bottom: calc(136px + var(--safe-b));
   transform: translateX(-50%);
   width: min(420px, calc(100vw - 40px));
   padding: 6px 10px;
@@ -423,6 +423,12 @@
   inset: 0;
   transform-origin: left center;
   background: linear-gradient(90deg, #8fd14f, #ffd24a 70%, #e8574a);
+}
+
+body[data-device='touch'] .pf-meter {
+  bottom: auto;
+  top: calc(168px + var(--safe-t));
+  width: min(340px, calc(100vw - 32px));
 }
 
 .pf-meter.hot {
