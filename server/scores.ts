@@ -2,22 +2,20 @@
 //
 // Keys (under keyPrefix()):
 //   lap:<roomId>:<areaId>          sorted set, browser key -> best lap ms
-//   casino:<roomId>:<areaId>:<bk>  CasinoStats (CAS on rev)
-//   casinoboard:<roomId>:<areaId>  sorted set, browser key -> balance
 //   galaxy:<roomId>:<areaId>       sorted set, browser key -> best frenzy score
-//   bj:<roomId>:<areaId>:<bk>      the player's blackjack hand and shoe
 //   modeboard:<roomId>:<areaId>:<mode>  sorted set, browser key -> best on that world board
 //   scorename:<bk>                 the name boards show for that browser
 //
 // Players are anonymous browsers, so scores follow the browser's current
-// name. The casino decides every spin here; the browser only animates it.
+// name. The casino lives in server/casino.ts; its first actions (spin,
+// refill, roulette, blackjack) are re-exported here for older browser tabs.
 
-import { randomBytes, randomInt } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { EMPTY_CONTENT, GALAXY_MAX_SCORE, cleanName, publishedContent, type Area, type RoomContent } from '../src/shared/model.js';
-import { BETS, REEL_STRIP, START_CREDITS, freshStats, payout, pushHistory, type CasinoStats, type SlotSymbol } from '../src/shared/slots.js';
-import { handValue, isBlackjack, newShoe, rouletteReturn, settle, type BjResult, type BjView, type Card, type RouletteBet } from '../src/shared/casino-games.js';
+import type { RouletteBet } from '../src/shared/casino-games.js';
 import { minLapMs } from '../src/shared/track.js';
 import { MAX_LOG, SCORE_MODES, beats, scoreMode, scoreProblem } from '../src/shared/score-modes.js';
+import { clearCasino, legacyBlackjack, legacyBoard, legacyRoulette, legacySpin, refill as casinoRefill } from './casino.js';
 import { browserKey } from './crypto.js';
 import { ApiError, limit } from './http.js';
 import { loadRoom } from './rooms.js';
@@ -69,11 +67,7 @@ export async function board(roomId: string, areaId: string, browserId: string | 
     const best = me ? await store.zscore(z, me) : null;
     return { kind: 'kart' as const, board: top, best };
   }
-  const z = `casinoboard:${roomId}:${areaId}`;
-  const top = await rows(z, await store.zrevrange(z, 0, BOARD_SIZE - 1), me);
-  const stats = me ? await store.get<CasinoStats>(`casino:${roomId}:${areaId}:${me}`) : null;
-  const bj = me ? await store.get<BjState>(`bj:${roomId}:${areaId}:${me}`) : null;
-  return { kind: 'casino' as const, board: top, stats: stats ?? freshStats(Date.now()), blackjack: bj ? bjView(bj) : null };
+  return legacyBoard(roomId, areaId, browserId);
 }
 
 export async function recordLap(roomId: string, areaId: string, browserId: string, name: string, ms: number) {
@@ -190,60 +184,11 @@ export async function modeBoards(roomId: string, areaId: string, modeIds: string
   return { kind: 'modes' as const, boards };
 }
 
-async function updateStats(roomId: string, areaId: string, key: string, fn: (s: CasinoStats) => CasinoStats): Promise<CasinoStats> {
-  const store = getStore();
-  const k = `casino:${roomId}:${areaId}:${key}`;
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const cur = (await store.get<CasinoStats>(k)) ?? freshStats(Date.now());
-    const next = fn(structuredClone(cur));
-    next.rev = cur.rev + 1;
-    if ((await store.cas(k, cur.rev, next)).ok) {
-      await store.zadd(`casinoboard:${roomId}:${areaId}`, next.balance, key);
-      return next;
-    }
-  }
-  throw new ApiError(409, 'busy', 'Too many spins at once. Try again.');
-}
-
-export async function spin(roomId: string, areaId: string, browserId: string, name: string, bet: number) {
-  await experienceArea(roomId, areaId, 'casino');
-  if (!(BETS as readonly number[]).includes(bet)) throw new ApiError(400, 'bad_bet', 'Pick one of the bets on the machine');
-  const key = browserKey(browserId);
-  await limit(`spin:${key}`, 90, 60, 'The machine needs a moment');
-  let result: { stops: number[]; line: SlotSymbol[]; rule: string | null; win: number } | null = null;
-  const stats = await updateStats(roomId, areaId, key, (s) => {
-    if (s.balance < bet) throw new ApiError(400, 'broke', s.balance < BETS[0] ? 'Out of credits. Take a free refill.' : 'Not enough credits for that bet');
-    const stops = [randomInt(REEL_STRIP.length), randomInt(REEL_STRIP.length), randomInt(REEL_STRIP.length)];
-    const line = stops.map((i) => REEL_STRIP[i]);
-    const { rule, win } = payout(line, bet);
-    result = { stops, line, rule, win };
-    const now = Date.now();
-    s.balance += win - bet;
-    s.spent += bet;
-    s.earned += win;
-    s.spins += 1;
-    s.biggestWin = Math.max(s.biggestWin, win);
-    s.history = pushHistory(s.history, now, s.balance);
-    return s;
-  });
-  await rememberName(key, name);
-  return { ...result!, stats };
-}
-
-export async function refill(roomId: string, areaId: string, browserId: string, name: string) {
-  await experienceArea(roomId, areaId, 'casino');
-  const key = browserKey(browserId);
-  await limit(`refill:${key}`, 10, 60, 'Slow down a little');
-  const stats = await updateStats(roomId, areaId, key, (s) => {
-    if (s.balance >= BETS[0]) throw new ApiError(400, 'not_broke', 'Refills are for when you run out');
-    s.balance = START_CREDITS;
-    s.refills += 1;
-    s.history = pushHistory(s.history, Date.now(), s.balance);
-    return s;
-  });
-  await rememberName(key, name);
-  return { stats };
-}
+// The first casino's actions, kept for browser tabs opened before the boat.
+export const spin = (roomId: string, areaId: string, browserId: string, name: string, bet: number) => legacySpin({ roomId, areaId, browserId, name }, bet);
+export const refill = (roomId: string, areaId: string, browserId: string, name: string) => casinoRefill({ roomId, areaId, browserId, name }).then((r) => ({ stats: r.stats }));
+export const roulette = (roomId: string, areaId: string, browserId: string, name: string, bet: number, pick: RouletteBet) => legacyRoulette({ roomId, areaId, browserId, name }, bet, pick);
+export const blackjack = (roomId: string, areaId: string, browserId: string, name: string, move: 'deal' | 'hit' | 'stand' | 'double', bet?: number) => legacyBlackjack({ roomId, areaId, browserId, name }, move, bet);
 
 /** Boards show this browser under its new name. */
 export async function renameScores(browserId: string, name: string) {
@@ -256,154 +201,12 @@ export async function renameScores(browserId: string, name: string) {
 /** Creator tool: wipe a track's laps or a casino's credits. */
 export async function clearScores(roomId: string, areaId: string) {
   const store = getStore();
-  const ids = await store.zrange(`casinoboard:${roomId}:${areaId}`, 0, -1);
+  await clearCasino(roomId, areaId);
   const modes = [...new Set(Object.values(SCORE_MODES).flatMap((list) => list.map((m) => m.id)))];
   await store.del(
     `lap:${roomId}:${areaId}`,
     `galaxy:${roomId}:${areaId}`,
-    `casinoboard:${roomId}:${areaId}`,
-    ...ids.map((id) => `casino:${roomId}:${areaId}:${id}`),
     ...modes.map((m) => `modeboard:${roomId}:${areaId}:${m}`),
   );
   return { ok: true };
-}
-
-// ---------------------------------------------------------------------------
-// Roulette
-
-export async function roulette(roomId: string, areaId: string, browserId: string, name: string, bet: number, pick: RouletteBet) {
-  await experienceArea(roomId, areaId, 'casino');
-  if (!(BETS as readonly number[]).includes(bet)) throw new ApiError(400, 'bad_bet', 'Pick one of the bets on the table');
-  if (pick.type === 'number' && (!Number.isInteger(pick.number) || pick.number! < 0 || pick.number! > 36)) throw new ApiError(400, 'bad_pick', 'Pick a number from 0 to 36');
-  const key = browserKey(browserId);
-  await limit(`spin:${key}`, 90, 60, 'The wheel needs a moment');
-  let pocket = 0;
-  let win = 0;
-  const stats = await updateStats(roomId, areaId, key, (s) => {
-    if (s.balance < bet) throw new ApiError(400, 'broke', s.balance < BETS[0] ? 'Out of credits. Take a free refill.' : 'Not enough credits for that bet');
-    pocket = randomInt(37);
-    win = rouletteReturn(pick, pocket) * bet;
-    s.balance += win - bet;
-    s.spent += bet;
-    s.earned += win;
-    s.spins += 1;
-    s.biggestWin = Math.max(s.biggestWin, win);
-    s.history = pushHistory(s.history, Date.now(), s.balance);
-    return s;
-  });
-  await rememberName(key, name);
-  return { pocket, win, stats };
-}
-
-// ---------------------------------------------------------------------------
-// Blackjack
-
-interface BjState {
-  rev: number;
-  shoe: Card[];
-  player: Card[];
-  dealer: Card[];
-  bet: number;
-  doubled: boolean;
-  phase: 'idle' | 'player' | 'done';
-  result: BjResult | null;
-  payout: number;
-}
-
-function bjView(b: BjState): BjView {
-  return {
-    phase: b.phase,
-    player: b.player,
-    dealer: b.phase === 'player' ? [b.dealer[0], '??'] : b.dealer,
-    bet: b.bet,
-    doubled: b.doubled,
-    result: b.result,
-    payout: b.payout,
-  };
-}
-
-function draw(b: BjState): Card {
-  if (b.shoe.length < 20) b.shoe = newShoe(6, randomInt);
-  return b.shoe.pop()!;
-}
-
-async function loadBj(roomId: string, areaId: string, key: string): Promise<BjState> {
-  return (await getStore().get<BjState>(`bj:${roomId}:${areaId}:${key}`)) ?? { rev: 0, shoe: [], player: [], dealer: [], bet: 0, doubled: false, phase: 'idle', result: null, payout: 0 };
-}
-
-async function saveBj(roomId: string, areaId: string, key: string, b: BjState, expectedRev: number): Promise<void> {
-  const next = { ...b, rev: expectedRev + 1 };
-  const r = await getStore().cas(`bj:${roomId}:${areaId}:${key}`, expectedRev, next);
-  if (!r.ok) throw new ApiError(409, 'busy', 'That hand changed. Try again.');
-  b.rev = next.rev;
-}
-
-/** Plays out the dealer and pays the hand. */
-async function finish(roomId: string, areaId: string, key: string, b: BjState): Promise<CasinoStats> {
-  if (handValue(b.player).total <= 21 && !isBlackjack(b.player)) {
-    while (handValue(b.dealer).total < 17) b.dealer.push(draw(b));
-  }
-  const stake = b.bet * (b.doubled ? 2 : 1);
-  const { result, payout } = settle(b.player, b.dealer, stake);
-  b.phase = 'done';
-  b.result = result;
-  b.payout = payout;
-  return updateStats(roomId, areaId, key, (s) => {
-    s.balance += payout;
-    s.earned += payout;
-    s.biggestWin = Math.max(s.biggestWin, payout);
-    s.history = pushHistory(s.history, Date.now(), s.balance);
-    return s;
-  });
-}
-
-export async function blackjack(roomId: string, areaId: string, browserId: string, name: string, move: 'deal' | 'hit' | 'stand' | 'double', bet?: number) {
-  await experienceArea(roomId, areaId, 'casino');
-  const key = browserKey(browserId);
-  await limit(`spin:${key}`, 90, 60, 'The dealer needs a moment');
-  const b = await loadBj(roomId, areaId, key);
-  const rev = b.rev;
-  let stats: CasinoStats | null = null;
-  if (move === 'deal') {
-    if (b.phase === 'player') throw new ApiError(409, 'in_hand', 'Finish this hand first');
-    if (!bet || !(BETS as readonly number[]).includes(bet)) throw new ApiError(400, 'bad_bet', 'Pick one of the bets on the table');
-    stats = await updateStats(roomId, areaId, key, (s) => {
-      if (s.balance < bet) throw new ApiError(400, 'broke', s.balance < BETS[0] ? 'Out of credits. Take a free refill.' : 'Not enough credits for that bet');
-      s.balance -= bet;
-      s.spent += bet;
-      s.spins += 1;
-      s.history = pushHistory(s.history, Date.now(), s.balance);
-      return s;
-    });
-    Object.assign(b, { player: [], dealer: [], bet, doubled: false, phase: 'player', result: null, payout: 0 });
-    b.player.push(draw(b));
-    b.dealer.push(draw(b));
-    b.player.push(draw(b));
-    b.dealer.push(draw(b));
-    if (isBlackjack(b.player) || isBlackjack(b.dealer)) stats = await finish(roomId, areaId, key, b);
-  } else {
-    if (b.phase !== 'player') throw new ApiError(409, 'no_hand', 'Deal a new hand first');
-    if (move === 'hit') {
-      b.player.push(draw(b));
-      if (handValue(b.player).total >= 21) stats = await finish(roomId, areaId, key, b);
-    } else if (move === 'stand') {
-      stats = await finish(roomId, areaId, key, b);
-    } else {
-      if (b.player.length !== 2) throw new ApiError(400, 'no_double', 'You can only double on your first two cards');
-      stats = await updateStats(roomId, areaId, key, (s) => {
-        if (s.balance < b.bet) throw new ApiError(400, 'broke', 'Not enough credits to double');
-        s.balance -= b.bet;
-        s.spent += b.bet;
-        s.history = pushHistory(s.history, Date.now(), s.balance);
-        return s;
-      });
-      b.doubled = true;
-      b.player.push(draw(b));
-      stats = await finish(roomId, areaId, key, b);
-    }
-  }
-  await saveBj(roomId, areaId, key, b, rev);
-  await rememberName(key, name);
-  stats ??= (await getStore().get<CasinoStats>(`casino:${roomId}:${areaId}:${key}`)) ?? freshStats(Date.now());
-  return { hand: bjView(b), stats };
 }
