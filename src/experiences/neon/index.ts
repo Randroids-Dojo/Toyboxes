@@ -7,7 +7,7 @@ import './neon.css';
 import { music } from '../../audio/music';
 import { tone } from '../../audio/sfx';
 import { disposeTree } from '../../world/kit';
-import type { Collider } from '../../world/physics';
+import { circle, type Collider } from '../../world/physics';
 import type { CameraShot, CaptureLabels, PlayerState, SpaceAction, SpaceView, Tier } from '../../world/space';
 import type { ExperienceCtx } from '../common';
 import { Hud, Particles, PostFX, Shockwaves } from '../kit';
@@ -21,7 +21,7 @@ import { NovaCore } from './core';
 import { Crowd } from './crowd';
 import { DanceMode, RIVALS, type DanceOutcome } from './dance';
 import { FLOOR_R, NovaFloor } from './floor';
-import { askSoundCheck, DUEL_NIGHT, duelSelect, partySettings, songSelect, tagSetup } from './menus';
+import { askSoundCheck, DUEL_NIGHT, duelSelect, nightSelect, partySettings, songSelect, tagSetup } from './menus';
 import { DuelMode, type DuelOutcome } from './duel';
 import { duelist as duelMeta, duelStars, type DuelistId } from '../../shared/neon/duel';
 import { ArenaView } from './arena-view';
@@ -37,6 +37,7 @@ import { Sky } from './sky';
 import { nova as snd } from './sounds';
 import { BOOTH, buildStation, DOOR, DUEL_TERMINAL, JUDGES, JUKEBOX, ORBIT_SPOT, paintBoard, PEDESTALS, STAR_PAD, stationQuality, TAG_TERMINAL, type StationParts } from './station';
 import { SyncMode, type SyncResult } from './sync';
+import { NightRun } from './night';
 import { Dancer, Fencer, Outfit, type SuitId } from './style';
 import { C } from './util';
 import type { Mode, Nova } from './world';
@@ -348,6 +349,14 @@ export class NeonParty implements SpaceView, Nova {
 
   cameraShot(dt: number): CameraShot | null {
     if (this.intro.on) return this.flyover(dt);
+    if (this.podiumOn) {
+      this.podiumT += dt;
+      const k = Math.min(1, this.podiumT / 1.2);
+      if (this.podiumMesh) this.podiumMesh.position.y = -0.55 + 0.55 * k;
+      if (k >= 1 && this.player_.y < 0.4) this.ctx.teleport(0, 0, 0, 0.5);
+      const a = this.podiumT * 0.35;
+      return { position: new THREE.Vector3(Math.sin(a) * 6, 2.6, Math.cos(a) * 6), target: new THREE.Vector3(0, 1.4, 0), blend: Math.min(1, this.podiumT * 2), lockPlayer: false };
+    }
     return this.mode?.shot(dt) ?? null;
   }
 
@@ -378,7 +387,8 @@ export class NeonParty implements SpaceView, Nova {
     if (this.mode) return this.mode.actions?.(p) ?? [];
     const out: SpaceAction[] = [];
     out.push({ x: BOOTH.x, z: BOOTH.z + 1.6, range: 2.2, label: 'Dance off: pick a song', short: 'Songs', run: () => this.openSongs() });
-    out.push({ x: STAR_PAD.x, z: STAR_PAD.z, range: 1.8, label: 'Dance off with Orbit', short: 'Dance', run: () => this.openSongs() });
+    const resume = NightRun.resumable(this.save.data.night);
+    out.push({ x: STAR_PAD.x, z: STAR_PAD.z, range: 1.8, label: resume ? 'Resume party night' : 'Start party night', short: 'Party', run: () => this.openNights() });
     out.push({ x: TAG_TERMINAL.x, z: TAG_TERMINAL.z + 0.9, range: 1.8, label: 'Laser tag', short: 'Tag', run: () => this.openTag() });
     out.push({ x: DUEL_TERMINAL.x + 0.9, z: DUEL_TERMINAL.z, range: 1.8, label: 'Choose a duel', short: 'Duel', run: () => this.openDuels() });
     DUELISTS.forEach((d, i) => {
@@ -433,16 +443,21 @@ export class NeonParty implements SpaceView, Nova {
     duelSelect(this, (id, echo) => this.startDuel(id, echo), () => undefined, only);
   }
 
-  startDuel(id: DuelistId, echo: boolean, now = false): void {
+  startDuel(id: DuelistId, echo: boolean, now = false, hook?: (o: DuelOutcome) => void): void {
     if (!now) {
-      this.withSync(() => this.startDuel(id, echo, true));
+      this.withSync(() => this.startDuel(id, echo, true, hook));
       return;
     }
     if (this.mode) this.endMode();
     this.ticket = null;
-    this.mode = new DuelMode(this, { id, echo, drill: !this.save.seen('duel-drill'), onDone: (o) => void this.duelDone(id, o) });
-    void this.boards.start(duelBoard(id)).then((t) => (this.ticket = t));
+    this.hook = hook ? { kind: 'duel', run: () => this.startDuel(id, echo, true, hook) } : null;
+    this.mode = new DuelMode(this, { id, echo, drill: !this.save.seen('duel-drill'), onDone: (o) => (hook ? hook(o) : void this.duelDone(id, o)) });
+    if (!hook) void this.boards.start(duelBoard(id)).then((t) => (this.ticket = t));
   }
+
+  /** Set while a party night runs a game: how to restart it. */
+  private hook: { kind: string; run: () => void } | null = null;
+  night: NightRun | null = null;
 
   private async duelDone(id: DuelistId, o: DuelOutcome): Promise<void> {
     if (o.quit) {
@@ -498,15 +513,62 @@ export class NeonParty implements SpaceView, Nova {
     DUELISTS.forEach((d, i) => (this.duelists[i].root.visible = d.id !== id));
   }
 
+  private openNights(): void {
+    nightSelect(
+      this,
+      (n, resume) => this.withSync(() => void new NightRun(this, n, resume ? this.save.data.night : null).begin()),
+      () => undefined,
+      NightRun.resumable(this.save.data.night),
+    );
+  }
+
+  /** The night podium on the Nova floor. */
+  podium(on: boolean): void {
+    this.podiumOn = on;
+    this.podiumT = 0;
+    if (on) {
+      if (!this.podiumMesh) {
+        const g = new THREE.Group();
+        const top = new THREE.Mesh(new THREE.CylinderGeometry(1.15, 1.3, 0.5, 40), new THREE.MeshStandardMaterial({ color: 0x2a1a66, roughness: 0.3, metalness: 0.5 }));
+        top.position.y = 0.25;
+        const rim = new THREE.Mesh(new THREE.TorusGeometry(1.16, 0.04, 6, 48), new THREE.MeshBasicMaterial({ color: new THREE.Color(C.gold).multiplyScalar(2) }));
+        rim.rotation.x = Math.PI / 2;
+        rim.position.y = 0.51;
+        g.add(top, rim);
+        this.podiumMesh = g;
+        this.scene.add(g);
+      }
+      this.podiumMesh.visible = true;
+      this.podiumMesh.position.y = -0.55;
+      this.colliders.push(this.podiumCollider);
+    } else {
+      if (this.podiumMesh) this.podiumMesh.visible = false;
+      const i = this.colliders.indexOf(this.podiumCollider);
+      if (i >= 0) this.colliders.splice(i, 1);
+    }
+  }
+
+  private podiumOn = false;
+  private podiumT = 0;
+  private podiumMesh: THREE.Group | null = null;
+  private podiumCollider = circle(0, 0, 1.2, 0.5, 0.3, false);
+
+  /** Duelists and layouts that a finished night opened. */
+  refreshUnlocks(): void {
+    DUELISTS.forEach((d, i) => this.duelists[i].setDark(this.save.data.nights < DUEL_NIGHT[d.id as DuelistId]));
+    this.wearEquipped();
+  }
+
   private openTag(): void {
     tagSetup(this, (diff, layout) => this.startTag(diff, layout), () => undefined);
   }
 
-  startTag(diff: TagDiff, layout: LayoutId = 'prism', opts: { size?: 2 | 3 | 4; duration?: number; captain?: boolean; echo?: boolean } = {}): void {
+  startTag(diff: TagDiff, layout: LayoutId = 'prism', opts: { size?: 2 | 3 | 4; duration?: number; captain?: boolean; echo?: boolean } = {}, hook?: (o: TagOutcome) => void): void {
     if (this.mode) this.endMode();
     const seed = (Date.now() & 0xffffff) | 1;
     this.ticket = null;
-    const board = diff !== 'easy' && !opts.duration;
+    this.hook = hook ? { kind: 'tag', run: () => this.startTag(diff, layout, opts, hook) } : null;
+    const board = diff !== 'easy' && !opts.duration && !hook;
     this.mode = new TagMode(this, this.arena, {
       diff,
       size: opts.size ?? 3,
@@ -516,7 +578,7 @@ export class NeonParty implements SpaceView, Nova {
       echo: opts.echo ?? false,
       practice: !this.save.seen('tag-practice'),
       seed,
-      onDone: (o) => void this.tagDone(diff, layout, o, board),
+      onDone: (o) => (hook ? hook(o) : void this.tagDone(diff, layout, o, board)),
     });
     if (board) void this.boards.start('tag').then((t) => (this.ticket = t));
   }
@@ -622,6 +684,14 @@ export class NeonParty implements SpaceView, Nova {
 
   pauseItems(): { label: string; run: () => void }[] {
     const m = this.mode;
+    const playing = (m instanceof DanceMode || m instanceof TagMode || m instanceof DuelMode) && m.playing;
+    if (this.night && this.hook && playing) {
+      const restart = this.hook.run;
+      return [
+        { label: 'Restart this game', run: () => restart() },
+        { label: 'Leave the party night', run: () => this.night?.leave() },
+      ];
+    }
     if (m instanceof DanceMode && m.playing) {
       return [
         { label: 'Restart the song', run: () => this.startDance(m.song, m.diff, true) },
@@ -639,16 +709,17 @@ export class NeonParty implements SpaceView, Nova {
     return [];
   }
 
-  startDance(song: SongId, diff: Diff, now = false): void {
+  startDance(song: SongId, diff: Diff, now = false, hook?: (o: DanceOutcome) => void, rivalId?: string): void {
     if (!now) {
-      this.withSync(() => this.startDance(song, diff, true));
+      this.withSync(() => this.startDance(song, diff, true, hook, rivalId));
       return;
     }
     if (this.mode) this.endMode();
-    const rival = diff === 'nova' ? RIVALS.orbit : song === 'lights' ? RIVALS.twirl : song === 'glitter' ? RIVALS.shimmer : song === 'heart' ? RIVALS.boogie : RIVALS.strobe;
-    const mode = new DanceMode(this, { song, diff, rival, seed: Date.now() & 0xffff, onDone: (o) => void this.danceDone(song, diff, o) });
+    this.hook = hook ? { kind: 'dance', run: () => this.startDance(song, diff, true, hook, rivalId) } : null;
+    const rival = rivalId ? RIVALS[rivalId] : diff === 'nova' ? RIVALS.orbit : song === 'lights' ? RIVALS.twirl : song === 'glitter' ? RIVALS.shimmer : song === 'heart' ? RIVALS.boogie : RIVALS.strobe;
+    const mode = new DanceMode(this, { song, diff, rival, seed: Date.now() & 0xffff, onDone: (o) => (hook ? hook(o) : void this.danceDone(song, diff, o)) });
     this.mode = mode;
-    const modeId = diff === 'normal' ? (DANCE_BOARD[song] ?? null) : null;
+    const modeId = diff === 'normal' && !hook ? (DANCE_BOARD[song] ?? null) : null;
     this.ticket = null;
     if (modeId && !this.save.data.sync.wide) void this.boards.start(modeId).then((t) => (this.ticket = t));
   }
@@ -891,6 +962,23 @@ export class NeonParty implements SpaceView, Nova {
   debugDuel(id: DuelistId = 'sprocket', echo = false): void {
     this.ctx.ui.closeAll();
     this.startDuel(id, echo, true);
+  }
+
+  debugNight(n = 1): void {
+    this.ctx.ui.closeAll();
+    this.save.data.sync.checked = true;
+    void new NightRun(this, n, null).begin();
+  }
+
+  /** Ends the current game at once (playtests). */
+  debugEnd(): void {
+    (this.mode as unknown as { debugEnd?: () => void })?.debugEnd?.();
+  }
+
+  debugSetNights(n: number): void {
+    this.save.data.nights = n;
+    this.save.save();
+    this.refreshUnlocks();
   }
 
   debugSkipIntro(): void {

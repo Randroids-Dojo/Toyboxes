@@ -10,6 +10,7 @@ import { SONGS, type SongId } from '../../shared/neon/songs';
 import { LAYOUT_NAMES, type LayoutId } from '../../shared/neon/arena';
 import { TAG_DIFF_NAMES, type TagDiff } from '../../shared/neon/tag';
 import { DUELISTS as DUEL_LIST, type DuelistId } from '../../shared/neon/duel';
+import { NIGHTS as NIGHT_LIST } from '../../shared/neon/night';
 import { songData } from './music';
 import type { Nova } from './world';
 
@@ -256,6 +257,37 @@ export function duelSelect(nova: Nova, onPick: (id: DuelistId, echo: boolean) =>
       if (!picked) onClose();
     },
     initial: () => first ?? back,
+  };
+  ui.open(panel);
+}
+
+/** The star pad: pick a party night (or resume a saved one). */
+export function nightSelect(nova: Nova, onPick: (n: number, resume: boolean) => void, onClose: () => void, canResume: boolean): void {
+  const ui = nova.ctx.ui;
+  const save = nova.save.data;
+  let picked = false;
+  const pick = (n: number, resume: boolean) => {
+    picked = true;
+    ui.close(panel);
+    onPick(n, resume);
+  };
+  const resume = canResume && save.night ? button(`Resume ${NIGHT_LIST.find((x) => x.n === save.night!.n)!.name}`, () => pick(save.night!.n, true), 'primary') : null;
+  const rows = NIGHT_LIST.map((d) => {
+    const locked = d.n > save.nights + 1;
+    const st = ['tag', 'duel', 'dance'].reduce((a, k) => a + (save.stars[`night${d.n}:${k}`] ?? 0), 0);
+    const best = save.best[`night${d.n}`];
+    const b = button(`${d.n}. ${d.name}`, () => pick(d.n, false), !resume && d.n === Math.min(5, save.nights + 1) ? 'primary' : 'ghost');
+    b.disabled = locked;
+    return h('div', { class: `nova-row${locked ? ' locked' : ''}` }, b, h('small', { class: 'muted' }, locked ? `Finish night ${d.n - 1}` : `${'★'.repeat(st)}${'☆'.repeat(9 - st)}${best ? ` · ${best.toLocaleString('en-US')}` : ''}`));
+  });
+  const back = button('Back', () => ui.close(panel), 'ghost');
+  const panel: Panel = {
+    el: card('Party night', 'Star pad', h('p', { class: 'xk-tagline' }, 'Laser tag, a blade duel and a dance off, back to back. Every night ends on the podium.'), resume ? h('div', { class: 'actions' }, resume) : null, h('div', { class: 'nova-nights' }, ...rows), h('div', { class: 'actions' }, back)),
+    onBack: () => ui.close(panel),
+    onClose: () => {
+      if (!picked) onClose();
+    },
+    initial: () => resume ?? (rows[Math.min(4, save.nights)].querySelector('button') as HTMLElement),
   };
   ui.open(panel);
 }

@@ -391,6 +391,12 @@ export class DuelMode implements Mode {
     this.finish(true);
   }
 
+  /** Playtests: let the rest of the bout run out unplayed. */
+  debugEnd(): void {
+    if (this.phase === 'drill') this.startBout();
+    for (const x of this.judge.sweep(this.script.endT + 10)) this.react(x);
+  }
+
   // ---- drawing
 
   private animate(dt: number, now: number): void {

@@ -795,6 +795,14 @@ export class TagMode implements Mode {
     this.opts.onDone({ score: scoreTag(log), log, won: s.cyan > s.magenta, quit, us: s.cyan, them: s.magenta });
   }
 
+  /** Playtests: run the clock out now (the score stands). */
+  debugEnd(): void {
+    if (this.phase !== 'play') return;
+    if (this.sim.score.cyan === this.sim.score.magenta) this.sim.score.cyan++;
+    this.sim.time = this.sim.cfg.duration;
+    this.sim.over = true;
+  }
+
   /** Leaves the match early (pause menu). */
   abandon(): void {
     this.finish(true);

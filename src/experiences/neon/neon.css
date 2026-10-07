@@ -763,3 +763,64 @@
   margin-left: -5px;
   border-radius: 50%;
 }
+
+/* ---- party night lineup */
+
+.nova-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 10px 0 14px;
+}
+
+.nova-tile {
+  display: grid;
+  gap: 4px;
+  padding: 12px 10px;
+  border-radius: 14px;
+  background: rgba(134, 104, 207, 0.14);
+  border: 2px solid rgba(180, 156, 255, 0.3);
+  text-align: center;
+}
+
+.nova-tile small {
+  font: 700 0.7rem var(--body);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+.nova-tile b {
+  font: 400 1.05rem var(--display);
+  color: #fff4fe;
+}
+
+.nova-tile span {
+  font: 600 0.8rem var(--body);
+  color: var(--nova-gold, #ffc93c);
+}
+
+.nova-tile.next {
+  border-color: #ffc93c;
+  box-shadow: 0 0 18px rgba(255, 201, 60, 0.35);
+}
+
+.nova-tile.done {
+  opacity: 0.7;
+}
+
+.nova-nights {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0 14px;
+}
+
+.nova-row.locked {
+  opacity: 0.55;
+}
+
+@media (max-width: 520px) {
+  .nova-tiles {
+    grid-template-columns: 1fr;
+  }
+}

@@ -8,6 +8,7 @@ import { danceCeiling, scoreDance } from './judge.js';
 import type { SongId } from './songs.js';
 import { tagBoardScore, tagCeiling } from './tag.js';
 import { DUELISTS, duelCeiling, scoreDuel, scriptFor, type DuelistId } from './duel.js';
+import { nightCeiling, nightMinMs, scoreNight } from './night.js';
 
 /** Board ids for the dance songs (normal charts only). */
 export const DANCE_BOARD: Partial<Record<SongId, string>> = {
@@ -80,6 +81,7 @@ export function tagFromLog(log: unknown): number | null {
 
 export function neonModes(): ScoreMode[] {
   const out: ScoreMode[] = [
+    { id: 'night', label: 'Party nights', better: 'higher', unit: 'points', min: 0, max: nightCeiling(), ticket: { minMs: nightMinMs() }, fromLog: (log) => scoreNight(log)?.total ?? null },
     { id: 'tag', label: 'Laser tag', better: 'higher', unit: 'points', min: 0, max: tagCeiling(TAG_SECONDS + 60), ticket: { minMs: (TAG_SECONDS - 5) * 1000 }, fromLog: tagFromLog },
   ];
   for (const song of Object.keys(DANCE_BOARD) as SongId[]) {

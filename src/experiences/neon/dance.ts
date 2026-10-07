@@ -434,6 +434,12 @@ export class DanceMode implements Mode {
     }
   }
 
+  /** Playtests: the rest of the song goes by unplayed. */
+  debugEnd(): void {
+    for (const x of this.judge.sweep(Infinity)) this.react(x);
+    this.finish();
+  }
+
   /** Leaves mid-song (from the pause menu). */
   abandon(): void {
     this.quit = true;
