@@ -92,7 +92,7 @@ export const STORM_SONG: Song = {
       bars: 4,
       tracks: [
         { voice: 'kick', pattern: 'x.......x..x....', gain: 0.8 },
-        { voice: 'tom', pattern: 'D3 . . . . . A2 . . . D3 . . . . . D3 . . . . . A2 . . . F2 . G2 . A2 .', gain: 0.5 },
+        { voice: 'tom', pattern: 'X.....x...x.....X.....x...x.x.x.', gain: 0.5 },
         { voice: 'rim', pattern: 'x.x.x.x.x.x.x.x.', gain: 0.18 },
         { voice: 'snare', pattern: '....x.......x...', gain: 0.4 },
         { voice: 'brass', pattern: '[D3 A3 D4] . . . . . . . [C3 G3 C4] . . . [D3 A3 D4] . . . [D3 A3 D4] . . . . . . . [F3 C4 F4] . . . [G3 D4 G4] . . .', gain: 0.32 },
@@ -137,7 +137,7 @@ export const HORIZON_SONG: Song = {
       tracks: [
         { voice: 'choir', pattern: 'Dmaj7 Eadd9 Bm7 Asus2', every: 16, octave: 3, gain: 0.4 },
         { voice: 'strings', pattern: 'D Eadd9 Bm Asus2', every: 16, octave: 4, gain: 0.22 },
-        { voice: 'tom', pattern: 'D2 . . . . . . . . . . . D2 . D2 .', gain: 0.35 },
+        { voice: 'tom', pattern: 'X...........x.o.', gain: 0.35 },
         { voice: 'glass', pattern: 'A5 . . . . . . . E6 . . . . . . . F#5 . . . . . . . C#6 . . . . . . .', gain: 0.18 },
       ],
     },

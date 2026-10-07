@@ -304,3 +304,63 @@ describe('comet surf', () => {
     expect(Math.hypot(start.x - DOCK.x, start.z - DOCK.z)).toBeLessThan(DOCK.r + 3);
   });
 });
+
+describe('galaxy save, songs and kicks', () => {
+  const store = new Map<string, string>();
+  (globalThis as unknown as { localStorage: Storage }).localStorage = {
+    getItem: (k: string) => store.get(k) ?? null,
+    setItem: (k: string, v: string) => void store.set(k, v),
+    removeItem: (k: string) => void store.delete(k),
+    clear: () => store.clear(),
+    key: () => null,
+    length: 0,
+  } as Storage;
+  const key = 'toyboxes.progress.galaxy.room.area.v2';
+
+  it('starts fresh, survives damaged saves and clamps odd values', async () => {
+    const { Save, moonStars } = await import('../src/experiences/galaxy/save');
+    store.clear();
+    expect(new Save('room', 'area').total).toBe(0);
+    store.set(key, '{not json');
+    expect(new Save('room', 'area').total).toBe(0);
+    store.set(key, JSON.stringify({ stars: { ring: 7, wake: 1, storm: 'x' }, moons: 0b1111, best: { ring: 52000 } }));
+    const s = new Save('room', 'area');
+    expect(s.data.stars).toEqual({ wake: 1, frenzy: 0, ring: 3, storm: 0, comet: 0 });
+    expect(s.total).toBe(5);
+    expect(s.data.best.ring).toBe(52000);
+    expect(s.data.best.frenzy).toBeNull();
+    expect(moonStars(255)).toBe(2);
+    expect(moonStars(0b1110)).toBe(0);
+    // Starting again keeps the bests and drops stars and moons.
+    s.restart();
+    expect(s.total).toBe(0);
+    expect(s.data.best.ring).toBe(52000);
+    expect(new Save('room', 'area').data.best.ring).toBe(52000);
+  });
+
+  it('every galaxy song is valid', async () => {
+    const { songProblem } = await import('../src/audio/music');
+    const songs = await import('../src/experiences/galaxy/audio');
+    for (const song of [songs.HUB_SONG, songs.FRENZY_SONG, songs.RING_SONG, songs.STORM_SONG, songs.COMET_SONG, songs.HORIZON_SONG]) expect(songProblem(song), song.name).toBeNull();
+  });
+
+  it('the kick (and the remote kick) only finds an orb in front, close by', async () => {
+    const THREE = await import('three');
+    const { Orbs } = await import('../src/experiences/galaxy/orbs');
+    const orbs = new Orbs(new THREE.Scene(), { uTime: { value: 0 } });
+    const p = { x: 0, z: 0, y: 0, vy: 0, grounded: true, yaw: 0, vx: 0, vz: 0, riding: null };
+    orbs.spawn(0, 1.2, 'plain', true);
+    expect(orbs.nearestKickable(p)).not.toBeNull();
+    orbs.clear();
+    orbs.spawn(0, -1.2, 'plain', true);
+    expect(orbs.nearestKickable(p)).toBeNull();
+    orbs.clear();
+    orbs.spawn(0, 3, 'plain', true);
+    expect(orbs.nearestKickable(p)).toBeNull();
+    // A moonball's first kick only shoves it.
+    orbs.clear();
+    const moon = orbs.spawn(0, 1, 'moon', true)!;
+    expect(orbs.kick(moon, 0)).toBe('shove');
+    expect(orbs.kick(moon, 0)).toBe('launch');
+  });
+});
