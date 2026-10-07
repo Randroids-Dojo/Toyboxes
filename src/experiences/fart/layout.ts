@@ -107,8 +107,10 @@ export function villageBoxes(): LBox[] {
   for (const r of ROOFED) b.push(...parapets(r));
   const hedge = (id: string, x: number, z: number, hw: number, hd: number, h = 1.6) => b.push({ id, x, z, hw, hd, h, cam: false });
   // South lane hedges (the lane is x -3 to 3 from z 22 to the end).
-  hedge('lane-w', -3.45, 28.2, 0.45, 5.2);
-  hedge('lane-w2', -3.45, 23.0, 0.45, 0.95);
+  // The west lane hedge has a gap for the garden gate (the way out) at z 22.55 to 24.45.
+  hedge('lane-w', -3.45, 28.925, 0.45, 4.475);
+  hedge('lane-w2', -3.45, 21.975, 0.45, 0.575);
+  b.push({ id: 'gate', x: -3.5, z: EXIT.z, hw: 0.08, hd: 0.94, h: 1.2, cam: false });
   hedge('lane-e', 3.45, 27.7, 0.45, 5.7);
   // Training hedge with the gap at x -3 to 3.
   hedge('hedge-w', -8.5, 12.5, 5.5, 0.4);

@@ -252,8 +252,8 @@ export function buildVillage(parent: THREE.Object3D, tier: Tier, owner: string):
     const cyl = new THREE.CylinderGeometry(long ? hd : hw, long ? hd : hw, (long ? hw : hd) * 2, 10, 1);
     P.add(cyl, M.hedge, col, mtx(x, h - 0.25, z, long ? 0 : Math.PI / 2, 0, long ? Math.PI / 2 : 0, 1, 1, 0.55), { tile: 1.5 });
   };
-  hedgeBox(-3.45, 28.2, 0.45, 5.2, 1.6);
-  hedgeBox(-3.45, 23.0, 0.45, 0.95, 1.6);
+  hedgeBox(-3.45, 28.925, 0.45, 4.475, 1.6);
+  hedgeBox(-3.45, 21.975, 0.45, 0.575, 1.6);
   hedgeBox(3.45, 27.7, 0.45, 5.7, 1.6);
   hedgeBox(-8.5, 12.5, 5.5, 0.4, 1.6);
   hedgeBox(8.5, 12.5, 5.5, 0.4, 1.6);
