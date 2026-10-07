@@ -66,6 +66,8 @@ export class RaceKart extends Vehicle {
   private lastSteerAge = 9;
   /** The drift button is still held after a drift ended: it never turns into a brake. */
   private brakeLatch = false;
+  /** Playtests: something else drives this kart (the computer drivers' brain). */
+  auto: ((dt: number) => { throttle: number; steer: number; brake: number }) | null = null;
   /** Signed sideways offset from the centre line, set by the world each step. */
   edgeOff = 0;
   /** Whether the kart is on the road surface (not grass or sand). */
@@ -186,6 +188,7 @@ export class RaceKart extends Vehicle {
   }
 
   drive(dt: number, throttle: number, steer: number, brake: number, colliders: Collider[]): void {
+    if (this.auto && !this.frozen) ({ throttle, steer, brake } = this.auto(dt));
     this.immune = Math.max(0, this.immune - dt);
     this.bubble = Math.max(0, this.bubble - dt);
     if (Math.abs(steer) > 0.3) {

@@ -7,6 +7,7 @@
 import { clamp, damp, wrapAngle, type Collider } from '../../world/physics';
 import { circle } from '../../world/physics';
 import type { ItemId, SpeedClass } from '../../shared/kart/rules';
+import type { DriverDef } from './drivers';
 import { HW, type Circuit } from './circuit';
 import { progress, type Racer } from './racer';
 
@@ -30,13 +31,21 @@ export interface AiWorld {
 
 export function driveCpu(r: Racer, w: AiWorld, dt: number, colliders: Collider[]): void {
   const v = r.kart;
-  const c = w.c;
-  const ai = r.ai;
-  const def = r.def!;
   if (v.frozen || r.grab) {
     v.drive(dt, 0, 0, 1, colliders);
     return;
   }
+  const inp = aiInputs(r, r.def!, w, dt);
+  const others = w.racers.filter((o) => o !== r && !o.grab).map((o) => circle(o.kart.pos.x, o.kart.pos.z, o.kart.t.radius * 0.9, o.kart.pos.y + 1.1, 0.7, false));
+  v.drive(dt, inp.throttle, inp.steer, inp.brake, colliders.concat(others));
+  aiItems(r, w, dt);
+}
+
+/** What a driver with this style would press this step (also the playtests' autopilot for your kart). */
+export function aiInputs(r: Racer, def: DriverDef, w: AiWorld, dt: number): { throttle: number; steer: number; brake: number } {
+  const v = r.kart;
+  const c = w.c;
+  const ai = r.ai;
   const racing = w.racing && r.finishedAt === null;
   let skill = def.skill * (racing ? w.cls.skill : 0.9);
   let nerve = def.nerve * (racing ? w.cls.nerve : 0.9);
@@ -104,10 +113,12 @@ export function driveCpu(r: Racer, w: AiWorld, dt: number, colliders: Collider[]
   if (!ai.drifting && racing && corner && Math.abs(steer) > 0.4 && speed > 9 && speed < cornerV + 1 && !v.air && v.onRoad) ai.drifting = w.rnd() < 0.5 + def.nerve * 0.3;
   if (ai.drifting && (Math.abs(steer) < 0.15 || speed < 6 || !corner || speed > cornerV + 2.5)) ai.drifting = false;
   const brake = ai.drifting ? 1 : 0;
-  const others = w.racers.filter((o) => o !== r && !o.grab).map((o) => circle(o.kart.pos.x, o.kart.pos.z, o.kart.t.radius * 0.9, o.kart.pos.y + 1.1, 0.7, false));
-  v.drive(dt, ai.drifting ? Math.max(throttle, 0.6) : throttle, steer, brake, colliders.concat(others));
+  return { throttle: ai.drifting ? Math.max(throttle, 0.6) : throttle, steer, brake };
+}
 
-  // ---- Items.
+function aiItems(r: Racer, w: AiWorld, dt: number): void {
+  const ai = r.ai;
+  const racing = w.racing && r.finishedAt === null;
   if (!w.items || !r.item || r.roulette > 0 || !racing) return;
   ai.holdFor += dt;
   if (ai.holdFor < w.cls.itemDelay) return;

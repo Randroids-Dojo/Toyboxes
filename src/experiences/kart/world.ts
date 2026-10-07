@@ -20,7 +20,7 @@ import { circle, damp, type Collider } from '../../world/physics';
 import type { CameraShot, PlayerState, SpaceAction, SpaceView, Spot, Tier } from '../../world/space';
 import { formatLap, ordinal, type ExperienceCtx } from '../common';
 import { Hud, Particles, Shockwaves, music } from '../kit';
-import { driveCpu, type AiWorld } from './ai';
+import { aiInputs, driveCpu, type AiWorld } from './ai';
 import { dressBlockTown } from './build/blocktown';
 import { buildScene, setTier, type CircuitScene, type ThemeParts } from './build/scene';
 import { Shape, ball, cyl, rbox } from './build/shape';
@@ -720,6 +720,8 @@ export class KartWorld implements SpaceView {
       r.place = i + 1;
       r.hitsDealt = 0;
       r.hitsTaken = 0;
+      // Each driver's wander comes from the race's seed, so a seed replays the same race.
+      r.ai.phase = this.session!.rnd() * 10;
     });
     this.ctx.teleport(this.kart.pos.x, this.kart.pos.z, this.kart.yaw);
     this.kart.frozen = true;
@@ -2162,6 +2164,13 @@ export class KartWorld implements SpaceView {
       steps++;
     }
     return { steps };
+  }
+
+  /** Lets the computer drivers' brain drive your kart (Barnaby's style), for motion screenshots. */
+  debugAutopilot(on: boolean): boolean {
+    const def = driverById('barnaby')!;
+    this.kart.auto = on ? (dt) => aiInputs(this.you, def, this.aiWorld(!!this.session), dt) : null;
+    return true;
   }
 
   /** Teleports your kart to a distance along the lap. */
