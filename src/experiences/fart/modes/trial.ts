@@ -17,6 +17,7 @@ import type { PuffSave, TrialId } from '../sim/progress';
 import type { Village3 } from '../town';
 import type { Village } from '../village';
 import type { Words } from '../words';
+import type { Boards } from '../boards';
 
 export interface TrialWorld {
   ctx: ExperienceCtx;
@@ -36,6 +37,7 @@ export interface TrialWorld {
   dust: Particles;
   rings: Shockwaves;
   save: PuffSave;
+  boards: Boards;
   saveNow(): void;
   /** Golden beans earned in a trial (keeps the best). */
   trialBeans(id: TrialId, beans: number, best: number | null, better: 'lower' | 'higher'): { newBeans: number; newBest: boolean };

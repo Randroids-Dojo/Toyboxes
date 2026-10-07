@@ -32,6 +32,8 @@ import { TOTAL_BEANS, beanCount, freshSave, migrate, newUnlocks, trialOpen, TRIA
 import { openProgramme, openTootomatic, TRIAL_NAMES } from './dialogs';
 import type { Trial, TrialWorld } from './modes/trial';
 import type { BrainEvent } from './sim/people';
+import { Boards } from './boards';
+import { RocketRings } from './modes/rings';
 
 const DAY = {
   hemiSky: new THREE.Color(0xcfefff),
@@ -52,7 +54,9 @@ const NIGHT = {
 
 /** Trial modules register here (see modes/). */
 export type TrialFactory = (w: TrialWorld, opts: Record<string, unknown>) => Trial;
-export const TRIALS: Partial<Record<TrialId, TrialFactory>> = {};
+export const TRIALS: Partial<Record<TrialId, TrialFactory>> = {
+  rings: (w, o) => new RocketRings(w, o),
+};
 
 export class FartSimulator implements SpaceView {
   readonly scene = new THREE.Scene();
@@ -84,6 +88,7 @@ export class FartSimulator implements SpaceView {
   readonly mover: Mover;
   readonly vil: Village3;
   readonly props: Props;
+  readonly boards: Boards;
   private progress: Progress<PuffSave>;
   save: PuffSave;
   private mischief: Mischief;
@@ -180,6 +185,7 @@ export class FartSimulator implements SpaceView {
       steam: (at) => this.dust.burst({ at, count: 6, shape: 'up', speed: [0.4, 1], color: 0xffffff, size: [0.15, 0.3], sizeEnd: 2.2, life: [0.8, 1.4], gravity: -0.8, alpha: 0.6 }),
       bubbles: (at, n) => this.sparks.burst({ at, count: n, shape: 'up', radius: 1.2, speed: [0.6, 1.4], color: [0x9fe3ff, 0xffffff], size: [0.3, 0.7], sizeEnd: 1.4, life: [1.4, 2.4], gravity: -1.2, drag: 0.6, alpha: 0.5 }),
     });
+    this.boards = new Boards(ctx, this.village);
     this.ph = new PuffHud(ctx.ui.hud);
     this.hud = new Hud(ctx, { accent: '#e8574a', accent2: '#6fbf3b', panel: 'light' });
     this.post = new PostFX(this.scene, { bloom: { strength: 0.35, radius: 0.5, threshold: 0.86 }, vignette: 0.28, saturation: 1.08, contrast: 1.04, lift: 0.02 });
@@ -520,6 +526,7 @@ export class FartSimulator implements SpaceView {
       dust: this.dust,
       rings: this.rings,
       save: this.save,
+      boards: this.boards,
       saveNow: () => this.progress.save(),
       trialBeans: (id, beans, best, better) => this.trialBeans(id, beans, best, better),
       endTrial: (next) => this.endTrial(next),
@@ -892,6 +899,7 @@ export class FartSimulator implements SpaceView {
 
   dispose(): void {
     music.stop();
+    this.boards.dispose();
     this.trial?.dispose();
     this.trial = null;
     this.mover.dispose();
@@ -971,6 +979,11 @@ export class FartSimulator implements SpaceView {
     this.save = this.progress.data;
     this.mischief = new Mischief([]);
     this.ph.beans(0, TOTAL_BEANS);
+  }
+
+  /** Puts the player at a point in the air (playtests use real input from there). */
+  debugPlace(x: number, y: number, z: number, yaw: number): void {
+    this.ctx.teleport(x, z, yaw, y);
   }
 
   debugStartTrial(id: TrialId, opts: Record<string, unknown> = {}): void {
