@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import { BJ_RULES, bjAdvice, bjAdviceReason, legalMoves, type BjMove, type BjRoundView, type BjTable } from '../../../shared/casino/blackjack';
 import { cardRank, cardSuit, handValue, type Card } from '../../../shared/casino-games';
-import type { GameId } from '../../../shared/casino/progress';
+import { canPlay, type GameId } from '../../../shared/casino/progress';
 import type { PlayerState, SpaceAction } from '../../../world/space';
 import { button, h } from '../../../ui/ui';
 import { DISPLAY_FONT, keep } from '../../../world/kit';
@@ -390,7 +390,7 @@ export class Blackjack {
   }
 
   actions(_p: PlayerState, act: (label: string, short: string, run: () => void) => SpaceAction): SpaceAction[] {
-    if (!this.host.eco.stats) return [];
+    if (!this.host.eco.stats || !canPlay(this.host.eco.rank, this.game)) return [];
     const v = this.currentView();
     const label = v?.phase === 'player' ? 'Finish your hand' : this.o.label;
     return [{ ...this.o.spot, ...act(label, this.o.short, () => this.open()) }];

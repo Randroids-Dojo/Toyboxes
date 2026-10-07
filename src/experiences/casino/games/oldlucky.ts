@@ -301,6 +301,8 @@ export class OldLucky {
   private marqueeTex: THREE.CanvasTexture;
   private marqueeKey = '';
   private fameMesh: THREE.Mesh;
+  /** The wall plaques, so the casino can hang them on their walls. */
+  readonly plaques: { fame: THREE.Object3D[]; pay: THREE.Object3D[] } = { fame: [], pay: [] };
   private fameKey = '';
   private paylineMat: THREE.MeshStandardMaterial;
   private lampMat: THREE.MeshStandardMaterial;
@@ -643,10 +645,13 @@ export class OldLucky {
     const pp = new THREE.Mesh(own(new THREE.PlaneGeometry(2.0, 1.4)), own(new THREE.MeshStandardMaterial({ map: payPlaque, emissive: new THREE.Color('#ffffff'), emissiveMap: payPlaque, emissiveIntensity: 0.4, roughness: 0.5 })));
     pp.position.set(SPOTS.paytable.x, 2.6, -8.83);
     host.scene.add(pp);
-    for (const [x, w, hh, y] of [[SPOTS.fame.x, 3.0, 2.0, 3.0], [SPOTS.paytable.x, 2.0, 1.4, 2.6]] as const) {
+    this.plaques.fame.push(this.fameMesh);
+    this.plaques.pay.push(pp);
+    for (const [x, w, hh, y, list] of [[SPOTS.fame.x, 3.0, 2.0, 3.0, this.plaques.fame], [SPOTS.paytable.x, 2.0, 1.4, 2.6, this.plaques.pay]] as const) {
       const fr = new THREE.Mesh(own(new THREE.BoxGeometry(w + 0.16, hh + 0.16, 0.05)), m.brass);
       fr.position.set(x, y, -8.86);
       host.scene.add(fr);
+      list.push(fr);
     }
     this.paint();
   }

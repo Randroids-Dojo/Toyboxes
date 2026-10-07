@@ -29,6 +29,7 @@ import { ARRIVAL, BLACKJACK, CAPTAIN_TABLE, COLLIDERS, EXIT, OLD_LUCKY, SPOTS, S
 import { Lights } from './lighting';
 import { Logbook } from './logbook';
 import { Gates } from './gates';
+import { Wheelhouse } from './wheelhouse';
 import { makeMats, tierMats, type Mats } from './materials';
 import { River } from './river';
 import { Staff, type StaffId } from './staff';
@@ -76,6 +77,7 @@ export class Casino implements SpaceView {
   private wheel: RiverWheel;
   private logbook: Logbook;
   private falls: LuckyFalls;
+  private wheelhouse: Wheelhouse;
   private poker: FiveCardCabin;
   private gates: Gates;
   private doors: { left: THREE.Group; right: THREE.Group; open: number } | null = null;
@@ -175,6 +177,21 @@ export class Casino implements SpaceView {
     this.gates = new Gates(this.host, this.staff);
     this.falls = new LuckyFalls(this.host);
     this.poker = new FiveCardCabin(this.host);
+    this.wheelhouse = new Wheelhouse(this.host, this.river);
+    // Plaques and boards hung on walls go with their wall when the cutaway drops it.
+    for (const [wallId, objs] of [
+      ['starA', this.lucky.plaques.fame],
+      ['starB', this.lucky.plaques.pay],
+      ['wheelPart', this.wheelhouse.plaques],
+    ] as const) {
+      const wall = this.boat.walls.find((w) => w.def.id === wallId);
+      if (!wall) continue;
+      wall.full.updateMatrixWorld(true);
+      for (const o of objs) {
+        o.updateMatrixWorld(true);
+        wall.full.attach(o);
+      }
+    }
     this.gates.openLogbook = () => this.logbook.open();
 
     this.eco.onChange(() => this.paintHud());
@@ -266,6 +283,7 @@ export class Casino implements SpaceView {
           this.ctx.ui.closeAll();
           this.gates.rankUp(rank);
         }
+        this.wheelhouse.ringBell();
       }, 1200 * ids.length);
     }
   }
@@ -310,7 +328,7 @@ export class Casino implements SpaceView {
   actions(player: PlayerState): SpaceAction[] {
     if (player.riding) return [];
     const act = (label: string, short: string, run: () => void) => ({ label, short, run }) as SpaceAction;
-    return [...this.lucky.actions(player, act), ...this.roulette.actions(player, act), ...this.blackjack.actions(player, act), ...this.wheel.actions(player, act), ...this.logbook.actions(player, act), ...this.gates.actions(player, act), ...this.falls.actions(player, act), ...this.poker.actions(player, act), ...this.captain.actions(player, act)];
+    return [...this.lucky.actions(player, act), ...this.roulette.actions(player, act), ...this.blackjack.actions(player, act), ...this.wheel.actions(player, act), ...this.logbook.actions(player, act), ...this.gates.actions(player, act), ...this.falls.actions(player, act), ...this.poker.actions(player, act), ...this.wheelhouse.actions(player, act), ...this.captain.actions(player, act)];
   }
 
   kickAction(player: PlayerState): { label: string; run: () => void } | null {
@@ -472,6 +490,7 @@ export class Casino implements SpaceView {
     this.gates.update(dt, this.player);
     this.falls.update(dt);
     this.poker.update(dt);
+    this.wheelhouse.update(dt);
     this.updateDoors(raw);
     this.blackjack.update(dt);
     this.captain.update(dt);
@@ -515,6 +534,7 @@ export class Casino implements SpaceView {
     this.gates.dispose();
     this.falls.dispose();
     this.poker.dispose();
+    this.wheelhouse.dispose();
     this.blackjack.dispose();
     this.captain.dispose();
     this.staff.dispose();
@@ -566,6 +586,11 @@ export class Casino implements SpaceView {
   debugTimeScale(k: number): number {
     this.scale = Math.max(0.1, Math.min(10, k));
     return this.scale;
+  }
+
+  /** Shows the outside as the helm would (visuals only, for screenshots). */
+  debugScenery(s: 'town' | 'sunset' | 'moon'): void {
+    this.river.scenery = s;
   }
 
   /** Reads your record from the server again (read only). */

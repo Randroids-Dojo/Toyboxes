@@ -62,7 +62,7 @@ export class Lights {
     this.group.add(this.warm);
 
     const bulbSpots: { p: THREE.Vector3; color: string; festoon?: number }[] = [];
-    const crystalMat = own(new THREE.MeshStandardMaterial({ color: '#fff4dc', emissive: new THREE.Color('#ffd9a0'), emissiveIntensity: 0.12, roughness: 0.15, metalness: 0.1 }));
+    const crystalMat = own(new THREE.MeshStandardMaterial({ color: '#fff4dc', emissive: new THREE.Color('#ffd9a0'), emissiveIntensity: 0.05, roughness: 0.3, metalness: 0.1 }));
 
     // Three chandeliers down the clerestory.
     for (const x of [-7, 0, 7]) {
@@ -98,8 +98,9 @@ export class Lights {
       cb.build(g, { cast: false });
       this.group.add(g);
       this.chandeliers.push({ group: g, x, z: 0, y, bulbs: [firstBulb, bulbSpots.length] });
-      const pl = new THREE.PointLight(C.chandelier, 18, 16, 1.6);
-      pl.position.set(x, y + 0.2, 0);
+      // The light hangs just below the chandelier, so its own crystals do not blow out.
+      const pl = new THREE.PointLight(C.chandelier, 13, 16, 1.6);
+      pl.position.set(x, y - 0.7, 0);
       this.chandLights.push(pl);
       this.group.add(pl);
     }
@@ -228,9 +229,9 @@ export class Lights {
       ch.group.rotation.y = Math.sin(t * 0.3 + ch.x) * 0.04;
     }
     const swell = 1 + this.glow * 0.8;
-    for (const l of this.chandLights) l.intensity = 18 * this.dim * swell;
+    for (const l of this.chandLights) l.intensity = 13 * this.dim * swell;
     this.warm.intensity = (0.55 + night * 0.1) * this.dim;
-    this.m.bulb.emissiveIntensity = (0.95 + night * 0.35) * (0.6 + 0.4 * this.dim) * swell;
+    this.m.bulb.emissiveIntensity = (0.75 + night * 0.25) * (0.6 + 0.4 * this.dim) * swell;
     this.poolMat.opacity = (0.26 + night * 0.12) * this.dim;
     // Festoons chase softly, two bulbs a beat, never faster than 3 flashes a second.
     const col = new THREE.Color();
