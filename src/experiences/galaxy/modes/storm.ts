@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { api } from '../../../net/api';
 import { CINDER, METEOR_WARN, STORM_SECONDS, STORM_SHIELDS, novaFor, starsFor, stormSchedule, THRESHOLDS, type Meteor, type Shard } from '../../../shared/galaxy-rules';
 import type { CameraShot, PlayerState } from '../../../world/space';
+import { ordinal } from '../../common';
 import { gsfx, STORM_SONG } from '../audio';
 import { shortRound, type Galaxy } from '../index';
 import * as S from '../shaders';
@@ -285,12 +286,15 @@ export class Storm implements Round {
     if (g.save.data.bloomed && novaFor('storm', score)) badges.push('Nova!');
     if (!r.ok) badges.push('Not saved to the board');
     const next = THRESHOLDS.storm.stars[stars];
+    g.podium(true);
+    const rank = g.boards.storm.findIndex((r) => r.you);
     const choice = await g.hud.results({
       title: stars === 3 ? 'Storm chaser' : 'Rock rain',
       subtitle: `${score} shards, ${this.shields} ${this.shields === 1 ? 'shield' : 'shields'} left`,
       stars,
       badges,
       rows: [
+        ...(rank >= 0 ? [{ label: 'Board place', value: ordinal(rank + 1) }] : []),
         { label: 'Shards', value: String(score), best: isBest },
         { label: 'Your best', value: String(Math.max(score, prevBest ?? 0)) },
         { label: 'Next star', value: next === undefined ? 'All three!' : `${next} shards` },

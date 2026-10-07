@@ -161,6 +161,9 @@ export class Galaxy implements SpaceView {
   /** Bounce blossoms off the main paths: id, where they fling you, and when they are out. */
   private hops: { id: number; to: Spot3; apex: number; active: () => boolean }[] = [];
   private freeSpawns = 0;
+  private podiumT = -1;
+  private podiumPos = new THREE.Vector3();
+  private podiumTarget = new THREE.Vector3();
   private pokes = 0;
   /** The round is carrying the player (comet ride, finale): no star net. */
   private roundCarried = false;
@@ -361,6 +364,7 @@ export class Galaxy implements SpaceView {
   }
 
   endRound(): void {
+    this.podium(false);
     const r = this.round;
     this.round = null;
     r?.dispose();
@@ -772,7 +776,20 @@ export class Galaxy implements SpaceView {
     return (this.round?.holdsTime() ?? false) || this.trav.busy || !!this.cine || this.stars.length > 0;
   }
 
+  /** A slow orbit round you while a results card is up. */
+  podium(on: boolean): void {
+    this.podiumT = on ? 0 : -1;
+  }
+
   cameraShot(dt: number): CameraShot | null {
+    if (this.podiumT >= 0 && !this.cine) {
+      this.podiumT += dt;
+      const p = this.playerPos;
+      const a = this.player.yaw + 0.6 + this.podiumT * 0.25;
+      this.podiumPos.set(p.x + Math.sin(a) * 4.2, p.y + 1.8, p.z + Math.cos(a) * 4.2);
+      this.podiumTarget.set(p.x, p.y + 1.1, p.z);
+      return { position: this.podiumPos, target: this.podiumTarget, fov: 50, blend: Math.min(1, this.podiumT * 2) };
+    }
     if (this.cine) {
       if (!this.ctx.ui.isOpen) this.cine.t += dt;
       const c = this.cine;
@@ -1452,7 +1469,9 @@ export class Galaxy implements SpaceView {
       this.lens.uniforms.uAspect.value = aspect;
       // Near the black hole the bend would double up the things in front of it.
       const away = camera.position.distanceTo(this.hole.centre) - this.hole.radius;
-      this.lens.uniforms.uStrength.value = scr.visible ? 0.9 * Math.min(1, Math.max(0, (away - 15) / 30)) : 0;
+      // And when it fills much of the screen, the bend would warp the whole view.
+      const small = Math.min(1, Math.max(0, (0.22 - scr.r) / 0.12));
+      this.lens.uniforms.uStrength.value = scr.visible ? 0.9 * Math.min(1, Math.max(0, (away - 15) / 30)) * small : 0;
     }
     this.composer!.render();
     return true;

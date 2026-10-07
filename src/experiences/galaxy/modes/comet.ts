@@ -9,6 +9,7 @@ import { api } from '../../../net/api';
 import { COMET_MOTES, COMET_SECONDS, DOCK, cometClouds, cometCurve, cometMotes, novaFor, starsFor, THRESHOLDS, type Mote } from '../../../shared/galaxy-rules';
 import type { CameraShot, Carry, MoveInput, PlayerState, SpaceAction } from '../../../world/space';
 import { Ribbon } from '../../kit';
+import { ordinal } from '../../common';
 import { gsfx, COMET_SONG } from '../audio';
 import { shortRound, type Galaxy } from '../index';
 import type { Round } from './round';
@@ -330,12 +331,15 @@ export class Comet implements Round {
     if (g.save.data.bloomed && novaFor('comet', score)) badges.push('Nova!');
     if (!r.ok) badges.push('Not saved to the board');
     const next = THRESHOLDS.comet.stars[stars];
+    g.podium(true);
+    const rank = g.boards.comet.findIndex((r) => r.you);
     const choice = await g.hud.results({
       title: stars === 3 ? 'Star surfer' : 'Comet surf',
       subtitle: `${score} of ${COMET_MOTES} stardust, ${this.ribbonsDone} full ribbons`,
       stars,
       badges,
       rows: [
+        ...(rank >= 0 ? [{ label: 'Board place', value: ordinal(rank + 1) }] : []),
         { label: 'Stardust', value: String(score), best: isBest },
         { label: 'Your best', value: String(Math.max(score, prevBest ?? 0)) },
         { label: 'Next star', value: next === undefined ? 'All three!' : `${next} stardust` },

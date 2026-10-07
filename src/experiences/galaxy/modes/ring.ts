@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { api } from '../../../net/api';
 import { MISS_PENALTY_MS, RING, RING_FINISH_S, RING_START_S, RING_THETA0, crossesGate, novaFor, ringGates, ringPoint, starsFor, THRESHOLDS, type Gate, type RingLog } from '../../../shared/galaxy-rules';
 import type { Carry, PlayerState } from '../../../world/space';
-import { formatLap } from '../../common';
+import { formatLap, ordinal } from '../../common';
 import { gsfx, RING_SONG } from '../audio';
 import type { Galaxy } from '../index';
 import type { GateState } from '../islands';
@@ -190,12 +190,15 @@ export class RingRun implements Round {
     if (g.save.data.bloomed && novaFor('ring', total)) badges.push('Nova!');
     if (!posted) badges.push('Not saved to the board');
     const next = THRESHOLDS.ring.stars[stars];
+    g.podium(true);
+    const rank = g.boards.ring.findIndex((r) => r.you);
     const choice = await g.hud.results({
       title: stars === 3 ? 'Ring master' : 'Two laps done',
       subtitle: misses ? `${misses} missed ${misses === 1 ? 'gate' : 'gates'}, +${(misses * MISS_PENALTY_MS) / 1000} s` : 'Clean run',
       stars,
       badges,
       rows: [
+        ...(rank >= 0 ? [{ label: 'Board place', value: ordinal(rank + 1) }] : []),
         { label: 'Time', value: formatLap(total), best: isBest },
         { label: 'Your best', value: formatLap(Math.min(total, prevBest ?? total)) },
         { label: 'Next star', value: next === undefined ? 'All three!' : `Under ${formatLap(next)}` },

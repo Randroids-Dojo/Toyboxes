@@ -11,7 +11,7 @@ import * as S from './shaders';
 type Uniforms = { uTime: { value: number }; uFlare: { value: number } };
 
 /** Tilted so the disk passes under the Horizon stair (its west side dips) and leans toward the hub. */
-export const DISK_NORMAL = new THREE.Vector3(-0.21, 0.97, 0.26).normalize();
+export const DISK_NORMAL = new THREE.Vector3(-0.21, 0.8, 0.56).normalize();
 
 export class BlackHole {
   readonly group = new THREE.Group();
