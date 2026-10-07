@@ -5,7 +5,7 @@
 // shared by the server (which writes records) and the client (which reads
 // them). No DOM or Node imports.
 
-import { START_CREDITS, freshStats, pushHistory, type CasinoStats, type DayTally, type GameTally, type Voyage } from '../slots';
+import { START_CREDITS, freshStats, pushHistory, type CasinoStats, type DayTally, type GameTally, type Voyage } from '../slots.js';
 import type { GameId } from './progress';
 
 export const DAYS_MAX = 90;

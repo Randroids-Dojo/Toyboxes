@@ -17,6 +17,13 @@ for (const path of ['/', '/admin/', '/api/world', '/version.json', '/manifest.we
   if (!r.ok) throw new Error(`${path} answered ${r.status}`);
 }
 
+// A fresh, cookie-free session request exercises the deployed admin module.
+// Reading /admin/ alone checks HTML and cannot catch function import failures.
+const session = await fetch(`${BASE}/api/admin?view=session`, { cache: 'no-store', headers: { 'x-toyboxes-admin': '1' } });
+if (!session.ok) throw new Error(`Admin session endpoint answered ${session.status}`);
+if ((await session.json()).admin !== false) throw new Error('A fresh admin session must be signed out');
+console.log('admin session endpoint passed');
+
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
 await ctx.addInitScript(() => localStorage.setItem('toyboxes.identity', JSON.stringify({ browserId: 'prod-smoke-browser-000001', name: 'Smoke' })));

@@ -40,6 +40,7 @@ SHA=$(git rev-parse HEAD)
 
 step typecheck; npm run typecheck > "$LOG/typecheck.log" 2>&1 || fail typecheck "$LOG/typecheck.log"
 step "unit tests"; npm test > "$LOG/unit.log" 2>&1 || fail "unit tests" "$LOG/unit.log"
+step "native server ESM"; node --import tsx scripts/autobuild/esmcheck.ts > "$LOG/esm.log" 2>&1 || fail "native server ESM" "$LOG/esm.log"
 step build; npm run build > "$LOG/build.log" 2>&1 || fail build "$LOG/build.log"
 
 fresh_server() {

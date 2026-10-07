@@ -17,7 +17,7 @@ Work in `/Users/randroid/Documents/Dev/Toyboxes` on `main`, starting from a clea
 3. `admin-cli.ts status <roomId> <pageId> building`, so the owner sees "Being built".
 4. Plan the smallest build that gives the request a real, playable result (see "What to build").
 5. Implement it, following the conventions below, and commit. Write the message as a human would: no AI attribution, no em or en dashes.
-6. `scripts/autobuild/qa.sh`. On failure, fix and rerun, up to three attempts. If it still fails:
+6. `scripts/autobuild/qa.sh`. The gate loads emitted API modules with native Node ESM before the browser tests, so a bundler cannot hide missing import extensions. Production smoke also reads the fresh admin-session endpoint to catch function import failures without signing in. On failure, fix and rerun, up to three attempts. If it still fails:
    - preserve the failed commit and any working changes for review; never reset unrelated work;
    - note "Automatic build could not pass QA: <reason>";
    - set the status back to `requested`, mark the page seen and notify the creator.

@@ -9,7 +9,7 @@
 //   holdAdvice(hand), holdReason(hand)                what simple strategy keeps, and why
 //   holdValue(hand, holds)                            exact expected multiple of a hold
 
-import { RANKS, SUITS, cardRank, cardSuit, newShoe, type Card } from '../casino-games';
+import { RANKS, SUITS, cardRank, cardSuit, newShoe, type Card } from '../casino-games.js';
 
 export type PokerHandRank =
   | 'royal_flush'

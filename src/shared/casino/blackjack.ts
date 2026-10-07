@@ -26,7 +26,7 @@
 //      hand gets its second card when the first hand is finished.
 //   4. The dealer draws last, and only if some hand still needs the dealer.
 
-import { cardRank, handValue, isBlackjack, type BjResult, type Card } from '../casino-games';
+import { cardRank, handValue, isBlackjack, type BjResult, type Card } from '../casino-games.js';
 
 export type BjTable = 'saloon' | 'captain';
 
