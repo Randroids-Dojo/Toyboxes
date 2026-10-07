@@ -1693,6 +1693,8 @@ export class KartWorld implements SpaceView {
     const s = this.session!;
     s.state = 'podium';
     s.shotT = 0;
+    // Moving your kart to the podium jumps along the lap; void the lap so it is not called a shortcut.
+    this.timing.valid = false;
     const p = this.cs.paddock.podium;
     const yaw = p.yaw;
     const right = { x: Math.cos(yaw), z: -Math.sin(yaw) };
