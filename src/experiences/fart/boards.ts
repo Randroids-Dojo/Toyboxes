@@ -24,6 +24,7 @@ export function formatValue(mode: ModeId, v: number): string {
 export class Boards {
   data: Partial<Record<ModeId, { board: BoardRow[]; best: number | null }>> = {};
   private alive = true;
+  private retries = 0;
 
   constructor(
     private ctx: ExperienceCtx,
@@ -37,6 +38,11 @@ export class Boards {
     if (!this.alive) return;
     if (!r.ok) {
       for (const m of MODES) this.paint(m, 'Board offline');
+      return;
+    }
+    if (!r.data?.boards) {
+      // An empty reply (the server was busy): keep what we have and try again shortly.
+      if (this.retries++ < 3) setTimeout(() => void this.refresh(), 2000);
       return;
     }
     this.data = r.data.boards as typeof this.data;

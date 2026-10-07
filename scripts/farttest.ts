@@ -1,70 +1,297 @@
-// Actual desktop, touch, controller and remote inputs in local memory only.
-import { mkdirSync } from 'node:fs';
-import { chromium } from 'playwright-core';
-import { requireLocalPlaytest } from './autobuild/safety';
-const base='http://localhost:5207/'; requireLocalPlaytest(base);
-const phone=process.env.PHONE==='1', pad=process.env.PAD==='1', remote=process.env.REMOTE==='1';
-const out=`/tmp/toyboxes-fart-${phone?'phone':pad?'pad':remote?'remote':'desktop'}`; mkdirSync(out,{recursive:true});
-async function api(path:string,body?:unknown,headers:Record<string,string>={}) {
- const r=await fetch(new URL(path,base),{method:body?'POST':'GET',headers:{'content-type':'application/json',...headers},body:body?JSON.stringify(body):undefined});
- const data=await r.json(); if(!r.ok)throw new Error(`${path}: ${r.status}`); return {data,headers:r.headers};
-}
-const free=(await api('/api/world')).data.slots.find((s:{roomId:string|null})=>!s.roomId);
-const claim=await api('/api/room',{action:'claim',slot:free.slot,name:'Puff tester',pin:'2468',pinConfirm:'2468',browserId:`fart-test-${Date.now()}-owner`});
-const roomId=claim.data.room.id;
-const login=await api('/api/admin',{action:'login',password:'toyboxes-dev'},{'x-toyboxes-admin':'1'});
-await api('/api/admin',{action:'saveContent',roomId,content:{rev:0,areas:[{id:'fart',name:'Fart simulator',theme:{wall:0,floor:0,trim:4},props:[],published:true,experience:{kind:'fart'},pages:[]}],exhibits:[]}},{'x-toyboxes-admin':'1',cookie:(login.headers.get('set-cookie')??'').split(';')[0]});
-const browser=await chromium.launch({args:['--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist']});
-const ctx=await browser.newContext(phone?{viewport:{width:390,height:844},isMobile:true,hasTouch:true}:{viewport:{width:1280,height:800}});
-await ctx.addInitScript(()=>localStorage.setItem('toyboxes.identity',JSON.stringify({browserId:'fart-test-player-000001',name:'Puff tester'})));
+// Playtest for Little Puffington (the fart world): drives the real input on
+// desktop, PHONE=1, PAD=1 or REMOTE=1 (arrows, OK and Back only) through the
+// first visit, eating, toots, a big one, mischief, all four trials, the
+// Toot-o-Matic and the exit, with screenshots and the cost of each tier.
+//
+//   TOYBOXES_BASE=http://localhost:5207/ npx tsx scripts/farttest.ts
+//   PHONE=1 / PAD=1 / REMOTE=1 for the other devices.
 
-await ctx.addInitScript(time=>localStorage.setItem('toyboxes.settings',JSON.stringify({time})),phone?'night':'day');
-const page=await ctx.newPage();const errors:string[]=[];page.on('pageerror',e=>{errors.push(e.message);console.log('pageerror',e.message);});
-if(pad)await page.addInitScript(`(() => {
- const pad={buttons:new Array(17).fill(0),axes:[0,0,0,0],connected:true}; window.__pad=pad;
- const snapshot=()=>({id:'Test Pad (STANDARD GAMEPAD)',index:0,connected:pad.connected,mapping:'standard',timestamp:performance.now(),axes:pad.axes.slice(),buttons:pad.buttons.map(v=>({pressed:v>0.5,touched:v>0,value:v}))});
- Object.defineProperty(navigator,'getGamepads',{value:()=>pad.connected?[snapshot(),null,null,null]:[null,null,null,null]});
-})();`);
-async function dbg(f:string,...args:unknown[]){return page.evaluate(([f,a])=>(window as any).toyboxes.debug[f as string](...(a as unknown[])),[f,args] as const);}
-async function act(kick=false){
- if(phone)await page.locator(kick?'.tbtn-kick':'.tbtn-action').tap();
- else if(pad){const b=kick?2:0;await page.evaluate(b=>(window as any).__pad.buttons[b]=1,b);await page.waitForTimeout(400);await page.evaluate(b=>(window as any).__pad.buttons[b]=0,b);await page.waitForTimeout(180);}
- else await page.keyboard.press(kick?'KeyF':remote?'Enter':'KeyE');
- await page.waitForTimeout(160);
+import { openWorld, type World } from './lib/world';
+
+const BUDGET = { low: { draws: 90, tris: 120_000 }, medium: { draws: 160, tris: 300_000 }, high: { draws: 260, tris: 600_000 } } as const;
+
+const w = await openWorld({ kind: 'fart', areaId: 'puff-challenge', name: 'Fart simulator', quality: 'medium' });
+const { page, device } = w;
+const remote = device === 'remote';
+const phone = device === 'phone';
+const exp = () => w.exp();
+const wait = (ms: number) => page.waitForTimeout(ms);
+const check = (ok: boolean, what: string, extra: unknown = '') => {
+  if (!ok) throw new Error(`${device}: ${what} ${typeof extra === 'string' ? extra : JSON.stringify(extra)}`);
+  console.log(`ok  ${what}`);
+};
+
+/** A toot the way this device does it: OK on the remote, the Toot (Kick) button elsewhere. */
+const toot = () => (remote ? w.act('interact') : w.act('kick'));
+const tootHold = (ms: number) => (remote ? w.hold('interact', ms) : w.hold('kick', ms));
+const place = async (x: number, z: number, yaw: number) => {
+  await w.dbg('teleport', x, z, yaw);
+  await wait(500);
+};
+/** Picks a card button by its label: taps it on a phone, or moves focus to it with the device. */
+async function choose(world: World, label: string): Promise<void> {
+  if (phone) {
+    await page.locator('.modal.in .btn', { hasText: label }).first().tap();
+    await wait(300);
+    return;
+  }
+  for (let i = 0; i < 8; i++) {
+    const text = await page.evaluate(() => (document.activeElement as HTMLElement | null)?.textContent ?? '');
+    if (text.includes(label)) break;
+    await world.dir(i < 4 ? 'right' : 'down');
+  }
+  await world.confirm();
 }
-async function until(check:()=>Promise<boolean>,what:string){const end=Date.now()+15000;while(Date.now()<end){if(await check())return;await page.waitForTimeout(100);}await page.screenshot({path:`${out}/failure.png`});throw new Error(`Timed out: ${what}: ${JSON.stringify(await dbg('state'))}`);}
-await page.goto(`${base}?room=${roomId}`);await page.waitForSelector('body.ready');await until(async()=>(await dbg('state')).space==='room','room');
-await page.waitForTimeout(1200);
-if(pad){await page.evaluate(()=>(window as any).__pad.buttons[13]=1);await page.waitForTimeout(160);await page.evaluate(()=>(window as any).__pad.buttons[13]=0);await page.waitForTimeout(200);if(await page.evaluate(()=>document.body.dataset.device)!=='pad')throw new Error('Controller did not activate');}
-const door=(await dbg('spots')).areaDoors[0];await dbg('teleport',door.x,door.z+.3,Math.PI);await page.waitForTimeout(300);await act();await until(async()=>(await dbg('state')).space==='area','arena');
-await page.screenshot({path:`${out}/arena.png`});
-await dbg('experienceCall','debugShortRound',14);await dbg('teleport',0,6,Math.PI);await page.waitForTimeout(300);await act();await until(async()=>(await dbg('experience')).state==='playing','start');
-// A short opening puff faces away from the hoop. It must register a miss.
-await dbg('teleport',0,6,0);await act();await page.waitForTimeout(850);
-let e=await dbg('experience');if(e.shots!==1||e.hits!==0)throw new Error('Miss did not count exactly one puff');
-// Place the player at the range shown by the live pressure meter, then use real input.
-e=await dbg('experience');await dbg('teleport',e.target.x,e.target.z+2+8*e.pressure,Math.PI);await act();
-await until(async()=>(await dbg('experience')).hits===1,'pressure puff hit');await page.screenshot({path:`${out}/hit.png`});
-await page.waitForTimeout(800);e=await dbg('experience');
-if(remote){await dbg('teleport',e.target.x,e.target.z+2+8*e.pressure,Math.PI);await act();}
-else{await dbg('teleport',e.target.x,e.target.z+4.4,Math.PI);await act(true);}
-await until(async()=>(await dbg('experience')).hits===2,'second hoop');
-e=await dbg('experience');if(e.shots!==3)throw new Error('Input repeats created extra puffs');
-await page.screenshot({path:`${out}/puffs.png`});await until(async()=>(await dbg('experience')).state==='result','result');
-if((await dbg('experience')).hits!==2)throw new Error('Results lost the hoop count');await page.screenshot({path:`${out}/result.png`});
-await dbg('teleport',0,6,Math.PI);await page.waitForTimeout(250);await act();await until(async()=>(await dbg('experience')).state==='playing','replay');
-e=await dbg('experience');if(e.hits!==0||e.shots!==0)throw new Error('Replay did not reset the round');
-// Win a complete second round, so the five-hoop goal is tested as well as timeout.
-await dbg('experienceCall','debugShortRound',30);
-for(let i=0;i<5;i++){
- await page.waitForTimeout(800);e=await dbg('experience');
- const reach=remote?2+8*e.pressure:4.4;
- if(e.target.z<0)await dbg('teleport',e.target.x,e.target.z+reach,Math.PI);
- else if(e.target.x<0)await dbg('teleport',e.target.x+reach,e.target.z,-Math.PI/2);
- else await dbg('teleport',e.target.x-reach,e.target.z,Math.PI/2);
- await act(!remote);await until(async()=>(await dbg('experience')).hits===i+1,`winning hoop ${i+1}`);
+
+// 1. First visit: the flyover, skipped with the device, then the intro card.
+await w.until(async () => (await exp()).mode === 'intro', 'the intro flyover');
+await w.shot('01-flyover');
+await wait(600);
+await w.act();
+await w.until(() => w.menuOpen(), 'the intro card');
+await w.shot('02-intro-card');
+await w.confirm();
+await w.until(async () => !(await w.menuOpen()) && (await exp()).mode === 'fete', 'the fete');
+await wait(800);
+await w.shot('03-arrival');
+
+// 2. Eat at Gran's stall.
+await place(1.9, 19.0, Math.PI / 2);
+check((await w.dbg('state')).prompt === 'Eat beans' || phone, 'Gran offers beans', (await w.dbg('state')).prompt);
+await w.act();
+await wait(600);
+let e = await exp();
+check(e.gas.type === 'beans' && e.gas.amount === 100, 'a tummy full of beans', e.gas);
+
+// 3. Toot next to Lady Featherstone: a double take, the teacup flies, a golden bean.
+const lady = e.people.lady;
+await place(lady.x - 1.1, lady.z + 0.7, Math.PI / 2);
+await toot();
+await wait(900);
+await w.shot('04-tea');
+e = await exp();
+check(e.people.lady.mood === 'startled' && !e.people.lady.cup, 'Lady Featherstone spills her tea', e.people.lady);
+check(e.mischief.includes('tea') && e.beans >= 1, 'a golden bean for the tea', e.mischief);
+
+// 4. A jump (a toot hop on the remote) and a toot boost in the air.
+await w.call('debugGive', 'beans');
+await place(0, 8, Math.PI);
+await w.call('debugResetMoves');
+if (remote) await toot();
+else await w.act('jump');
+await wait(remote ? 330 : 280);
+await toot();
+await wait(1100);
+e = await exp();
+check(e.moves.maxY > 2.5, 'boosted over 2.5 m', e.moves.maxY);
+
+// 5. A big one from the maypole pad.
+await w.call('debugGive', 'beans');
+await place(-5, 5.1, Math.PI);
+await w.call('debugResetMoves');
+// Held well past full charge: headless frames can run slower than the clock.
+await tootHold(1800);
+await wait(350);
+await w.shot('05-big-one');
+await wait(1000);
+e = await exp();
+check(e.moves.maxY > 6 && e.moves.rockets >= 1, 'a big one over 6 m', e.moves);
+
+// 6. Rocket Rings with real input (a three-ring course), Play again, then give up.
+await place(6, 5.6, Math.PI);
+check((await w.dbg('state')).prompt === 'Start Rocket Rings' || phone, 'the rally pad', (await w.dbg('state')).prompt);
+await w.act();
+await w.until(() => w.menuOpen(), 'the rally card');
+await w.call('debugTrial', 'debugShorten', 3);
+await w.confirm();
+await w.until(async () => (await exp()).trial?.phase === 'run', 'the rally countdown', 12000);
+for (let i = 0; i < 3; i++) {
+  const hp = (await exp()).trial.nextHoop;
+  await w.call('debugPlace', hp.x - hp.nx * 0.5, Math.max(0, hp.y - 0.8 - hp.ny * 0.5), hp.z - hp.nz * 0.5, Math.atan2(hp.nx, hp.nz));
+  await w.walk('up', 800);
+  await w.until(async () => (await exp()).trial?.next > i || (await w.menuOpen()), `ring ${i + 1}`, 8000);
+  if (i === 1) await w.shot('06-rings');
 }
-if((await dbg('experience')).state!=='result')throw new Error('Five hoops did not finish the round');
-await page.screenshot({path:`${out}/win.png`});
-await dbg('teleport',-7,7,0);await page.waitForTimeout(250);await act();await until(async()=>(await dbg('state')).space==='room','exit');
-await browser.close();if(errors.length)throw new Error(errors.join(' | '));console.log(`Puff miss, aimed hit, second hoop, timeout, replay, five-hoop win and exit passed: ${out}`);
+await w.until(() => w.menuOpen(), 'the rally results', 15000);
+await w.shot('07-rings-results');
+e = await exp();
+check(e.trial?.next === 3, 'three rings passed', e.trial);
+await w.confirm();
+await w.until(async () => (await exp()).trial?.phase === 'count' || (await w.menuOpen()), 'play again');
+if (await w.menuOpen()) await w.confirm();
+await w.until(async () => (await exp()).trial?.phase === 'run', 'the second rally', 12000);
+const h0 = (await exp()).trial.nextHoop;
+await w.call('debugPlace', h0.x - h0.nx * 0.5, Math.max(0, h0.y - 0.8 - h0.ny * 0.5), h0.z - h0.nz * 0.5, Math.atan2(h0.nx, h0.nz));
+await w.walk('up', 800);
+await w.until(async () => (await exp()).trial?.next >= 1, 'the first ring again', 8000);
+await place(6, 5, Math.PI);
+await wait(400);
+await w.act();
+await w.until(async () => (await exp()).mode === 'fete', 'gave up the rally');
+check(true, 'Play again and Give up work');
+
+// 7. The library (needs three golden beans): mask a toot on the BONG, get caught, squeeze, shelve.
+await w.call('debugBeans', 3);
+await place(19, -12.8, Math.PI);
+await wait(500);
+await w.act();
+await w.until(() => w.menuOpen(), 'the library card');
+await w.call('debugTrial', 'debugShorten', 2);
+await w.confirm();
+await w.until(async () => (await exp()).trial?.phase === 'run', 'into the library', 12000);
+await w.shot('08-library');
+await place(195.2, -1.2, 0);
+await w.call('debugTrial', 'debugSkipTo', 11.86);
+await toot();
+await wait(500);
+e = await exp();
+check(e.trial.masked === 1 && e.trial.strikes === 0, 'a toot masked by the clock', e.trial);
+await place(203.4, -5.6, 0);
+await wait(1200);
+await toot();
+await wait(700);
+await w.shot('09-library-caught');
+e = await exp();
+check(e.trial.strikes === 1, 'caught tooting in plain sight', e.trial);
+await place(189.5, 5.6, 0);
+const before = (await exp()).trial.pressure;
+await tootHold(1300);
+await wait(300);
+e = await exp();
+check(e.clouds > 0 && e.trial.pressure < before + 1, 'a silent squeeze leaves a cloud', { clouds: e.clouds, before, after: e.trial.pressure });
+for (const b of (await exp()).trial.books) {
+  await place(b.x, b.z, 0);
+  await w.act();
+  await wait(900);
+}
+await w.until(() => w.menuOpen(), 'the library results', 15000);
+await w.shot('10-library-results');
+e = await exp();
+check(e.trial.shelved === 2, 'both books shelved', e.trial);
+await choose(w, 'Back to the fete');
+await w.until(async () => (await exp()).mode === 'fete', 'out of the library');
+
+// 8. Brass Band Bash: the rhythm check, then an eight-note chart in time.
+await place(-8.3, -2.8, Math.PI);
+await w.act();
+await w.until(() => w.menuOpen(), 'the band card');
+await w.call('debugTrial', 'debugShort');
+await w.confirm();
+await w.until(async () => (await exp()).trial?.phase === 'calibrate', 'the rhythm check', 12000);
+for (let i = 0; i < 8; i++) {
+  const t = (await exp()).trial;
+  const next = Math.max(2, Math.ceil(t.beat + 0.3));
+  await wait(((next - t.beat) * 60000) / 100 - 20);
+  await toot();
+}
+await w.until(async () => (await exp()).trial?.phase === 'play', 'the song starts', 12000);
+await w.shot('11-band');
+{
+  // Schedule every press from the chart against the wall clock (re-reading after each note is too slow headless).
+  const t = (await exp()).trial;
+  const beatMs = 60000 / t.bpm;
+  const t0 = Date.now() - t.beat * beatMs;
+  for (const n of t.chart as { beat: number; kind: string; len: number }[]) {
+    if (n.kind === 'rest') continue;
+    const at = t0 + n.beat * beatMs - 20;
+    const ms = at - Date.now();
+    if (ms > 0) await wait(ms);
+    if (n.kind === 'hold') await tootHold(Math.min(1400, n.len * beatMs - 150));
+    else await toot();
+  }
+}
+await w.until(() => w.menuOpen(), 'the band results', 20000);
+e = await exp();
+const r = e.trial.result;
+check(r.perfect + r.good >= 6, 'at least six notes in time', r);
+await w.shot('12-band-results');
+await choose(w, 'Back to the fete');
+await w.until(async () => (await exp()).mode === 'fete', 'off the bandstand');
+
+// 9. Picnic Panic (needs six golden beans): a real toot upwind, then a full clear posted to the board.
+await w.call('debugBeans', 6);
+await place(-15.4, 11.6, Math.PI);
+await w.act();
+await w.until(() => w.menuOpen(), 'the picnic card');
+const started = Date.now();
+await w.confirm();
+await w.until(async () => (await exp()).trial?.phase === 'run', 'the picnic starts', 12000);
+e = await exp();
+const p0 = e.trial.people[0];
+const wl = Math.hypot(e.trial.wind.x, e.trial.wind.z);
+await place(p0.x - (e.trial.wind.x / wl) * 1.4, p0.z - (e.trial.wind.z / wl) * 1.4, Math.atan2(e.trial.wind.x, e.trial.wind.z));
+await toot();
+await wait(1800);
+e = await exp();
+check(e.trial.people[0].whiff > 0, 'a picnicker gets a whiff', e.trial.people[0]);
+await w.shot('13-picnic');
+await wait(Math.max(0, 15000 - (Date.now() - started)));
+// Real clears take more than the board's 15 second floor: run the clock on first.
+await w.call('debugTrial', 'debugFastForward', Math.max(0, 22 - (await exp()).trial.time));
+for (let k = 0; k < 6 && (await exp()).trial?.left > 0; k++) {
+  await w.call('debugTrial', 'debugStinkAll');
+  await w.call('debugTrial', 'debugFastForward', 3);
+  await wait(300);
+}
+await w.until(() => w.menuOpen(), 'the picnic results', 20000);
+await w.shot('14-picnic-results');
+e = await exp();
+check(e.boards.picnic?.best !== null && e.boards.picnic?.rows > 0, 'the picnic time is on the board', e.boards);
+await choose(w, 'Back to the fete');
+await w.until(async () => (await exp()).mode === 'fete', 'back from the picnic');
+
+// 10. The Toot-o-Matic: pick the squeaky duck with the device, close with Back.
+await place(6.5, 10.4, Math.PI);
+await w.act();
+await w.until(() => w.menuOpen(), 'the Toot-o-Matic');
+if (phone) await page.locator('.modal.in .btn', { hasText: 'Squeaky duck' }).first().tap();
+else {
+  await w.dir('right');
+  await w.confirm();
+}
+await wait(300);
+await w.shot('15-tootomatic');
+e = await exp();
+check(e.voice === 'duck', 'the squeaky duck voice', e.voice);
+if (phone) await page.locator('.modal.in .btn', { hasText: 'Done' }).first().tap();
+else await w.back();
+await w.until(async () => !(await w.menuOpen()), 'the Toot-o-Matic closes');
+
+// 11. Tap mode on the remote: a double tap is a big one.
+if (remote) {
+  await w.call('debugTapMode', true);
+  await w.call('debugGive', 'beans');
+  await place(0, 8, Math.PI);
+  await w.call('debugResetMoves');
+  await page.keyboard.press('Enter');
+  await wait(90);
+  await page.keyboard.press('Enter');
+  await wait(1400);
+  e = await exp();
+  check(e.moves.maxY > 5, 'tap mode: a double tap fires a big one', e.moves);
+  await w.call('debugTapMode', false);
+}
+
+// 12. Night, and the cost of every tier.
+await place(0, 26, Math.PI);
+await w.call('debugNight', 1);
+await wait(800);
+await w.shot('16-night');
+await w.call('debugNight', null);
+for (const q of ['low', 'medium', 'high'] as const) {
+  await w.dbg('setQuality', q);
+  await wait(1200);
+  e = await exp();
+  const st = await w.dbg('state');
+  console.log(`tier ${q}: ${e.draws} draw calls, ${e.triangles} triangles, fps ${st.fps}, p75 ${st.p75.toFixed(1)} ms`);
+  check(e.draws <= BUDGET[q].draws && e.triangles <= BUDGET[q].tris, `the ${q} tier fits its budget`, { draws: e.draws, tris: e.triangles });
+  await w.shot(`17-tier-${q}`);
+}
+await w.dbg('setQuality', 'medium');
+
+// 13. Leave through the garden gate.
+await place(-2.1, 23.5, -Math.PI / 2);
+check((await w.dbg('state')).prompt?.startsWith('Back to') || phone, 'the way out', (await w.dbg('state')).prompt);
+await w.act();
+await w.until(async () => (await w.dbg('state')).space === 'room', 'back in the room');
+await w.done('Fart world playtest passed');

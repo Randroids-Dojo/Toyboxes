@@ -294,6 +294,12 @@ export class PicnicPanic implements Trial {
     };
   }
 
+  /** Playtests: a cabbage cloud on every blanket. */
+  debugStinkAll(): void {
+    const wd = this.sim.wind;
+    for (const p of this.sim.people) if (p.state === 'sit') this.w.clouds.add('cabbage', p.x - wd.x * 0.8, p.shade ? 2.4 : 1.1, p.z - wd.z * 0.8, { big: 0.9, vx: 0, vz: 0 });
+  }
+
   /** Playtests: run the sim forward with the current clouds. */
   debugFastForward(seconds: number): void {
     const step = 1 / 30;

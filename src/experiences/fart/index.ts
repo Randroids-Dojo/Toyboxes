@@ -120,6 +120,7 @@ export class FartSimulator implements SpaceView {
   private sparkleSpot: { x: number; z: number; t: number } | null = null;
   /** The music beat at the moment of the last toot press (for toots on the beat). */
   private pressBeat: number | null = null;
+  private nightOverride: number | null = null;
 
   constructor(private ctx: ExperienceCtx) {
     this.tier = ctx.tier();
@@ -859,9 +860,10 @@ export class FartSimulator implements SpaceView {
     }
   }
 
-  update(night: number, t: number, _phase: number, focus: THREE.Vector3): void {
+  update(nightIn: number, t: number, _phase: number, focus: THREE.Vector3): void {
     const dt = Math.min(0.1, Math.max(0, t - (this.lastT || t)));
     this.lastT = t;
+    const night = this.nightOverride ?? nightIn;
     this.night = night;
     this.dayNight(night, focus);
     const v = this.village;
@@ -966,7 +968,7 @@ export class FartSimulator implements SpaceView {
     if (this.village.flowers) this.village.flowers.visible = t !== 'low';
     // The low tier (TVs, older phones) drops the far decoration.
     this.village.skyPuffs.visible = t !== 'low';
-    this.village.trees.count = t === 'low' ? 14 + 32 : this.village.trees.instanceMatrix.count;
+    this.village.trees.count = t === 'low' ? 14 + 16 : this.village.trees.instanceMatrix.count;
   }
 
   render(renderer: THREE.WebGLRenderer, camera: THREE.PerspectiveCamera): boolean {
@@ -1027,6 +1029,7 @@ export class FartSimulator implements SpaceView {
       cloud: this.save.cloud,
       chase: this.vil.town.chase.on,
       trial: this.trial?.debug() ?? null,
+      boards: Object.fromEntries(Object.entries(this.boards.data).map(([k, v]) => [k, { best: v?.best ?? null, rows: v?.board.length ?? 0, top: v?.board[0]?.name ?? null }])),
       night: this.night,
       tier: this.tier,
       draws: this.drawStats.calls,
@@ -1078,6 +1081,11 @@ export class FartSimulator implements SpaceView {
 
   debugStartTrial(id: TrialId, opts: Record<string, unknown> = {}): void {
     this.startTrial(id, opts);
+  }
+
+  /** Playtests: force day (0) or night (1), or null for the shared clock. */
+  debugNight(n: number | null): void {
+    this.nightOverride = n;
   }
 
   debugCeremony(): void {

@@ -5,7 +5,8 @@ import * as THREE from 'three';
 import { music } from '../../../audio/music';
 import { h } from '../../../ui/ui';
 import { formatLap } from '../../common';
-import type { CaptureLabels, PlayerState } from '../../../world/space';
+import type { CaptureLabels, PlayerState, SpaceAction } from '../../../world/space';
+import { SPOTS } from '../layout';
 import { crossesHoop, hoops, ringsBeans, RINGS_START, type Hoop } from '../../../shared/fart/course';
 import { RINGS_GALOP } from '../songs';
 import { fx, toot } from '../toots';
@@ -135,6 +136,25 @@ export class RocketRings implements Trial {
 
   holdsTime(): boolean {
     return this.phase !== 'done';
+  }
+
+  /** Back on the start pad after the first ring, you can give up the rally. */
+  actions(p: PlayerState): SpaceAction[] {
+    if (this.phase !== 'run' || this.next === 0) return [];
+    if (Math.hypot(p.x - SPOTS.rings.x, p.z - SPOTS.rings.z) > SPOTS.rings.range || !p.grounded) return [];
+    return [{ ...SPOTS.rings, label: 'Give up the rally', short: 'Give up', run: () => this.giveUp() }];
+  }
+
+  private giveUp(): void {
+    this.phase = 'done';
+    music.duck(0.4, 1);
+    this.w.endTrial();
+  }
+
+  /** Playtests: a short course with the real start. */
+  debugShorten(n: number): void {
+    this.hoops = this.hoops.slice(0, n);
+    this.w.hud.set('ring', `${this.next}/${this.hoops.length}`);
   }
 
   captureInput(): CaptureLabels | null {

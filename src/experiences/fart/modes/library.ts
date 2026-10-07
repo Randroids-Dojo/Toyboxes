@@ -563,6 +563,13 @@ export class LibraryTrial implements Trial {
     };
   }
 
+  /** Playtests: fewer books. */
+  debugShorten(n: number): void {
+    this.sim.books = this.sim.books.slice(0, n);
+    this.set.slotGlow.forEach((g, i) => (g.visible = i < n));
+    this.w.hud.set('books', `${this.sim.shelved}/${n}`);
+  }
+
   /** Playtests: jump the clock to a moment before the next loud noise. */
   debugSkipTo(seconds: number): void {
     this.sim.time = seconds;

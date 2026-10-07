@@ -242,7 +242,11 @@ export class BandBash implements Trial {
     }
   }
 
+  private presses: string[] = [];
+
   private press(src: Action, beat: number, beatSec: number): void {
+    this.presses.push(`${src}@${beat.toFixed(3)}`);
+    if (this.presses.length > 12) this.presses.shift();
     const c = this.chart;
     const voice = this.w.save.voice;
     // The nearest note still to judge.
@@ -425,6 +429,12 @@ export class BandBash implements Trial {
     this.w.ctx.pose(null);
   }
 
+  /** Playtests: the eight-note chart. */
+  debugShort(): void {
+    this.short = true;
+    this.chart = shortChart(this.song);
+  }
+
   debug(): Record<string, unknown> {
     const c = this.chart;
     const beat = music.beat();
@@ -442,6 +452,9 @@ export class BandBash implements Trial {
       result: r,
       cal: this.cal.length,
       offset: this.w.save.offset,
+      hits: this.hits,
+      presses: this.presses,
+      chart: c.notes.map((n) => ({ beat: n.beat, kind: n.kind, len: n.len })),
     };
   }
 }

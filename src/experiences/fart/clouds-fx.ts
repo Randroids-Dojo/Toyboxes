@@ -116,8 +116,8 @@ export class CloudFx {
 
   setQuality(t: Tier): void {
     this.cap = Math.min(this.max, BUDGET[t]);
-    // Rounder puffs on high; lighter ones elsewhere.
-    const detail = t === 'high' ? 2 : 1;
+    // Rounder puffs on high; lighter ones elsewhere (the low tier runs on TVs).
+    const detail = t === 'high' ? 2 : t === 'medium' ? 1 : 0;
     if (this.detail !== detail) {
       this.detail = detail;
       const old = this.mesh.geometry;
