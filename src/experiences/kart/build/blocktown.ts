@@ -119,8 +119,8 @@ export function room(d: Dresser, tex: TexCache, look: { wall: string; print: str
     mesh.rotation.y = yaw;
     mesh.receiveShadow = true;
     d.group.add(mesh);
-    // Skirting board stands proud of the wall.
-    const sk = new THREE.Mesh(new THREE.BoxGeometry(len, 1.6, 0.6), skirt);
+    // Skirting board stands proud of the wall; the side walls' boards stop short of the corners so none overlap.
+    const sk = new THREE.Mesh(new THREE.BoxGeometry(i >= 2 ? len - 1.24 : len, 1.6, 0.6), skirt);
     sk.position.set(x + Math.sin(yaw) * 0.3, 0.8 - 0.05, z + Math.cos(yaw) * 0.3);
     sk.rotation.y = yaw;
     sk.receiveShadow = true;
@@ -138,7 +138,8 @@ export function room(d: Dresser, tex: TexCache, look: { wall: string; print: str
       const frame = new Shape();
       frame.at(rbox(1.2, wh + 1.2, 1.2, 0.2), PAL.cream, 0, 0, 0);
       const f = new Shape();
-      for (const sx of [-1, 0, 1]) f.at(rbox(sx === 0 ? 0.7 : 1.4, wh + 1.4, 1.0, 0.2), PAL.cream, (sx * ww) / 2, 0, 0);
+      // Uprights a touch shorter than the frame's top and bottom bars, so their ends never share a plane.
+      for (const sx of [-1, 0, 1]) f.at(rbox(sx === 0 ? 0.7 : 1.4, wh + 1.36, 1.0, 0.2), PAL.cream, (sx * ww) / 2, 0, 0);
       for (const sy of [-1, 1]) f.at(rbox(ww + 1.4, 1.4, 1.0, 0.2), PAL.cream, 0, (sy * wh) / 2, 0);
       f.at(rbox(ww, 0.5, 1.0, 0.15), PAL.cream, 0, 0, 0);
       f.at(rbox(ww + 4, 0.8, 2.6, 0.2), PAL.cream, 0, -wh / 2 - 0.9, 0.8);
@@ -146,7 +147,8 @@ export function room(d: Dresser, tex: TexCache, look: { wall: string; print: str
       // Curtains, gathered at the sides.
       const cur = new Shape();
       for (const sx of [-1, 1])
-        for (let k = 0; k < 5; k++) cur.at(cyl(1.0, 1.2, wh + 6, 10), k % 2 ? '#ef6fa0' : '#f48fb5', sx * (ww / 2 + 3 + k * 1.3), 0, 0.5 + (k % 2) * 0.4);
+        // Folds of different lengths, so their ends never share a plane.
+        for (let k = 0; k < 5; k++) cur.at(cyl(1.0, 1.2, wh + 6 + k * 0.06, 10), k % 2 ? '#ef6fa0' : '#f48fb5', sx * (ww / 2 + 3 + k * 1.3), k * 0.02, 0.5 + (k % 2) * 0.4);
       cur.at(cyl(0.3, 0.3, ww + 26, 10), PAL.woodDark, 0, wh / 2 + 3.4, 0.4, 0, 0, Math.PI / 2);
       d.batch.shape(cur, xform(x - 1.8, wy + 1, z, 0, yaw, 0));
     }
@@ -458,6 +460,11 @@ export function dressBlockTown(d: Dresser, scene: CircuitScene, tex: TexCache): 
         train.add(o);
         trainCars.push(o);
       }
+      // Start spaced out along the oval.
+      trainCars.forEach((o, i) => {
+        const a = -i * 0.3;
+        o.position.set(Math.cos(a) * trainOval.a, 0, Math.sin(a) * trainOval.b);
+      });
       d.group.add(train);
     }
   }
@@ -569,7 +576,7 @@ export function dressBlockTown(d: Dresser, scene: CircuitScene, tex: TexCache): 
     const x0 = b.minX - m + 2.2;
     const cz = (b.minZ + b.maxZ) / 2;
     const shelf = new Shape();
-    shelf.at(rbox(4, 30, 40, 0.3), PAL.woodDark, 0, 15, 0);
+    shelf.at(rbox(4, 29.7, 40, 0.3), PAL.woodDark, 0, 14.85, 0);
     for (const y of [0.4, 10, 20, 29.6]) shelf.at(rbox(4.4, 0.8, 40.4, 0.2), PAL.wood, 0.3, y, 0);
     for (let row = 0; row < 3; row++) {
       let z = -19;
@@ -597,6 +604,7 @@ export function dressBlockTown(d: Dresser, scene: CircuitScene, tex: TexCache): 
   }
 
   let lastLeader = -1;
+  for (const g of [horse, top, train]) g.userData.dynamic = true;
   return {
     hero: new THREE.Vector3(horse.position.x, 8, horse.position.z),
     dust: 0xd9a066,
@@ -611,7 +619,7 @@ export function dressBlockTown(d: Dresser, scene: CircuitScene, tex: TexCache): 
       top.position.x += Math.sin(t * 0.5) * 0.004;
       // The train runs round its oval.
       trainCars.forEach((o, i) => {
-        const a = t * 0.28 - i * 0.24;
+        const a = t * 0.28 - i * 0.3;
         o.position.set(Math.cos(a) * trainOval.a, 0, Math.sin(a) * trainOval.b);
         o.rotation.y = Math.atan2(-Math.sin(a) * trainOval.a, Math.cos(a) * trainOval.b) + Math.PI;
       });

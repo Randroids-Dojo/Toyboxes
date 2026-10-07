@@ -21,12 +21,13 @@ function picket(d: Dresser, x0: number, z0: number, x1: number, z1: number): voi
   const yaw = Math.atan2(x1 - x0, z1 - z0);
   const n = Math.floor(len / 0.9);
   const s = new Shape();
-  for (let i = 0; i <= n; i++) {
+  // The last picket would sit on the next run's first: leave it out.
+  for (let i = 0; i < n; i++) {
     const t = i / n - 0.5;
     s.at(rbox(0.32, 1.5, 0.12, 0.04), '#fbf8f0', 0, 0.75, t * len);
     s.at(cone(0.23, 0.32, 4), '#fbf8f0', 0, 1.6, t * len, 0, Math.PI / 4, 0);
   }
-  for (const y of [0.45, 1.15]) s.at(rbox(0.1, 0.14, len, 0.03), '#f0ebe0', -0.1, y, 0);
+  for (const y of [0.45, 1.15]) s.at(rbox(0.1, 0.14, len - 0.5, 0.03), '#f0ebe0', -0.1, y, 0);
   d.batch.shape(s, xform((x0 + x1) / 2, 0, (z0 + z1) / 2, 0, yaw, 0), 'plastic', { cast: false });
 }
 

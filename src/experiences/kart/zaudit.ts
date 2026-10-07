@@ -28,6 +28,8 @@ const MIN_AREA = 1e-4;
 
 function skip(m: THREE.Mesh): boolean {
   if ((m as unknown as THREE.InstancedMesh).isInstancedMesh) return true;
+  // Moving set pieces (a train, a tail, a rocket) are checked in motion by eye, not here.
+  for (let o: THREE.Object3D | null = m; o; o = o.parent) if (o.userData.dynamic) return true;
   const mats = Array.isArray(m.material) ? m.material : [m.material];
   return mats.every((mat) => (mat.polygonOffset && mat.polygonOffsetFactor < 0) || (mat.transparent && !mat.depthWrite) || mat.blending === THREE.AdditiveBlending || !m.visible);
 }
@@ -83,6 +85,7 @@ export function zAudit(root: THREE.Object3D, report?: (msg: string) => void): nu
   root.updateMatrixWorld(true);
   const tris: Tri[] = [];
   let meshId = 0;
+  const names: string[] = [];
   const a = new THREE.Vector3();
   const b = new THREE.Vector3();
   const c = new THREE.Vector3();
@@ -97,6 +100,8 @@ export function zAudit(root: THREE.Object3D, report?: (msg: string) => void): nu
     const idx = g.index;
     const n = idx ? idx.count : pos.count;
     const id = meshId++;
+    const mat = (Array.isArray(m.material) ? m.material[0] : m.material) as THREE.MeshStandardMaterial;
+    names.push(`${m.name || (m.userData.batch ? 'batch' : 'mesh')}:${mat.map ? 'tex' : mat.vertexColors ? 'vc' : '#' + mat.color?.getHexString()}`);
     for (let i = 0; i + 2 < n; i += 3) {
       const ia = idx ? idx.getX(i) : i;
       const ib = idx ? idx.getX(i + 1) : i + 1;
@@ -112,6 +117,8 @@ export function zAudit(root: THREE.Object3D, report?: (msg: string) => void): nu
       const ny = nrm.y / len;
       if (Math.abs(ny) < 0.995) continue;
       if (Math.abs(a.y - b.y) > DY || Math.abs(a.y - c.y) > DY) continue;
+      // Faces looking down at floor level are never seen: the camera stays above the floor.
+      if (ny < 0 && a.y < 0.06) continue;
       tris.push({ ax: a.x, az: a.z, bx: b.x, bz: b.z, cx: c.x, cz: c.z, y: (a.y + b.y + c.y) / 3, up: ny > 0, minX: Math.min(a.x, b.x, c.x), maxX: Math.max(a.x, b.x, c.x), minZ: Math.min(a.z, b.z, c.z), maxZ: Math.max(a.z, b.z, c.z), mesh: id });
     }
   });
@@ -141,7 +148,7 @@ export function zAudit(root: THREE.Object3D, report?: (msg: string) => void): nu
         seen.add(key);
         if (overlap(A, B) > MIN_AREA) {
           count++;
-          if (report && count <= 12) report(`overlap at ${A.ax.toFixed(2)},${A.y.toFixed(3)},${A.az.toFixed(2)} meshes ${A.mesh}/${B.mesh}`);
+          if (report && count <= 40) report(`overlap at ${A.ax.toFixed(2)},${A.y.toFixed(3)},${A.az.toFixed(2)} ${A.up ? 'up' : 'down'} ${names[A.mesh]} / ${names[B.mesh]} tri ${[A.ax, A.az, A.bx, A.bz, A.cx, A.cz].map((v) => v.toFixed(1)).join(',')} vs ${[B.ax, B.az, B.bx, B.bz, B.cx, B.cz].map((v) => v.toFixed(1)).join(',')}`);
         }
       }
     }

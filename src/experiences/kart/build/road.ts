@@ -260,7 +260,8 @@ export function buildRoad(c: Circuit, batch: Batch, look: RoadLook, colliders: C
       for (const sd of [1, -1]) {
         const side2 = (a0: number, b0: number): [number, number][] => (sd > 0 ? [[a0, 0], [b0, 0]] : [[b0, 0], [a0, 0]]);
         // A ledge from the curb lip to the rail.
-        batch.raw(strip(c, x0, x1, (s) => side2(sd * EDGE, sd * RO).map(([o]) => [o, h(s) - 0.04]) as [number, number][], 2, { flatUp: true }), look.rail);
+        // It rises a little toward the rail so it never lies flat on the ground at the ramp's foot.
+        batch.raw(strip(c, x0, x1, (s) => side2(sd * EDGE, sd * RO).map(([o]) => [o, h(s) - 0.04 + (Math.abs(o) > EDGE + 0.01 ? 0.03 : 0)]) as [number, number][], 2, { flatUp: true }), look.rail);
         if (r.style === 'planks') {
           // An open bridge: a deck fascia, support posts and rope rails, so the water shows underneath.
           batch.raw(wall(c, x0, x1, sd * (RO + RW), (s) => Math.max(-0.14, h(s) - 0.36), (s) => h(s) - 0.04, 1), sideMat, { cast: true });
@@ -294,7 +295,10 @@ export function buildRoad(c: Circuit, batch: Batch, look: RoadLook, colliders: C
       const ms = s + 1;
       const f = c.frame(ms);
       const yaw = Math.atan2(f.tx, f.tz);
-      const hh = gap && ms > gap.s0 && ms < gap.s1 ? peak + 1.2 : Math.max(0.5, h(ms) + 0.9);
+      const inGap = !!gap && ms > gap.s0 && ms < gap.s1;
+      // Where the ramp is still low, karts may roll off its side: no blunt rail end to hit.
+      if (!inGap && h(ms) < 0.3) continue;
+      const hh = inGap ? peak + 1.2 : Math.max(0.5, h(ms) + 0.9);
       for (const sd of [1, -1]) colliders.push(box(f.x + f.nx * sd * (EDGE + 0.23), f.z + f.nz * sd * (EDGE + 0.23), 0.15, 1.05, yaw, hh, 0.3, false));
     }
   }

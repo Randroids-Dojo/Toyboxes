@@ -63,9 +63,9 @@ const tmpS = new THREE.Vector3();
 const tmpP = new THREE.Vector3();
 const tmpC = new THREE.Color();
 
-/** A matrix from position, rotation (radians, XYZ) and scale. */
+/** A matrix from position, rotation (radians: roll z, then pitch x, then yaw y) and scale. */
 export function xform(x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1): THREE.Matrix4 {
-  tmpE.set(rx, ry, rz);
+  tmpE.set(rx, ry, rz, 'YXZ');
   tmpQ.setFromEuler(tmpE);
   return new THREE.Matrix4().compose(tmpP.set(x, y, z), tmpQ, tmpS.set(sx, sy, sz));
 }

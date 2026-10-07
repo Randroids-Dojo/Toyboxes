@@ -60,7 +60,11 @@ export function dressCove(d: Dresser, scene: CircuitScene, tex: TexCache): Theme
   // ---- The sea: beyond a coastline parallel to the bridge, outside it.
   const bf = c.frame(148);
   const outB = d.outsideSide(148);
-  const coast = { x: bf.x + bf.nx * outB * (EDGE + 12), z: bf.z + bf.nz * outB * (EDGE + 12), nx: bf.nx * outB, nz: bf.nz * outB };
+  // The shore runs parallel to the bridge, far enough out that no part of the road is in the sea.
+  let reachOut = 0;
+  for (let i = 0; i < c.path.n; i++) reachOut = Math.max(reachOut, (c.path.x[i] - bf.x) * bf.nx * outB + (c.path.z[i] - bf.z) * bf.nz * outB);
+  const shore = reachOut + EDGE + 12;
+  const coast = { x: bf.x + bf.nx * outB * shore, z: bf.z + bf.nz * outB * shore, nx: bf.nx * outB, nz: bf.nz * outB };
   const seaDist = (x: number, z: number) => (x - coast.x) * coast.nx + (z - coast.z) * coast.nz;
   const seaMat = waterMaterial(tex, '#1f7fb8', '#3fc1d9');
   const seaGeo = new THREE.PlaneGeometry(900, 500).rotateX(-Math.PI / 2);
@@ -99,7 +103,7 @@ export function dressCove(d: Dresser, scene: CircuitScene, tex: TexCache): Theme
   if (lag) {
     channel.push({ ax: lag.x, az: lag.z, bx: bridgeMid.x - coast.nx * (EDGE + 3), bz: bridgeMid.z - coast.nz * (EDGE + 3), w: 2.4 });
     // Straight across under the bridge and out to the sea.
-    channel.push({ ax: bridgeMid.x - coast.nx * (EDGE + 3), az: bridgeMid.z - coast.nz * (EDGE + 3), bx: bridgeMid.x + coast.nx * (EDGE + 14), bz: bridgeMid.z + coast.nz * (EDGE + 14), w: 2.4 });
+    channel.push({ ax: bridgeMid.x - coast.nx * (EDGE + 3), az: bridgeMid.z - coast.nz * (EDGE + 3), bx: bridgeMid.x + coast.nx * (shore + 2), bz: bridgeMid.z + coast.nz * (shore + 2), w: 2.4 });
     channel.forEach((ch, i) => {
       const len = Math.hypot(ch.bx - ch.ax, ch.bz - ch.az);
       const g = new THREE.PlaneGeometry(ch.w * 2, len + ch.w).rotateX(-Math.PI / 2);
@@ -154,8 +158,10 @@ export function dressCove(d: Dresser, scene: CircuitScene, tex: TexCache): Theme
       const s = new Shape();
       s.at(rbox(7, 6, 6, 0.2), '#fffaf0', 0, 3, 0);
       for (let k = 0; k < 6; k++) s.at(rbox(7 / 6 + 0.02, 6.04, 6.04, 0.02), k % 2 ? col : '#fffaf0', -3.5 + (k + 0.5) * (7 / 6), 3, 0);
-      s.at(rbox(8, 0.5, 7.2, 0.15), col, 0, 7.2, 0, 0, 0, 0.35);
-      s.at(rbox(8, 0.5, 7.2, 0.15), col, 0, 7.2, 0, 0, 0, -0.35);
+      // Two roof halves meeting under a ridge cap (one a touch lower, so their bevels never coincide).
+      s.at(rbox(4.4, 0.5, 7.2, 0.15), col, -1.95, 6.55, 0, 0, 0, 0.35);
+      s.at(rbox(4.4, 0.5, 7.2, 0.15), col, 1.95, 6.53, 0, 0, 0, -0.35);
+      s.at(cyl(0.35, 0.35, 7.4, 10), '#fffaf0', 0, 7.45, 0, Math.PI / 2, 0, 0);
       s.at(rbox(2.4, 3.6, 0.3, 0.1), '#2b2340', 0, 1.8, 3.05);
       s.at(rbox(7.6, 0.4, 1.6, 0.1), '#b98a5e', 0, 0.2, 3.6);
       batch.shape(s, xform(q.x, 0, q.z, 0, yaw, 0));
@@ -251,7 +257,7 @@ export function dressCove(d: Dresser, scene: CircuitScene, tex: TexCache): Theme
     for (let s = 166; s < 268; s += 7) {
       for (const sd of [1, -1]) {
         const p = d.beside(s, sd, 4.5 + ((s * 7) % 5));
-        if (!d.free(p.x, p.z, 2, 4)) continue;
+        if (!d.free(p.x, p.z, 2, 4) || seaDist(p.x, p.z) > -4) continue;
         if (n % 3 === 2) {
           // A rock pool with a starfish.
           const g = new THREE.CircleGeometry(2.2, 24).rotateX(-Math.PI / 2);
@@ -312,7 +318,11 @@ export function dressCove(d: Dresser, scene: CircuitScene, tex: TexCache): Theme
         // A toy palm.
         const s = new Shape();
         for (let i = 0; i < 6; i++) s.at(cyl(0.45 - i * 0.03, 0.5 - i * 0.03, 1.6, 8), i % 2 ? '#b98a5e' : '#a87a4e', Math.sin(i * 0.4) * 0.6, 0.8 + i * 1.55, 0, 0, 0, -0.08);
-        for (let i = 0; i < 6; i++) s.at(rbox(0.9, 0.12, 4.2, 0.05), '#3fb68b', Math.cos((i / 6) * Math.PI * 2) * 2, 9.6, Math.sin((i / 6) * Math.PI * 2) * 2, 0.35, -(i / 6) * Math.PI * 2 + Math.PI / 2, 0);
+        // Leaves droop outward from the crown, each at its own height so none share a plane.
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2;
+          s.at(rbox(0.9, 0.12, 4.2, 0.05), '#3fb68b', Math.cos(a) * 2.4, 9.5 + i * 0.03, Math.sin(a) * 2.4, 0.35, Math.PI / 2 - a, 0);
+        }
         s.at(ball(0.4, 8, 6), '#8a5a3b', 0.6, 9.3, 0.3);
         s.at(ball(0.4, 8, 6), '#8a5a3b', 0.2, 9.2, -0.5);
         d.place(s, sp.x, sp.z, n, 2, { collide: 0.6 });
@@ -387,6 +397,7 @@ export function dressCove(d: Dresser, scene: CircuitScene, tex: TexCache): Theme
   for (let i = 0; i < 3; i++) {
     const m = new THREE.Mesh(ballGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.35 }));
     m.castShadow = true;
+    m.userData.dynamic = true;
     d.group.add(m);
     balls.push(m);
     const sh = new THREE.Mesh(shadowGeo, shadowMat);

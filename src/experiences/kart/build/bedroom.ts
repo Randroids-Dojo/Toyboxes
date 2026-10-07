@@ -157,7 +157,7 @@ export function dressBedroom(d: Dresser, scene: CircuitScene, tex: TexCache): Th
       [2.4, 0.45],
     ]) {
       const hnd = new THREE.Group();
-      hnd.position.set(0, 7.2, 1.62 + w * 0.1);
+      hnd.position.set(0, 7.2, 1.62 + hands.length * 0.16);
       hnd.add(new THREE.Mesh(new THREE.BoxGeometry(w, len, 0.12).translate(0, len / 2 - 0.3, 0), new THREE.MeshStandardMaterial({ color: '#1d1830' })));
       clock.add(hnd);
       hands.push(hnd);
@@ -194,7 +194,7 @@ export function dressBedroom(d: Dresser, scene: CircuitScene, tex: TexCache): Th
       [171, 1],
       [172, -1],
     ] as [number, number][]) {
-      const p = d.beside(s0, sd, 4.5);
+      const p = d.beside(s0, sd, 7);
       const st = new Shape();
       let y = 0;
       for (let i = 0; i < 5 - (s0 % 2); i++) {
@@ -242,15 +242,16 @@ export function dressBedroom(d: Dresser, scene: CircuitScene, tex: TexCache): Th
     const mid = (t.s0 + t.s1) / 2;
     const f = c.frame(mid);
     const yaw = Math.atan2(f.tx, f.tz);
-    const len = t.s1 - t.s0 + 10;
-    const W = EDGE * 2 + 10;
+    // The road runs across the bed, from one side to the other: legs and headboard stay off the road.
+    const len = t.s1 - t.s0 + 4;
+    const W = EDGE * 2 + 12;
+    const head = d.outsideSide(mid);
     const frame = new Shape();
-    // Legs outside the road.
     for (const sd of [1, -1]) for (const e of [-1, 1]) frame.at(rbox(1.4, t.roof, 1.4, 0.3), '#8a5a3b', sd * (W / 2 - 1), t.roof / 2, e * (len / 2 - 1));
     frame.at(rbox(W, 1.2, len, 0.4), '#8a5a3b', 0, t.roof + 0.6, 0);
-    // The headboard at one end, rising high.
-    frame.at(rbox(W, 12, 1.4, 0.6), '#a8714f', 0, t.roof + 6, -len / 2);
-    for (let i = 0; i < 5; i++) frame.at(ball(0.7, 8, 6), '#ffd24a', -W / 2 + 2 + i * ((W - 4) / 4), t.roof + 12.4, -len / 2);
+    // The headboard along one side, rising high, with brass knobs.
+    frame.at(rbox(1.4, 13, len + 1.4, 0.6), '#a8714f', head * (W / 2 + 0.7), t.roof / 2 + 6.4, 0);
+    for (let i = 0; i < 5; i++) frame.at(ball(0.7, 8, 6), '#ffd24a', head * (W / 2 + 0.7), t.roof / 2 + 13.2, -len / 2 + 1 + i * ((len - 2) / 4));
     batch.shape(frame, xform(f.x, 0, f.z, 0, yaw, 0));
     for (const sd of [1, -1])
       for (const e of [-1, 1]) {
@@ -258,7 +259,10 @@ export function dressBedroom(d: Dresser, scene: CircuitScene, tex: TexCache): Th
         const lz = f.z + f.nz * sd * (W / 2 - 1) + f.tz * e * (len / 2 - 1);
         d.colliders.push({ kind: 'circle', x: lx, z: lz, r: 1, h: t.roof, bounce: 0.3, blocksCamera: false });
       }
-    d.wallBox(f.x - f.tx * len / 2, f.z - f.tz * len / 2, W / 2, 0.8, yaw, t.roof + 12, true);
+    // xform's local +x is the road's right; the left normal is -x.
+    const hx = f.x - f.nx * head * (W / 2 + 0.7);
+    const hz = f.z - f.nz * head * (W / 2 + 0.7);
+    d.wallBox(hx, hz, 0.8, len / 2 + 0.7, yaw, t.roof + 13, true);
     // Mattress and duvet: their own mesh so they fade when the camera rises into them.
     const mat = new THREE.MeshStandardMaterial({ color: '#4aa3df', roughness: 0.9, transparent: true, opacity: 1 });
     roofMats.push(mat);
@@ -401,7 +405,7 @@ export function dressBedroom(d: Dresser, scene: CircuitScene, tex: TexCache): Th
     const s = new Shape();
     s.at(cyl(0.1, 0.1, 10, 6), '#fffaf0', 0, -5, 0);
     s.at(rbox(22, 0.3, 0.3, 0.1), '#fffaf0', 0, -10, 0);
-    s.at(rbox(0.3, 0.3, 22, 0.1), '#fffaf0', 0, -10, 0);
+    s.at(rbox(0.3, 0.3, 22, 0.1), '#fffaf0', 0, -10.32, 0);
     const planets: [number, number, number, string, number][] = [
       [11, 0, 2.2, '#ff8fd1', 0],
       [-11, 0, 1.8, '#7ef0ff', 1],
@@ -488,6 +492,7 @@ export function dressBedroom(d: Dresser, scene: CircuitScene, tex: TexCache): Th
     info: () => ({ kind: 'tail', sweeping: tailInfo.sweeping, warn: tailInfo.warn, angle: +tailInfo.angle.toFixed(2) }),
   };
 
+  for (const g of [clock, tail, rocket, mobile, ...catEars]) g.userData.dynamic = true;
   return {
     hero: moonAt.clone(),
     dust: 0x8a7ad8,

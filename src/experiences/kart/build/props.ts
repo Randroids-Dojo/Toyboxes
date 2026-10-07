@@ -110,8 +110,9 @@ export function grandstand(w: number, tiers: number, look: { frame: string; seat
     for (let x = -w / 2 + 0.9; x < w / 2 - 0.6; x += 0.85) seats.push(new THREE.Vector3(x, hgt + 0.16, -t * depth + depth - 0.25));
   }
   const back = 0.7 + tiers * 0.75;
-  for (const sx of [-1, 1]) s.at(rbox(0.35, back + 3.2, 0.35, 0.06), look.frame, sx * (w / 2 - 0.2), (back + 3.2) / 2, -(tiers - 1) * depth + 0.2);
-  for (const sx of [-1, 1]) s.at(rbox(0.3, 3.2, 0.3, 0.06), look.frame, sx * (w / 2 - 0.2), 1.6, depth + 0.6);
+  // Posts stand a few millimetres proud of the base so their feet never share its plane.
+  for (const sx of [-1, 1]) s.at(rbox(0.35, back + 3.2, 0.35, 0.06), look.frame, sx * (w / 2 - 0.2), (back + 3.2) / 2 + 0.004, -(tiers - 1) * depth + 0.2);
+  for (const sx of [-1, 1]) s.at(rbox(0.3, 3.2, 0.3, 0.06), look.frame, sx * (w / 2 - 0.2), 1.6 + 0.004, depth + 0.6);
   // Striped roof.
   const stripes = Math.round(w / 1.6);
   for (let i = 0; i < stripes; i++) {

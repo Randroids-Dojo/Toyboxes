@@ -228,7 +228,7 @@ export const CIRCUITS: Record<CircuitId, CircuitDef> = {
     capsules: [14, 78],
     pads: [
       { s: 287, off: 0 },
-      { s: 340, off: 0 },
+      { s: 148, off: 0, len: 2 },
     ],
     medals: [35000, 32000, 30300, 29200],
     bounds: 28,

@@ -1251,13 +1251,14 @@ export class KartWorld implements SpaceView {
     const fell = !k.air && gap;
     if (active && !r.you) {
       r.stuckFor = k.speed < 1 && !k.frozen ? r.stuckFor + h : 0;
-      if (r.offFor > 3 || r.stuckFor > 2.5 || inWater || fell) this.callGrabber(r);
+      if (r.offFor > 3 || r.stuckFor > 2.5 || inWater || fell) this.callGrabber(r, inWater ? 'water' : fell ? 'gap' : r.offFor > 3 ? 'off' : 'stuck');
     } else if (r.you && active && (inWater || fell || (r.offFor > 3 && this.session?.state === 'running' && !this.kart.assists.autoGas && false))) this.callGrabber(r);
   }
 
   /** The Grabber lifts a kart back onto the road, a little behind where it left. */
-  callGrabber(r: Racer): void {
+  callGrabber(r: Racer, why = 'asked'): void {
     if (r.grab) return;
+    r.lastGrab = `${why} at ${r.s.toFixed(0)}`;
     const c = this.c;
     let back = r.s - 2;
     // Not inside a gap, and clear of other karts.
@@ -2090,6 +2091,7 @@ export class KartWorld implements SpaceView {
       r.laps = 0;
       r.offMax = 0;
       r.grabs = 0;
+      r.lastGrab = '';
       r.kart.applyClass(CLASSES[cls]);
       r.kart.root.visible = true;
     }
@@ -2100,7 +2102,7 @@ export class KartWorld implements SpaceView {
     this.simPace = false;
     this.session = wasSession;
     for (const r of this.cpus) r.kart.applyClass(CLASSES.battery);
-    return { seconds: this.clock - t0, cpus: this.cpus.map((r) => ({ name: r.name, laps: r.laps, offMax: r.offMax, grabs: r.grabs })) };
+    return { seconds: this.clock - t0, cpus: this.cpus.map((r) => ({ name: r.name, laps: r.laps, offMax: r.offMax, grabs: r.grabs, lastGrab: r.lastGrab })) };
   }
 
   /** Parks the drivers in a row facing the arrival spot, for close-up screenshots. */
@@ -2127,6 +2129,13 @@ export class KartWorld implements SpaceView {
   debugZAudit(): number {
     this.z.audit = zAudit(this.cs.group);
     return this.z.audit;
+  }
+
+  /** Where the z-fight audit finds overlaps (first dozen), with mesh names. */
+  debugZReport(): string[] {
+    const out: string[] = [];
+    zAudit(this.cs.group, (m) => out.push(m));
+    return out;
   }
 
   debugUnlockAll(): boolean {

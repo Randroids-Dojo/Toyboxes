@@ -125,12 +125,26 @@ export class Circuit {
     const wide = smoothLoop(curv, Math.max(1, Math.round(8 / spacing)));
     const rawLine = new Float32Array(n);
     for (let i = 0; i < n; i++) rawLine[i] = clamp(wide[i] * 45, -1, 1) * (HW - 1.7);
-    // Raised decks and ramps: keep to the middle.
-    for (let i = 0; i < n; i++) if (this.profile.walled(p.s[i]) || this.profile.tunnelAt(p.s[i])) rawLine[i] *= 0.15;
+    // Raised decks, ramps and tunnels: keep to the middle, easing over toward it 14 m before.
+    const narrow = (s: number) => this.profile.walled(s) || !!this.profile.tunnelAt(s);
+    for (let i = 0; i < n; i++) {
+      let k = 1;
+      for (let a = 0; a <= 14; a += 2) if (narrow(p.s[i] + a)) k = Math.min(k, 0.15 + (a / 14) * 0.85);
+      rawLine[i] *= k;
+    }
     this.line = smoothLoop(smoothLoop(rawLine, Math.max(1, Math.round(6 / spacing))), Math.max(1, Math.round(6 / spacing)));
     const tight = smoothLoop(curv, k3);
     this.plan = new Float32Array(n);
     for (let i = 0; i < n; i++) this.plan[i] = Math.sqrt(AI_GRIP * 1.1 * (1 / Math.max(Math.abs(tight[i]), 1 / 300)));
+    // Arrive at a ramp lined up, not flat out from the corner before it.
+    for (const r of this.profile.raises) {
+      if (r.sides !== 'wall') continue;
+      const a = r.segs[0].s0;
+      for (let i = 0; i < n; i++) {
+        const d = this.path.delta(a, p.s[i]);
+        if (d > -10 && d < 2) this.plan[i] = Math.min(this.plan[i], 13);
+      }
+    }
     for (let pass = 0; pass < 2; pass++)
       for (let i = n - 1; i >= 0; i--) {
         const j = (i + 1) % n;

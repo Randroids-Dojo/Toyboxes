@@ -60,6 +60,8 @@ export interface Racer {
   stuckFor: number;
   offMax: number;
   grabs: number;
+  /** Where along the lap, and why, the Grabber last came (playtests). */
+  lastGrab: string;
   draft: number;
   mood: Mood;
   moodUntil: number;
@@ -97,6 +99,7 @@ export function newRacer(id: string, name: string, color: string, kart: RaceKart
     stuckFor: 0,
     offMax: 0,
     grabs: 0,
+    lastGrab: '',
     draft: 0,
     mood: 'drive',
     moodUntil: 0,

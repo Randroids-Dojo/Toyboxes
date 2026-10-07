@@ -95,12 +95,14 @@ export function driveCpu(r: Racer, w: AiWorld, dt: number, colliders: Collider[]
   if (speed > cornerV + 0.6) throttle = -clamp((speed - cornerV) / 4, 0.15, 1);
   else if (v.boost > 0 || speed < Math.min(cruise, cornerV) - 0.2) throttle = 1;
   else throttle = 0;
-  // A ramp with a gap needs speed: flat out.
-  if (c.profile.raiseAt(r.s + 10)?.gap) throttle = 1;
+  // On a ramp up to a gap, keep the speed up (the pad on it does the rest).
+  const ramp = c.profile.raiseAt(r.s);
+  if (ramp?.gap && c.path.delta(r.s, ramp.gap.s0) > 0 && speed < v.t.maxSpeed) throttle = 1;
   // Drift through slow corners for a mini-turbo.
   const corner = c.plan[c.idx(r.s + 8)] < v.t.maxSpeed * 0.8;
-  if (!ai.drifting && racing && corner && Math.abs(steer) > 0.4 && speed > 9 && !v.air && v.onRoad) ai.drifting = w.rnd() < 0.5 + def.nerve * 0.3;
-  if (ai.drifting && (Math.abs(steer) < 0.15 || speed < 6 || !corner)) ai.drifting = false;
+  // A drift cannot brake, so only start one at a sane speed for the corner, and give up if too fast.
+  if (!ai.drifting && racing && corner && Math.abs(steer) > 0.4 && speed > 9 && speed < cornerV + 1 && !v.air && v.onRoad) ai.drifting = w.rnd() < 0.5 + def.nerve * 0.3;
+  if (ai.drifting && (Math.abs(steer) < 0.15 || speed < 6 || !corner || speed > cornerV + 2.5)) ai.drifting = false;
   const brake = ai.drifting ? 1 : 0;
   const others = w.racers.filter((o) => o !== r && !o.grab).map((o) => circle(o.kart.pos.x, o.kart.pos.z, o.kart.t.radius * 0.9, o.kart.pos.y + 1.1, 0.7, false));
   v.drive(dt, ai.drifting ? Math.max(throttle, 0.6) : throttle, steer, brake, colliders.concat(others));

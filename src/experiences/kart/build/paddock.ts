@@ -86,10 +86,10 @@ export function buildPaddock(c: Circuit, batch: Batch, group: THREE.Group, tex: 
   const fence = new Shape();
   const gate0 = PADDOCK.gate[0] - 4;
   const gate1 = PADDOCK.gate[0] + 4;
-  const runFence = (u0: number, u1: number, v0: number, v1: number) => {
+  const runFence = (u0: number, u1: number, v0: number, v1: number, firstPost = true) => {
     const len = Math.hypot(u1 - u0, v1 - v0);
     const n = Math.max(1, Math.round(len / 2.4));
-    for (let i = 0; i <= n; i++) {
+    for (let i = firstPost ? 0 : 1; i <= n; i++) {
       const u = u0 + ((u1 - u0) * i) / n;
       const v = v0 + ((v1 - v0) * i) / n;
       batch.shape(new Shape().at(rbox(0.28, 1.3, 0.28, 0.08), look.post, 0, 0.65, 0).at(ball(0.2, 8, 6), look.accent, 0, 1.4, 0), at(u, v, 0), 'plastic');
@@ -102,8 +102,9 @@ export function buildPaddock(c: Circuit, batch: Batch, group: THREE.Group, tex: 
   };
   runFence(-H, gate0, PADDOCK.fence, PADDOCK.fence);
   runFence(gate1, H, PADDOCK.fence, PADDOCK.fence);
-  runFence(-H, -H, PADDOCK.fence, PADDOCK.back);
-  runFence(H, H, PADDOCK.fence, PADDOCK.back);
+  // The side fences start at the corner posts the front fence already has.
+  runFence(-H, -H, PADDOCK.fence, PADDOCK.back, false);
+  runFence(H, H, PADDOCK.fence, PADDOCK.back, false);
   void fence;
 
   // ---- Boom gate at the pit exit: a collider on foot, lifted for karts.
