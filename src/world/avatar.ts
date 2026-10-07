@@ -13,6 +13,25 @@ const SHIRTS = ['#e8574a', '#f4b740', '#4aa3df', '#3fb68b', '#8a6bd1', '#f58a6b'
  */
 export type Pose = 'fly' | 'surf' | 'float' | 'tumble' | 'dance' | 'cheer' | 'crouch' | 'aim';
 
+/** The figure's pivots, for worlds that animate limbs themselves or dress the figure. */
+export interface AvatarBones {
+  /** Leans and bobs; position is an offset from standing. */
+  rig: THREE.Group;
+  torso: THREE.Mesh;
+  head: THREE.Group;
+  armL: THREE.Group;
+  armR: THREE.Group;
+  legL: THREE.Group;
+  legR: THREE.Group;
+}
+
+/**
+ * A custom pose: called every frame with the bones reset to standing, the
+ * seconds since the pose began and the frame time. Set rotations and the rig
+ * offset; e.g. dance moves timed to a song's beat.
+ */
+export type PoseFn = (b: AvatarBones, t: number, dt: number) => void;
+
 export function shirtFor(name: string): string {
   let h = 0;
   for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
@@ -44,7 +63,7 @@ export class Avatar {
   private airborne = false;
   private jumpT = 0;
   private shirtMat: THREE.MeshStandardMaterial;
-  private pose: Pose | null = null;
+  private pose: Pose | PoseFn | null = null;
   private poseT = 0;
   private swingT = 0;
   /** Where a held thing goes: the end of the right arm. */
@@ -112,8 +131,13 @@ export class Avatar {
     this.swingT = 0.3;
   }
 
+  /** The figure's pivots (see AvatarBones). Worlds that hang things on them remove them when they leave. */
+  bones(): AvatarBones {
+    return { rig: this.rig, torso: this.torso, head: this.head, armL: this.armL, armR: this.armR, legL: this.legL, legR: this.legR };
+  }
+
   /** Holds a pose until cleared with null. */
-  setPose(p: Pose | null): void {
+  setPose(p: Pose | PoseFn | null): void {
     if (p !== this.pose) {
       this.pose = p;
       this.poseT = 0;
@@ -167,6 +191,14 @@ export class Avatar {
     this.swingT = Math.max(0, this.swingT - dt);
     this.rig.rotation.set(0, 0, 0);
     this.armL.rotation.y = this.armR.rotation.y = 0;
+    if (typeof this.pose === 'function') {
+      this.poseT += dt;
+      this.rig.position.set(0, 0, 0);
+      for (const l of [this.armL, this.armR, this.legL, this.legR, this.head]) l.rotation.set(0, 0, 0);
+      this.pose(this.bones(), this.poseT, dt);
+      this.swingOverlay();
+      return;
+    }
     if (this.pose) {
       this.poseT += dt;
       this.posed(this.pose, this.poseT, speed, reduceMotion);
