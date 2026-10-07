@@ -4,10 +4,11 @@
 import * as THREE from 'three';
 import { Engine, setMusicVolume, setVolume, sfx, suspendAudio, unlockAudio } from '../audio/sfx';
 import * as local from '../core/local';
+import { APP_VERSION, newerVersion } from '../core/update';
 import { IS_TV, type Input } from '../input/input';
 import type { TouchControls } from '../input/touch';
 import { api, retryText } from '../net/api';
-import { ARCADES, EMPTY_CONTENT, exhibitsIn, type Area, type ArcadeId, type Exhibit, type RoomPublic, type SlotSummary } from '../shared/model';
+import { ARCADES, EMPTY_CONTENT, exhibitsIn, type Area, type ArcadeId, type Exhibit, type Experience, type RoomPublic, type SlotSummary } from '../shared/model';
 import { askName, choose, confirmBox, pinPad } from '../ui/dialogs';
 import { openSketchbook, type EditSession } from '../ui/sketchbook';
 import { h, type UI } from '../ui/ui';
@@ -20,15 +21,33 @@ import { Town, type Entrance } from '../world/town';
 import { Toys, type Mover, type ToyEvent } from '../world/toys';
 import { Vehicle } from '../world/vehicles';
 import type { ExperienceCtx } from '../experiences/common';
-import { Casino } from '../experiences/casino';
-import { Galaxy } from '../experiences/galaxy';
-import { NeonParty } from '../experiences/neon/index';
-import { FartSimulator } from '../experiences/fart';
-import { KartWorld } from '../experiences/kart/index';
 import type { CameraShot, CaptureLabels, PlayerState, SpaceView, Tier } from '../world/space';
 import { Arranger } from './arrange';
 import { CameraRig } from './camera';
 import { controlsPanel, pauseMenu, settingsPanel } from './menus';
+
+type WorldClass = new (ctx: ExperienceCtx) => SpaceView;
+
+/** Each world's code downloads the first time it is needed, so the town never loads all of them. */
+const WORLD_CODE: Record<Experience['kind'], () => Promise<WorldClass>> = {
+  kart: () => import('../experiences/kart/index').then((m) => m.KartWorld),
+  casino: () => import('../experiences/casino').then((m) => m.Casino),
+  galaxy: () => import('../experiences/galaxy').then((m) => m.Galaxy),
+  neon: () => import('../experiences/neon/index').then((m) => m.NeonParty),
+  fart: () => import('../experiences/fart').then((m) => m.FartSimulator),
+};
+const worldLoads = new Map<Experience['kind'], Promise<WorldClass>>();
+
+/** Starts (or reuses) the download of a world's code; a failed download can be tried again. */
+function worldCode(kind: Experience['kind']): Promise<WorldClass> {
+  let p = worldLoads.get(kind);
+  if (!p) {
+    p = WORLD_CODE[kind]();
+    p.catch(() => worldLoads.delete(kind));
+    worldLoads.set(kind, p);
+  }
+  return p;
+}
 
 type Space =
   | { kind: 'hub' }
@@ -465,8 +484,7 @@ export class Game {
     const prevRoom = this.currentRoom();
     if (this.session && (!prevRoom || prevRoom.id !== room.id) && this.session.roomId !== room.id) this.lock(false);
     const area = opts.areaId ? room.content.areas.find((a) => a.id === opts.areaId) : undefined;
-    if (area) this.buildArea(room, area);
-    else this.buildRoom(room);
+    if (!area || !(await this.buildArea(room, area))) this.buildRoom(room);
     const arrival = this.space.kind === 'hub' ? null : this.space.interior.arrival;
     if (opts.at) this.placePlayer(opts.at.x, opts.at.z, opts.at.yaw);
     else if (arrival) this.placePlayer(arrival.x, arrival.z, arrival.yaw);
@@ -485,6 +503,8 @@ export class Game {
       areas: content.areas,
     });
     this.setScene({ kind: 'room', room, interior });
+    // Fetch the code for this room's worlds now, so their doors open without a wait.
+    for (const d of interior.areaDoors) if (d.area.experience) void worldCode(d.area.experience.kind);
   }
 
   private experienceCtx(room: RoomPublic, area: Area): ExperienceCtx {
@@ -528,26 +548,26 @@ export class Game {
     };
   }
 
-  private buildArea(room: RoomPublic, area: Area): void {
-    if (area.experience?.kind === 'kart') {
-      this.setScene({ kind: 'area', room, area, interior: new KartWorld(this.experienceCtx(room, area)) });
-      return;
-    }
-    if (area.experience?.kind === 'casino') {
-      this.setScene({ kind: 'area', room, area, interior: new Casino(this.experienceCtx(room, area)) });
-      return;
-    }
-    if (area.experience?.kind === 'fart') {
-      this.setScene({ kind: 'area', room, area, interior: new FartSimulator(this.experienceCtx(room, area)) });
-      return;
-    }
-    if (area.experience?.kind === 'neon') {
-      this.setScene({ kind: 'area', room, area, interior: new NeonParty(this.experienceCtx(room, area)) });
-      return;
-    }
-    if (area.experience?.kind === 'galaxy') {
-      this.setScene({ kind: 'area', room, area, interior: new Galaxy(this.experienceCtx(room, area)) });
-      return;
+  /** Builds an inner area. False when its world's code could not be downloaded; nothing changes then. */
+  private async buildArea(room: RoomPublic, area: Area): Promise<boolean> {
+    const kind = area.experience?.kind;
+    if (kind && WORLD_CODE[kind]) {
+      let World: WorldClass;
+      try {
+        World = await worldCode(kind);
+      } catch {
+        // A tab opened before a release asks for world code that is gone now: reload into the new version, at this door.
+        if (await newerVersion(APP_VERSION)) {
+          const door = this.view()?.areaDoors.find((d) => d.area.id === area.id);
+          local.setReturnSpot({ space: 'room', roomId: room.id, x: door?.x ?? 0, z: (door?.z ?? 0) + 0.6, yaw: Math.PI, at: Date.now() });
+          location.reload();
+          return false;
+        }
+        this.ui.toast(`Couldn't load ${area.name}. Check the connection and try again.`, 'bad', 3600);
+        return false;
+      }
+      this.setScene({ kind: 'area', room, area, interior: new World(this.experienceCtx(room, area)) });
+      return true;
     }
     const interior = new Interior({
       kind: 'area',
@@ -558,6 +578,7 @@ export class Game {
       areas: [],
     });
     this.setScene({ kind: 'area', room, area, interior });
+    return true;
   }
 
   private async enterArea(area: Area): Promise<void> {
@@ -566,9 +587,10 @@ export class Game {
     const room = this.space.room;
     sfx.door();
     await this.fade(true);
-    this.buildArea(room, area);
-    const arrival = (this.space as { interior: SpaceView }).interior.arrival;
-    this.placePlayer(arrival.x, arrival.z, arrival.yaw);
+    if (await this.buildArea(room, area)) {
+      const arrival = (this.space as { interior: SpaceView }).interior.arrival;
+      this.placePlayer(arrival.x, arrival.z, arrival.yaw);
+    }
     this.busy = false;
     await this.fade(false);
   }
