@@ -15,6 +15,7 @@ import { browserKey } from '../server/crypto.js';
 import { MemoryStore, setStore } from '../server/store.js';
 import { BONUS_RING, REEL_STRIP, START_CREDITS, type CasinoStats } from '../src/shared/slots';
 import { invariantProblem, localDay } from '../src/shared/casino/stats';
+import { newShoe, type Card } from '../src/shared/casino-games';
 import { WHEEL_SEGMENTS } from '../src/shared/casino/wheel';
 
 async function call(handler: any, c: { method?: string; query?: Record<string, string>; body?: unknown; headers?: Record<string, string> } = {}) {
@@ -47,6 +48,18 @@ async function giveStamps(n: number, who = alice) {
   const s = (await store.get<CasinoStats & { tables?: unknown }>(statsKey(who)))!;
   const ids = ['aboard', 'lever', 'redblack', 'twentyone', 'riverwheel', 'fruit', 'steam', 'blackjack', 'doubledown', 'split', 'straightup', 'spread', 'star', 'pearl', 'dealt'];
   await store.set(statsKey(who), { ...s, stamps: ids.slice(0, n) });
+}
+
+/** Deal a fixed valid shoe, so rank assertions never depend on a lucky hand. */
+async function scriptHand(deal: Card[]) {
+  const s = (await store.get<CasinoStats & { tables?: Record<string, unknown> }>(statsKey()))!;
+  const shoe = newShoe(6, n => n - 1);
+  for (const card of deal) {
+    const i = shoe.indexOf(card);
+    if (i < 0) throw new Error('Scripted card missing from shoe');
+    shoe.splice(i, 1);
+  }
+  await store.set(statsKey(), { ...s, tables: { ...s.tables, bj: { shoe: [...shoe, ...[...deal].reverse()], round: null } } });
 }
 
 beforeEach(async () => {
@@ -208,10 +221,13 @@ describe('stamps and ranks', () => {
     rig.queue.push(REEL_STRIP.indexOf('star'), REEL_STRIP.indexOf('bar'), REEL_STRIP.indexOf('lemon'));
     const first = await post({ action: 'slot', bet: 10 });
     expect(first.body.newStamps).toEqual(['aboard', 'lever']);
+    rig.queue.push(2);
     expect((await post({ action: 'roulette', bets: [{ type: 'red', amount: 10 }] })).body.newStamps).toContain('redblack');
+    await scriptHand(['10H', '10C', '9S', '8D']);
     let hand = await post({ action: 'blackjack', table: 'saloon', move: 'deal', bet: 10 });
     while (hand.body.hand.phase === 'player') hand = await post({ action: 'blackjack', table: 'saloon', move: 'stand' });
     expect(hand.body.newStamps).toContain('twentyone');
+    rig.queue.push(0);
     const wheel = await post({ action: 'wheel', bets: { anchor: 10 } });
     expect(wheel.body.newStamps).toContain('riverwheel');
     expect(wheel.body.rank).toBe(1);
@@ -220,6 +236,23 @@ describe('stamps and ranks', () => {
     expect((await post({ action: 'slot', bet: 10 })).body.newStamps).not.toContain('lever');
     const r = await get();
     expect(r.body.boards.stamps[0]).toMatchObject({ name: 'Alice', value: r.body.stats.stamps.length, you: true });
+  });
+
+  it('a natural blackjack earns Bosun before the River Wheel', async () => {
+    rig.queue.push(REEL_STRIP.indexOf('star'), REEL_STRIP.indexOf('bar'), REEL_STRIP.indexOf('lemon'));
+    await post({ action: 'slot', bet: 10 });
+    rig.queue.push(2);
+    await post({ action: 'roulette', bets: [{ type: 'red', amount: 10 }] });
+    await scriptHand(['AH', '10C', '10S', '8D']);
+    const hand = await post({ action: 'blackjack', table: 'saloon', move: 'deal', bet: 10 });
+    expect(hand.body.newStamps).toEqual(['twentyone', 'blackjack']);
+    expect(hand.body.rank).toBe(1);
+    expect(hand.body.rankUp).toBe(true);
+    rig.queue.push(0);
+    const wheel = await post({ action: 'wheel', bets: { anchor: 10 } });
+    expect(wheel.body.newStamps).toContain('riverwheel');
+    expect(wheel.body.rank).toBe(1);
+    expect(wheel.body.rankUp).toBe(false);
   });
 
   it('a voyage that ends up on the day earns Shore leave', async () => {

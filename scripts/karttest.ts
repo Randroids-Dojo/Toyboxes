@@ -249,7 +249,7 @@ async function touchSet(id: number, p: { x: number; y: number } | null): Promise
   if (p) touches.set(id, p);
   else touches.delete(id);
   const list = [...touches].map(([i, q]) => ({ x: q.x, y: q.y, id: i }));
-  // DevTools works out which points changed: a missing point is a release, a new one a press.
+  // Add or move active points; the final release ends the whole gesture.
   const type = !p ? (list.length ? 'touchMove' : 'touchEnd') : had ? 'touchMove' : 'touchStart';
   await cdp.send('Input.dispatchTouchEvent', { type, touchPoints: list });
 }
@@ -290,8 +290,10 @@ async function drift(): Promise<void> {
     await page.waitForTimeout(80);
     await touchSet(STICK, { x: 110, y: 610 });
     await w.until(async () => (await exp()).kart.stage >= 1, 'a charged drift', 6000);
-    await touchSet(BRAKE, null);
-    await touchSet(STICK, { x: 110, y: 590 });
+    // End both fingers: omitting Brake from touchMove does not release it.
+    await cdp!.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    touches.clear();
+    await gas(true);
     return;
   }
   if (device === 'pad') {

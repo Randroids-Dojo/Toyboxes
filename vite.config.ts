@@ -85,7 +85,10 @@ export default defineConfig(({ command }) => {
   plugins: [devApi(), versionFile(version)],
   server: { port: 5207 },
   // Worlds load on demand. Scan them up front too, so the dev server never reloads the page mid-visit to add a dependency.
-  optimizeDeps: { entries: ['index.html', 'admin/index.html', 'src/experiences/**/*.ts'] },
+  optimizeDeps: {
+    entries: ['index.html', 'admin/index.html', 'src/experiences/**/*.ts'],
+    include: ['three/examples/jsm/environments/RoomEnvironment.js', 'three/examples/jsm/postprocessing/SavePass.js'],
+  },
   build: {
     target: 'es2020',
     sourcemap: true,
