@@ -4,6 +4,7 @@
 // Static parts are merged per material per wall or zone.
 
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { Batch } from './batch';
 import {
   BAY,
@@ -32,6 +33,7 @@ import { C, coffers, hullPaint, loungeCarpet, planks, saloonCarpet, wallpaper, c
 
 export interface WallView {
   def: WallDef;
+  /** An empty group in the wall's frame for things hung on it (plaques, boards); hidden with the wall. */
   full: THREE.Group;
   stub: THREE.Group;
   /** Inward normal and a point on the wall, for the cutaway test. */
@@ -39,11 +41,31 @@ export interface WallView {
   cut: boolean;
 }
 
+/** How many walls the cut uniform can hold. */
+const MAX_WALLS = 16;
+
+/**
+ * A copy of a material whose vertices collapse away when their wall is cut
+ * (or, for the skirting stubs, when it is not). Every wall of a room shares
+ * one mesh per material, so the cutaway costs no extra draw calls.
+ */
+function cutMaterial<M extends THREE.Material>(base: M, cut: { value: number[] }): M {
+  const m = base.clone() as M;
+  m.onBeforeCompile = (shader) => {
+    shader.uniforms.uCut = cut;
+    // A full wall part shows while its wall stands; a skirting stub part (wallStub 1) only while it is cut.
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', `#include <common>\nattribute float wallId;\nattribute float wallStub;\nuniform float uCut[${MAX_WALLS}];`)
+      .replace('#include <project_vertex>', `#include <project_vertex>\nif ((uCut[int(wallId + 0.5)] > 0.5) != (wallStub > 0.5)) gl_Position = vec4(0.0, 0.0, -2.0, 1.0);`);
+  };
+  m.customProgramCacheKey = () => 'wall';
+  return m;
+}
+
 export interface ColumnView {
   x: number;
   z: number;
-  mesh: THREE.Mesh;
-  mat: THREE.MeshStandardMaterial;
+  /** 1 standing, 0 shrunk out of the way of the camera. */
   fade: number;
 }
 
@@ -51,7 +73,13 @@ export interface BoatView {
   group: THREE.Group;
   zones: Record<ZoneId, THREE.Group>;
   walls: WallView[];
+  /** Ceilings and the clerestory, each with userData.ceiling (its lowest height). */
+  ceilings: THREE.Object3D[];
+  /** Drops a wall to its skirting (or puts it back). */
+  setCut(i: number, cut: boolean): void;
   columns: ColumnView[];
+  /** All columns in one instanced mesh; `setColumn` shrinks one away. */
+  setColumn(i: number, fade: number): void;
   /** Window glass, tinted by the time of day. */
   glass: THREE.MeshStandardMaterial;
   /** Materials whose canvas scale depends on the tier. */
@@ -263,6 +291,7 @@ export function buildBoat(m: Mats, texScale: number): BoatView {
     const mesh = new THREE.Mesh(g, mat);
     mesh.position.y = y;
     mesh.receiveShadow = true;
+    mesh.name = 'floor';
     zones[zone].add(mesh);
     return mesh;
   };
@@ -289,7 +318,7 @@ export function buildBoat(m: Mats, texScale: number): BoatView {
     tex.repeat.set(1, -1 / 2.2);
     tex.offset.set(0, 1 + 1.2 / 2.2 - 1);
     // Caps first (the deck under the floors, dark wood), then the painted sides.
-    const hull = new THREE.Mesh(geo, [own(new THREE.MeshStandardMaterial({ color: '#3a2214', roughness: 0.9 })), own(new THREE.MeshStandardMaterial({ map: tex, roughness: 0.6 }))]);
+    const hull = new THREE.Mesh(geo, [own(new THREE.MeshStandardMaterial({ color: '#3a2214', roughness: 0.9, visible: false })), own(new THREE.MeshStandardMaterial({ map: tex, roughness: 0.6 }))]);
     hull.receiveShadow = true;
     group.add(hull);
     // The guard: a brass-capped rim at deck level, a hand's width proud of the hull.
@@ -305,8 +334,35 @@ export function buildBoat(m: Mats, texScale: number): BoatView {
     rim.build(group, { cast: false });
   }
 
-  // ---- walls
+  // ---- walls, merged per room and material, cut away in the vertex shader
   const walls: WallView[] = [];
+  const cutU = { value: new Array(MAX_WALLS).fill(0) };
+  const cutMats = new Map<string, THREE.Material>();
+  const cutOf = (base: THREE.Material) => {
+    let m = cutMats.get(base.uuid);
+    if (!m) {
+      m = own(cutMaterial(base, cutU));
+      cutMats.set(base.uuid, m);
+    }
+    return m;
+  };
+  /** Per room, per wall material: the parts in world space, tagged with their wall. */
+  const collect = new Map<ZoneId, Map<THREE.Material, THREE.BufferGeometry[]>>();
+  const gather = (zone: ZoneId, batch: Batch, matrix: THREE.Matrix4, index: number, stub: boolean) => {
+    const byMat = collect.get(zone) ?? new Map<THREE.Material, THREE.BufferGeometry[]>();
+    collect.set(zone, byMat);
+    for (const [mat, list] of batch.drain()) {
+      const cm = cutOf(mat);
+      const out = byMat.get(cm) ?? [];
+      for (const g of list) {
+        g.applyMatrix4(matrix);
+        g.setAttribute('wallId', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count).fill(index), 1));
+        g.setAttribute('wallStub', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count).fill(stub ? 1 : 0), 1));
+        out.push(g);
+      }
+      byMat.set(cm, out);
+    }
+  };
   for (const w of WALLS) {
     const len = wallLength(w);
     const ops = localOpenings(w);
@@ -355,7 +411,7 @@ export function buildBoat(m: Mats, texScale: number): BoatView {
         for (const side of [1, -1]) b.add(new THREE.ExtrudeGeometry(frameShape(o, 0.16), { depth: 0.06, bevelEnabled: false, curveSegments: 10 }), m.trim, 0, 0, side > 0 ? z0 + 0.012 : -z0 - 0.072, 0, 0, 0, side > 0 ? sc.frame : C.ivory);
       }
     }
-    b.build(full);
+    gather(w.zone, b, full.matrix, walls.length, false);
     // The stub: a skirting with a brass cap, broken at doors.
     const sb = new Batch();
     const lift = walls.length * 0.004;
@@ -363,10 +419,24 @@ export function buildBoat(m: Mats, texScale: number): BoatView {
       sb.add(box(s1 - s0, 0.34 + lift, T), m.trim, (s0 + s1) / 2, 0.172 + lift * 1.5, 0, 0, 0, 0, sc.wains);
       sb.add(box(s1 - s0 - 0.08, 0.035, T + 0.06), m.trim, (s0 + s1) / 2, 0.36 + lift * 2, 0, 0, 0, 0, '#a8782c');
     }
-    sb.build(stub, { cast: false });
+    gather(w.zone, sb, full.matrix, walls.length, true);
     stub.visible = false;
     zones[w.zone].add(full, stub);
     walls.push({ def: w, full, stub, n: wallNormal(w), cut: false });
+  }
+  for (const [zone, byMat] of collect) {
+    for (const [mat, list] of byMat) {
+      const merged = mergeGeometries(list);
+      for (const g of list) g.dispose();
+      if (!merged) continue;
+      own(merged);
+      merged.computeBoundingSphere();
+      const mesh = new THREE.Mesh(merged, mat);
+      mesh.castShadow = !(mat as THREE.MeshStandardMaterial).transparent;
+      mesh.receiveShadow = true;
+      mesh.name = `walls-${zone}`;
+      zones[zone].add(mesh);
+    }
   }
 
   // ---- ceilings (single sided, facing down, so a high camera sees in)
@@ -376,9 +446,13 @@ export function buildBoat(m: Mats, texScale: number): BoatView {
     const mat = own(new THREE.MeshStandardMaterial({ map: tex, roughness: 0.8, emissive: new THREE.Color('#ffffff'), emissiveMap: emissive ? tex : null, emissiveIntensity: emissive }));
     const mesh = new THREE.Mesh(g, mat);
     mesh.position.y = y;
+    mesh.userData.ceiling = y;
+    mesh.name = 'ceiling';
     zones[zone].add(mesh);
+    ceilings.push(mesh);
     return mesh;
   };
+  const ceilings: THREE.Object3D[] = [];
   const rect = (x0: number, z0: number, x1: number, z1: number) => new THREE.Shape([new THREE.Vector2(x0, z0), new THREE.Vector2(x1, z0), new THREE.Vector2(x1, z1), new THREE.Vector2(x0, z1)]);
   {
     // The clerestory runs down the middle and opens out over Old Lucky's bay,
@@ -438,6 +512,7 @@ export function buildBoat(m: Mats, texScale: number): BoatView {
     );
     band.wrapS = THREE.RepeatWrapping;
     const bandMat = own(new THREE.MeshStandardMaterial({ map: band, roughness: 0.8, emissive: new THREE.Color('#ffffff'), emissiveMap: band, emissiveIntensity: 0.12 }));
+    const bandBatch = new Batch();
     const hgt = CLERESTORY.height - (SALOON.height - 0.12);
     const yc = (CLERESTORY.height + SALOON.height - 0.12) / 2;
     const inside = (x: number, z: number) => {
@@ -463,14 +538,15 @@ export function buildBoat(m: Mats, texScale: number): BoatView {
         nx = -nx;
         nz = -nz;
       }
-      const g = own(new THREE.PlaneGeometry(len, hgt));
+      const g = new THREE.PlaneGeometry(len, hgt);
       const uv = g.attributes.uv;
       for (let k = 0; k < uv.count; k++) uv.setX(k, uv.getX(k) * (len / 4));
-      const p = new THREE.Mesh(g, bandMat);
       // A centimetre into the well, clear of the wall caps below.
-      p.position.set(mx + nx * 0.01, yc, mz + nz * 0.01);
-      p.rotation.y = Math.atan2(nx, nz);
-      zones.saloon.add(p);
+      bandBatch.add(g, bandMat, mx + nx * 0.01, yc, mz + nz * 0.01, 0, Math.atan2(nx, nz), 0);
+    }
+    for (const bm of bandBatch.build(zones.saloon, { cast: false })) {
+      bm.userData.ceiling = SALOON.height - 0.12;
+      ceilings.push(bm);
     }
     const header = own(
       canvasTex(1024, 160, (g, W, Hh) => {
@@ -491,7 +567,9 @@ export function buildBoat(m: Mats, texScale: number): BoatView {
     );
     const hm = new THREE.Mesh(own(new THREE.PlaneGeometry(BAY.x1 - BAY.x0 + 0.6, BAY.height - CLERESTORY.height)), own(new THREE.MeshStandardMaterial({ map: header, roughness: 0.6 })));
     hm.position.set(0, (BAY.height + CLERESTORY.height) / 2, SALOON.z0 + 0.01);
+    hm.userData.ceiling = CLERESTORY.height;
     zones.saloon.add(hm);
+    ceilings.push(hm);
   }
   // The bay: a deep red night sky with a gilded sunburst over Old Lucky.
   ceiling(
@@ -538,6 +616,8 @@ export function buildBoat(m: Mats, texScale: number): BoatView {
 
   // ---- columns: cast iron with brass capitals, faded when they block the view
   const columns: ColumnView[] = [];
+  let colMesh: THREE.InstancedMesh | null = null;
+  const colM = new THREE.Matrix4();
   {
     const prof: THREE.Vector2[] = [];
     const H = SALOON.height - 0.12;
@@ -558,15 +638,15 @@ export function buildBoat(m: Mats, texScale: number): BoatView {
       col.set([c.r, c.g, c.b], i * 3);
     }
     shaft.setAttribute('color', new THREE.BufferAttribute(col, 3));
-    for (const c of COLUMNS) {
-      const mat = own(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.1, transparent: true, opacity: 1 }));
-      const mesh = new THREE.Mesh(shaft, mat);
-      mesh.position.set(c.x, 0, c.z);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      zones.saloon.add(mesh);
-      columns.push({ x: c.x, z: c.z, mesh, mat, fade: 1 });
-    }
+    const mat = own(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.1 }));
+    colMesh = new THREE.InstancedMesh(shaft, mat, COLUMNS.length);
+    COLUMNS.forEach((c, i) => {
+      colMesh!.setMatrixAt(i, new THREE.Matrix4().makeTranslation(c.x, 0, c.z));
+      columns.push({ x: c.x, z: c.z, fade: 1 });
+    });
+    colMesh.castShadow = true;
+    colMesh.receiveShadow = true;
+    zones.saloon.add(colMesh);
   }
 
   // ---- fixed furniture
@@ -578,7 +658,17 @@ export function buildBoat(m: Mats, texScale: number): BoatView {
     group,
     zones,
     walls,
+    ceilings,
+    setCut(i: number, cut: boolean) {
+      cutU.value[i] = cut ? 1 : 0;
+    },
     columns,
+    setColumn(i: number, fade: number) {
+      const c = columns[i];
+      const f = Math.max(0.0001, fade);
+      colMesh!.setMatrixAt(i, colM.makeScale(f, 1, f).setPosition(c.x, 0, c.z));
+      colMesh!.instanceMatrix.needsUpdate = true;
+    },
     glass,
     floorMats,
     dispose() {
@@ -592,10 +682,9 @@ export function buildBoat(m: Mats, texScale: number): BoatView {
 
 function furnishSaloon(m: Mats, into: THREE.Group, own: <X extends { dispose(): void }>(x: X) => X): void {
   const b = new Batch();
-  const brass = new Batch();
   // Band stage: a quarter disc in the bow-starboard corner, with a brass lip.
   b.add(new THREE.CylinderGeometry(STAGE.r, STAGE.r, STAGE.h, 40, 1, false, 0, Math.PI / 2), m.trim, STAGE.x + 0.15, STAGE.h / 2, STAGE.z + 0.15, 0, 0, 0, C.mahoganyLit);
-  brass.add(new THREE.TorusGeometry(STAGE.r, 0.04, 8, 40, Math.PI / 2).rotateX(Math.PI / 2).rotateY(Math.PI / 2), m.brass, STAGE.x + 0.15, STAGE.h, STAGE.z + 0.15);
+  b.add(new THREE.TorusGeometry(STAGE.r, 0.04, 8, 40, Math.PI / 2).rotateX(Math.PI / 2).rotateY(Math.PI / 2), m.trim, STAGE.x + 0.15, STAGE.h, STAGE.z + 0.15, 0, 0, 0, C.brassMatte);
 
   // Soda fountain bar along the starboard wall.
   const sx = (SODA.x0 + SODA.x1) / 2;
@@ -605,10 +694,10 @@ function furnishSaloon(m: Mats, into: THREE.Group, own: <X extends { dispose(): 
   for (let i = 0; i < 5; i++) b.add(box(sw / 5 - 0.12, 0.6, 0.02), m.trim, SODA.x0 + (i + 0.5) * (sw / 5), 0.5, SODA.z + 0.41, 0, 0, 0, C.mahoganyLit);
   for (let i = 0; i < 4; i++) {
     const x = SODA.x0 + 0.5 + i * 0.85;
-    brass.add(new THREE.CylinderGeometry(0.03, 0.03, 0.4, 8), m.brass, x, 1.25, SODA.z - 0.2);
-    brass.add(new THREE.SphereGeometry(0.06, 10, 8), m.brass, x, 1.46, SODA.z - 0.2);
+    b.add(new THREE.CylinderGeometry(0.03, 0.03, 0.4, 8), m.trim, x, 1.25, SODA.z - 0.2, 0, 0, 0, C.brassMatte);
+    b.add(new THREE.SphereGeometry(0.06, 10, 8), m.trim, x, 1.46, SODA.z - 0.2, 0, 0, 0, C.brassMatte);
     // Stools.
-    brass.add(new THREE.CylinderGeometry(0.04, 0.06, 0.7, 8), m.brass, x, 0.35, SODA.z + 0.85);
+    b.add(new THREE.CylinderGeometry(0.04, 0.06, 0.7, 8), m.trim, x, 0.35, SODA.z + 0.85, 0, 0, 0, C.brassMatte);
     b.add(new THREE.CylinderGeometry(0.22, 0.22, 0.1, 16), m.trim, x, 0.74, SODA.z + 0.85, 0, 0, 0, C.coral);
   }
   // Bottles and glasses on a back shelf.
@@ -625,15 +714,15 @@ function furnishSaloon(m: Mats, into: THREE.Group, own: <X extends { dispose(): 
   for (let i = 0; i <= 16; i++) {
     const x = PENNY.x0 + 0.1 + i * ((pw - 0.2) / 16);
     if (Math.abs(x - px) < 0.4) continue;
-    brass.add(new THREE.CylinderGeometry(0.018, 0.018, 1.3, 6), m.brass, x, 1.75, PENNY.z0 + 0.12);
+    b.add(new THREE.CylinderGeometry(0.018, 0.018, 1.3, 6), m.trim, x, 1.75, PENNY.z0 + 0.12, 0, 0, 0, C.brassMatte);
   }
-  brass.add(box(pw, 0.06, 0.06), m.brass, px, 2.42, PENNY.z0 + 0.12);
+  b.add(box(pw, 0.06, 0.06), m.trim, px, 2.42, PENNY.z0 + 0.12, 0, 0, 0, C.brassMatte);
   b.add(box(pw + 0.3, 0.14, 1.9), m.trim, px, 2.6, (PENNY.z0 + PENNY.z1) / 2, 0, 0, 0, C.mahogany);
   b.add(box(pw + 0.1, 0.34, 0.05), m.trim, px, 2.84, PENNY.z0 - 0.03, 0, 0, 0, '#13212b');
   for (const sxx of [PENNY.x0, PENNY.x1]) b.add(box(0.14, 2.6, 0.14), m.trim, sxx, 1.3, PENNY.z0 + 0.12, 0, 0, 0, C.mahogany);
   // A safe and a coin scale behind the counter.
   b.add(box(0.8, 1.0, 0.6), m.trim, PENNY.x0 + 0.6, 0.5, PENNY.z1 - 0.45, 0, 0, 0, '#2a3b4a');
-  brass.add(new THREE.CylinderGeometry(0.12, 0.12, 0.04, 16).rotateX(Math.PI / 2), m.brass, PENNY.x0 + 0.6, 0.6, PENNY.z1 - 0.76);
+  b.add(new THREE.CylinderGeometry(0.12, 0.12, 0.04, 16).rotateX(Math.PI / 2), m.trim, PENNY.x0 + 0.6, 0.6, PENNY.z1 - 0.76, 0, 0, 0, C.brassMatte);
 
   // The Logbook nook: bookshelves along the port wall, two armchairs.
   const sh = LOGBOOK.shelves;
@@ -681,7 +770,6 @@ function furnishSaloon(m: Mats, into: THREE.Group, own: <X extends { dispose(): 
   }
   // Rugs under the logbook nook and the tables: separate decals, lifted off the carpet.
   b.build(into);
-  brass.build(into);
   const rug = own(
     canvasTex(512, 320, (g, W, Hh) => {
       g.fillStyle = '#7a2a22';
@@ -710,7 +798,6 @@ function furnishSaloon(m: Mats, into: THREE.Group, own: <X extends { dispose(): 
 
 function furnishStern(m: Mats, into: THREE.Group): void {
   const b = new Batch();
-  const brass = new Batch();
   // Rails: turned posts and a mahogany top rail along the sides and the stern.
   const rail = (x0: number, z0: number, x1: number, z1: number) => {
     const len = Math.hypot(x1 - x0, z1 - z0);
@@ -740,10 +827,9 @@ function furnishStern(m: Mats, into: THREE.Group): void {
   // Masts for the festoon strings.
   for (const z of [-7.5, 7.5]) {
     b.add(new THREE.CylinderGeometry(0.09, 0.12, 6.4, 10), m.trim, 21, 3.2, z, 0, 0, 0, C.ivory);
-    brass.add(new THREE.SphereGeometry(0.16, 12, 8), m.brass, 21, 6.45, z);
+    b.add(new THREE.SphereGeometry(0.16, 12, 8), m.trim, 21, 6.45, z, 0, 0, 0, C.brassMatte);
   }
   b.build(into);
-  brass.build(into);
 }
 
 function furnishLounge(m: Mats, into: THREE.Group): void {

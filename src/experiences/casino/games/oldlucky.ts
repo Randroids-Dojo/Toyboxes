@@ -6,6 +6,7 @@
 // tempo whatever is showing (no slowing down for near misses).
 
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { chipsFor, type GameId } from '../../../shared/casino/progress';
 import { BONUS_RING, MAJOR_X, MINI_X, PAYTABLE, REEL_STRIP, type RingSegment, type SlotSymbol } from '../../../shared/slots';
 import type { PlayerState, SpaceAction } from '../../../world/space';
@@ -24,6 +25,8 @@ const A = (55 * Math.PI) / 180;
 const CELL = 0.8;
 const WIN_Y = 3.6;
 const FRONT = 1.1;
+// Rows of the shared face canvas given to the marquee (the paytable sits below).
+const MARQUEE_H = 420;
 
 export interface SlotResult {
   stops: number[];
@@ -301,6 +304,8 @@ export class OldLucky {
   private marqueeTex: THREE.CanvasTexture;
   private marqueeKey = '';
   private fameMesh: THREE.Mesh;
+  /** The faint glass over the reels: off on the low tier. */
+  reelGlass: THREE.Mesh | null = null;
   /** The wall plaques, so the casino can hang them on their walls. */
   readonly plaques: { fame: THREE.Object3D[]; pay: THREE.Object3D[] } = { fame: [], pay: [] };
   private fameKey = '';
@@ -337,7 +342,7 @@ export class OldLucky {
     const lac = new Batch();
     const brass = new Batch();
     const dark = new Batch();
-    const darkMat = own(new THREE.MeshStandardMaterial({ color: C.glassDark, roughness: 0.5 }));
+    const darkMat = m.iron;
     // Plinth and lower cabinet.
     brass.add(new THREE.BoxGeometry(5.4, 0.2, 2.6), m.brass, 0, 0.1, 0.1);
     lac.add(new THREE.BoxGeometry(5.0, 2.0, 2.2), m.lacquer, 0, 1.2, 0);
@@ -412,13 +417,11 @@ export class OldLucky {
 
     // The lever: a brass arm with a red knob, pivoting towards you.
     this.lever.position.set(3.2, 3.2, 0.5);
-    const arm = new THREE.Mesh(own(new THREE.CylinderGeometry(0.06, 0.07, 2.2, 12).translate(0, 1.1, 0)), m.brass);
-    const knob = new THREE.Mesh(own(new THREE.SphereGeometry(0.24, 20, 14)), m.lacquer);
-    knob.position.y = 2.3;
-    const collar = new THREE.Mesh(own(new THREE.TorusGeometry(0.1, 0.035, 8, 16).rotateX(Math.PI / 2)), m.brass);
-    collar.position.y = 2.1;
-    arm.castShadow = knob.castShadow = true;
-    this.lever.add(arm, knob, collar);
+    const lb = new Batch();
+    lb.add(new THREE.CylinderGeometry(0.06, 0.07, 2.2, 12).translate(0, 1.1, 0), m.brass, 0, 0, 0);
+    lb.add(new THREE.TorusGeometry(0.1, 0.035, 8, 16).rotateX(Math.PI / 2), m.brass, 0, 2.1, 0);
+    lb.add(new THREE.SphereGeometry(0.24, 20, 14), m.lacquer, 0, 2.3, 0);
+    lb.build(this.lever);
     this.lever.rotation.x = -0.18;
     g.add(this.lever);
 
@@ -439,27 +442,29 @@ export class OldLucky {
     }
     // The payline: a red lamp line with diamond lamps at each end.
     this.paylineMat = own(new THREE.MeshStandardMaterial({ color: '#ff3d4a', emissive: new THREE.Color('#ff2a3a'), emissiveIntensity: 0.6, roughness: 0.3 }));
-    const pl = new THREE.Mesh(own(new THREE.BoxGeometry(3.3, 0.035, 0.012)), this.paylineMat);
-    pl.position.set(0, WIN_Y, 1.008);
-    g.add(pl);
-    this.lampMat = own(new THREE.MeshStandardMaterial({ color: '#ff5a4a', emissive: new THREE.Color('#ff2a3a'), emissiveIntensity: 0.8, roughness: 0.25 }));
-    for (const sx of [-1.95, 1.95]) {
-      const lamp = new THREE.Mesh(own(new THREE.OctahedronGeometry(0.13, 0).scale(1, 1, 0.5)), this.lampMat);
-      lamp.position.set(sx, WIN_Y, 1.16);
-      g.add(lamp);
-    }
+    this.lampMat = this.paylineMat;
+    const lampB = new Batch();
+    for (const sx of [-1.95, 1.95]) lampB.add(new THREE.OctahedronGeometry(0.13, 0).scale(1, 1, 0.5), this.paylineMat, sx, WIN_Y, 1.16);
+    lampB.add(new THREE.BoxGeometry(3.3, 0.035, 0.012), this.paylineMat, 0, WIN_Y, 1.008);
+    lampB.build(g, { cast: false });
     // Glass over the reels.
     const glass = new THREE.Mesh(own(new THREE.PlaneGeometry(3.3, 2.3)), own(new THREE.MeshStandardMaterial({ color: '#ffffff', transparent: true, opacity: 0.04, roughness: 0.15, metalness: 0, envMapIntensity: 0.1, depthWrite: false })));
     glass.position.set(0, WIN_Y, 1.07);
     glass.renderOrder = 3;
     g.add(glass);
+    this.reelGlass = glass;
 
-    // Belly glass: the paytable, lit from behind.
-    const pay = own(
+    // The marquee face (the name and the jackpot meter, redrawn when they
+    // change) and the belly glass (the paytable, lit from behind) share one
+    // canvas and one mesh: the marquee on top, the paytable below it.
+    this.marqueeTex = own(
       canvasTex(
         1024,
-        280,
-        (cg, W, Hh) => {
+        MARQUEE_H + 4 + 280,
+        (cg0, W) => {
+          const Hh = 280;
+          cg0.translate(0, MARQUEE_H + 4);
+          const cg = cg0;
           cg.fillStyle = '#1d1830';
           cg.fillRect(0, 0, W, Hh);
           cg.strokeStyle = '#e0ac45';
@@ -490,23 +495,25 @@ export class OldLucky {
             cg.fillStyle = '#ffd24a';
             cg.fillText(b, x + 440, y);
           });
+          cg0.setTransform(1, 0, 0, 1, 0, 0);
         },
         false,
       ),
     );
-    const belly = new THREE.Mesh(own(new THREE.PlaneGeometry(3.8, 1.0)), own(new THREE.MeshStandardMaterial({ map: pay, emissive: new THREE.Color('#ffffff'), emissiveMap: pay, emissiveIntensity: 0.32, roughness: 0.4 })));
-    belly.position.set(0, 1.55, FRONT + 0.055);
-    g.add(belly);
-
-    // Marquee face: the name and the jackpot meter, redrawn when they change.
-    this.marqueeTex = own(canvasTex(1024, 420, () => {}, false));
+    const atlasH = MARQUEE_H + 4 + 280;
+    const bellyGeo = new THREE.PlaneGeometry(3.8, 1.0).translate(0, 1.55, FRONT + 0.055);
+    const bu = bellyGeo.attributes.uv;
+    for (let i = 0; i < bu.count; i++) bu.setY(i, (bu.getY(i) * 280) / atlasH);
     const faceShape = ellipseArch(5.4, 0.6, 1.6, 0.16);
-    const fg = own(new THREE.ShapeGeometry(faceShape, 24));
+    const fg = new THREE.ShapeGeometry(faceShape, 24);
     const uv = fg.attributes.uv;
     const p = fg.attributes.position;
-    for (let i = 0; i < uv.count; i++) uv.setXY(i, (p.getX(i) + 2.54) / 5.08, (p.getY(i) - 0.16) / (2.2 - 0.32));
-    const marquee = new THREE.Mesh(fg, own(new THREE.MeshStandardMaterial({ map: this.marqueeTex, emissive: new THREE.Color('#ffffff'), emissiveMap: this.marqueeTex, emissiveIntensity: 0.32, roughness: 0.5 })));
-    marquee.position.set(0, 5.0, 0.905);
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, (p.getX(i) + 2.54) / 5.08, 1 - ((1 - (p.getY(i) - 0.16) / (2.2 - 0.32)) * MARQUEE_H) / atlasH);
+    fg.translate(0, 5.0, 0.905);
+    const faces = own(mergeGeometries([bellyGeo, fg])!);
+    bellyGeo.dispose();
+    fg.dispose();
+    const marquee = new THREE.Mesh(faces, own(new THREE.MeshStandardMaterial({ map: this.marqueeTex, emissive: new THREE.Color('#ffffff'), emissiveMap: this.marqueeTex, emissiveIntensity: 0.32, roughness: 0.45 })));
     g.add(marquee);
 
     // Bulbs: round the marquee arch and the reel window, chased in patterns.
@@ -608,11 +615,11 @@ export class OldLucky {
     dial.position.set(0, 1.42, 0.085);
     tg.add(dial);
     this.pointer.position.set(0, 1.42, 0.1);
-    const parm = new THREE.Mesh(own(new THREE.BoxGeometry(0.05, 0.36, 0.03).translate(0, 0.16, 0)), m.brassDark);
-    const pknob = new THREE.Mesh(own(new THREE.SphereGeometry(0.06, 12, 8)), m.lacquer);
-    pknob.position.set(0, 0.36, 0.02);
-    const hub = new THREE.Mesh(own(new THREE.CylinderGeometry(0.06, 0.06, 0.05, 14).rotateX(Math.PI / 2)), m.brass);
-    this.pointer.add(parm, pknob, hub);
+    const pb = new Batch();
+    pb.add(new THREE.BoxGeometry(0.05, 0.36, 0.03).translate(0, 0.16, 0), m.trim, 0, 0, 0, 0, 0, 0, '#a8782c');
+    pb.add(new THREE.SphereGeometry(0.06, 12, 8), m.trim, 0, 0.36, 0.02, 0, 0, 0, C.lacquer);
+    pb.add(new THREE.CylinderGeometry(0.06, 0.06, 0.05, 14).rotateX(Math.PI / 2), m.trim, 0, 0, 0, 0, 0, 0, C.brassMatte);
+    pb.build(this.pointer);
     tg.add(this.pointer);
     host.scene.add(tg);
 
@@ -645,14 +652,9 @@ export class OldLucky {
     const pp = new THREE.Mesh(own(new THREE.PlaneGeometry(2.0, 1.4)), own(new THREE.MeshStandardMaterial({ map: payPlaque, emissive: new THREE.Color('#ffffff'), emissiveMap: payPlaque, emissiveIntensity: 0.4, roughness: 0.5 })));
     pp.position.set(SPOTS.paytable.x, 2.6, -8.83);
     host.scene.add(pp);
+    // The canvases paint their own thick brass borders, so the plaques need no frame meshes.
     this.plaques.fame.push(this.fameMesh);
     this.plaques.pay.push(pp);
-    for (const [x, w, hh, y, list] of [[SPOTS.fame.x, 3.0, 2.0, 3.0, this.plaques.fame], [SPOTS.paytable.x, 2.0, 1.4, 2.6, this.plaques.pay]] as const) {
-      const fr = new THREE.Mesh(own(new THREE.BoxGeometry(w + 0.16, hh + 0.16, 0.05)), m.brass);
-      fr.position.set(x, y, -8.86);
-      host.scene.add(fr);
-      list.push(fr);
-    }
     this.paint();
   }
 
@@ -673,6 +675,8 @@ export class OldLucky {
       return s;
     };
     const b = new Batch();
+    void velvet;
+    const red = '#8a1424';
     // Side drapes: tall, gathered towards a brass tie-back.
     for (const sx of [-1, 1]) {
       const geo = new THREE.ExtrudeGeometry(folds(0.9, 0.07, 4), { depth: 5.7, bevelEnabled: false, curveSegments: 4 }).rotateX(-Math.PI / 2);
@@ -684,21 +688,20 @@ export class OldLucky {
         pos.setX(i, pos.getX(i) * pinch + sx * (1 - pinch) * 0.25);
       }
       geo.computeVertexNormals();
-      b.add(geo, velvet, sx * 4.45, 0, -8.82);
+      b.add(geo, this.host.mats.trim, sx * 4.45, 0, -8.82, 0, 0, 0, red);
     }
     // Valance: a scalloped swag across the top of the bay.
     const val = new THREE.ExtrudeGeometry(folds(10.2, 0.06, 10), { depth: 0.7, bevelEnabled: false, curveSegments: 4 }).rotateX(-Math.PI / 2);
-    b.add(val, velvet, 0, 7.9, -8.84);
-    b.build(this.host.scene);
-    const bb = new Batch();
+    b.add(val, this.host.mats.trim, 0, 7.9, -8.84, 0, 0, 0, red);
+    const bb = b;
     for (const sx of [-1, 1]) {
-      bb.add(new THREE.TorusGeometry(0.16, 0.035, 8, 16), this.host.mats.brass, sx * 4.48, 1.6, -8.75);
+      bb.add(new THREE.TorusGeometry(0.16, 0.035, 8, 16), this.host.mats.trim, sx * 4.48, 1.6, -8.75, 0, 0, 0, C.brassMatte);
       // Gilded pilasters at the mouth of the bay.
       bb.add(new THREE.BoxGeometry(0.36, 8.3, 0.3), this.host.mats.trim, sx * 5.05, 4.15, -8.92, 0, 0, 0, C.ivory);
       bb.add(new THREE.BoxGeometry(0.5, 0.3, 0.4), this.host.mats.trim, sx * 5.05, 8.3, -8.9, 0, 0, 0, C.brassMatte);
       bb.add(new THREE.BoxGeometry(0.5, 0.24, 0.4), this.host.mats.trim, sx * 5.05, 0.12, -8.9, 0, 0, 0, C.brassMatte);
     }
-    bb.add(new THREE.BoxGeometry(10.4, 0.12, 0.12), this.host.mats.brass, 0, 8.56, -8.82);
+    bb.add(new THREE.BoxGeometry(10.4, 0.12, 0.12), this.host.mats.trim, 0, 8.56, -8.82, 0, 0, 0, C.brassMatte);
     bb.build(this.host.scene);
   }
 
@@ -715,7 +718,11 @@ export class OldLucky {
       const c = this.marqueeTex.image as HTMLCanvasElement;
       const g = c.getContext('2d')!;
       const W = c.width;
-      const H = c.height;
+      const H = MARQUEE_H;
+      g.save();
+      g.beginPath();
+      g.rect(0, 0, W, H);
+      g.clip();
       const bg = g.createRadialGradient(W / 2, H * 0.9, 20, W / 2, H * 0.9, W * 0.7);
       bg.addColorStop(0, '#7a1424');
       bg.addColorStop(1, '#2a0610');
@@ -760,6 +767,7 @@ export class OldLucky {
       g.font = `30px ${DISPLAY_FONT}`;
       g.fillStyle = '#fff6e0';
       g.fillText(`${formatCredits(Math.floor(grand * bet))} at bet ${bet}  ·  MAJOR ${MAJOR_X}x  ·  MINI ${MINI_X}x`, W / 2, H * 0.88);
+      g.restore();
       this.marqueeTex.needsUpdate = true;
     }
     // The telegraph dial.

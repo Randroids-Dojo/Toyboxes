@@ -260,13 +260,31 @@ it('the boat has no coplanar overlapping triangles across meshes', async () => {
           skipped += Math.floor((end - g.start) / 3);
           continue;
         }
-        const meshId = meshes.length;
-        meshes.push({ label: `${where.where} [${matName(mat)}]${im ? ` instance ${k}` : ''}`, obj: `${mesh.id}:${k}`, wall: where.wall, part: where.part });
+        // Walls are merged per room and material; their wallId attribute splits them back into one part per wall.
+        const wallAttr = geo.attributes.wallId as THREE.BufferAttribute | undefined;
+        const stubAttr = geo.attributes.wallStub as THREE.BufferAttribute | undefined;
+        const parts = new Map<string, number>();
+        const partFor = (wallIdx: number, stub: boolean) => {
+          const k = `${wallIdx}:${stub}`;
+          let id = parts.get(k);
+          if (id === undefined) {
+            id = meshes.length;
+            parts.set(k, id);
+            meshes.push({ label: `wall-${view.walls[wallIdx].def.id}${stub ? '-stub' : ''} [${matName(mat)}]`, obj: `${mesh.id}:${k}`, wall: wallIdx, part: stub ? 'stub' : 'full' });
+          }
+          return id;
+        };
+        let meshId = -1;
+        if (!wallAttr) {
+          meshId = meshes.length;
+          meshes.push({ label: `${where.where} [${matName(mat)}]${im ? ` instance ${k}` : ''}`, obj: `${mesh.id}:${k}`, wall: where.wall, part: where.part });
+        }
         const side = mat.side;
         for (let i = g.start; i + 2 < end; i += 3) {
           const ia = index ? index.getX(i) : i;
           const ib = index ? index.getX(i + 1) : i + 1;
           const ic = index ? index.getX(i + 2) : i + 2;
+          if (wallAttr) meshId = partFor(Math.round(wallAttr.getX(ia)), (stubAttr?.getX(ia) ?? 0) > 0.5);
           a.fromBufferAttribute(pos, ia).applyMatrix4(world);
           b.fromBufferAttribute(pos, ib).applyMatrix4(world);
           c.fromBufferAttribute(pos, ic).applyMatrix4(world);

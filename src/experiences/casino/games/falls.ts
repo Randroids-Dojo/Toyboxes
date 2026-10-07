@@ -55,7 +55,7 @@ export class LuckyFalls {
   private binTex: THREE.CanvasTexture;
   private binKey = '';
   private binGlow: number[] = new Array(N_BINS).fill(0);
-  private binMeshes: THREE.Mesh[] = [];
+  private binMesh: THREE.InstancedMesh;
   private fallMat: THREE.MeshBasicMaterial;
   private fallGlow = 0;
   private owned: { dispose(): void }[] = [];
@@ -167,15 +167,13 @@ export class LuckyFalls {
     const strip = new THREE.Mesh(own(new THREE.PlaneGeometry(N_BINS * SPACING, 0.34)), own(new THREE.MeshStandardMaterial({ map: this.binTex, emissive: new THREE.Color('#ffffff'), emissiveMap: this.binTex, emissiveIntensity: 0.5, roughness: 0.5 })));
     strip.position.set(0, BIN_Y - 0.38, 0.485);
     g.add(strip);
-    // A glow in each bin, lit when a pearl lands.
-    const binGlowGeo = own(new THREE.PlaneGeometry(SPACING - 0.03, 0.4));
+    // A glow in each bin, lit when a pearl lands: one instanced mesh, black when dark (additive).
+    this.binMesh = new THREE.InstancedMesh(own(new THREE.PlaneGeometry(SPACING - 0.03, 0.4)), own(new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })), N_BINS);
     for (let i = 0; i < N_BINS; i++) {
-      const mat = own(new THREE.MeshBasicMaterial({ color: '#ffd27a', transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
-      const bm = new THREE.Mesh(binGlowGeo, mat);
-      bm.position.set((i - (N_BINS - 1) / 2) * SPACING, BIN_Y + 0.05, FACE_Z - 0.06);
-      g.add(bm);
-      this.binMeshes.push(bm);
+      this.binMesh.setMatrixAt(i, mm.makeTranslation((i - (N_BINS - 1) / 2) * SPACING, BIN_Y + 0.05, FACE_Z - 0.06));
+      this.binMesh.setColorAt(i, this.col.set('#000000'));
     }
+    g.add(this.binMesh);
     this.pearlGeo = own(new THREE.SphereGeometry(PEARL_R, 18, 14));
     this.pearlMat = own(new THREE.MeshStandardMaterial({ color: '#fff8f0', roughness: 0.15, metalness: 0.25, emissive: new THREE.Color('#cfe3ff'), emissiveIntensity: 0.25 }));
     this.paintBins();
@@ -407,10 +405,14 @@ export class LuckyFalls {
       this.pegs.setColorAt(i, this.col.set('#d9a838').lerp(new THREE.Color('#ffffff'), this.pegFlash[i]));
     }
     if (flashing && this.pegs.instanceColor) this.pegs.instanceColor.needsUpdate = true;
-    this.binMeshes.forEach((bm, i) => {
+    let glowing = false;
+    for (let i = 0; i < N_BINS; i++) {
+      if (this.binGlow[i] <= 0) continue;
+      glowing = true;
       this.binGlow[i] = Math.max(0, this.binGlow[i] - dt * 1.2);
-      (bm.material as THREE.MeshBasicMaterial).opacity = this.binGlow[i] * 0.8;
-    });
+      this.binMesh.setColorAt(i, this.col.set('#ffd27a').multiplyScalar(this.binGlow[i] * 0.8));
+    }
+    if (glowing && this.binMesh.instanceColor) this.binMesh.instanceColor.needsUpdate = true;
     this.fallGlow = Math.max(0, this.fallGlow - dt * 0.6);
     this.fallMat.opacity = this.fallGlow * 0.45;
   }

@@ -137,7 +137,11 @@ export class Fx {
   }
 
   update(dt: number): void {
-    for (const p of [this.steam, this.sparks, this.glow, this.confetti]) p.update(dt);
+    for (const p of [this.steam, this.sparks, this.glow, this.confetti]) {
+      p.update(dt);
+      // An empty system costs a draw call for nothing.
+      p.points.visible = p.count > 0;
+    }
     const g = 13;
     let w = 0;
     for (const c of this.coins) {

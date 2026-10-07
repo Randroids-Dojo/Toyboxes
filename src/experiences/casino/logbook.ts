@@ -21,6 +21,7 @@ import type { Host } from './host';
 import { ANCHOR_SVG } from './hud';
 import { LOGBOOK, SPOTS } from './layout';
 import { canvasTex } from './materials';
+import { Batch } from './batch';
 
 type Tab = 'overview' | 'time' | 'games' | 'voyages' | 'stamps' | 'boards';
 const TABS: [Tab, string][] = [
@@ -181,31 +182,22 @@ export class Logbook {
     // The chart table: mahogany with turned legs, a brass rail, and the parchment chart.
     const g = new THREE.Group();
     g.position.set(T.x, 0, T.z);
-    const top = new THREE.Mesh(new THREE.BoxGeometry(T.w, 0.08, T.d), m.mahogany);
-    top.position.y = 0.91;
-    const apron = new THREE.Mesh(new THREE.BoxGeometry(T.w - 0.16, 0.16, T.d - 0.16), m.mahogany);
-    apron.position.y = 0.79;
-    g.add(top, apron);
-    for (const sx of [-1, 1])
-      for (const sz of [-1, 1]) {
-        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.035, 0.78, 10), m.mahogany);
-        leg.position.set(sx * (T.w / 2 - 0.14), 0.39, sz * (T.d / 2 - 0.14));
-        g.add(leg);
-      }
-    const rail = new THREE.Mesh(new THREE.BoxGeometry(T.w + 0.04, 0.03, T.d + 0.04), m.brass);
-    rail.position.y = 0.94;
-    g.add(rail);
+    const tb = new Batch();
+    const wood = '#6a2c1d';
+    const gold = '#d9a838';
+    tb.add(new THREE.BoxGeometry(T.w, 0.08, T.d), m.trim, 0, 0.91, 0, 0, 0, 0, wood);
+    tb.add(new THREE.BoxGeometry(T.w - 0.16, 0.16, T.d - 0.16), m.trim, 0, 0.79, 0, 0, 0, 0, wood);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) tb.add(new THREE.CylinderGeometry(0.05, 0.035, 0.78, 10), m.trim, sx * (T.w / 2 - 0.14), 0.39, sz * (T.d / 2 - 0.14), 0, 0, 0, wood);
+    tb.add(new THREE.BoxGeometry(T.w + 0.04, 0.03, T.d + 0.04), m.trim, 0, 0.94, 0, 0, 0, 0, gold);
+    // Brass dividers and a magnifier on the chart.
+    tb.add(new THREE.CylinderGeometry(0.008, 0.008, 0.36, 6).rotateZ(Math.PI / 2 - 0.25), m.trim, 0.7, 0.975, 0.35, 0, 0, 0, gold);
+    tb.add(new THREE.TorusGeometry(0.08, 0.012, 8, 20).rotateX(Math.PI / 2), m.trim, -0.85, 0.97, -0.3, 0, 0, 0, gold);
+    tb.build(g);
     this.parchment = canvasTex(host.tier() === 'low' ? 512 : 1024, host.tier() === 'low' ? 320 : 640, () => {}, false);
     const parch = new THREE.Mesh(new THREE.PlaneGeometry(T.w - 0.2, T.d - 0.2).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ map: this.parchment, roughness: 0.85, emissive: new THREE.Color('#ffffff'), emissiveMap: this.parchment, emissiveIntensity: 0.03 }));
     // Parchment lies 3 mm above the table top (top face at 0.95, the rail's at 0.955).
     parch.position.y = 0.958;
     g.add(parch);
-    // Brass dividers and a magnifier on the chart.
-    const div = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.36, 6).rotateZ(Math.PI / 2 - 0.25), m.brass);
-    div.position.set(0.7, 0.975, 0.35);
-    const glass = new THREE.Mesh(new THREE.TorusGeometry(0.08, 0.012, 8, 20).rotateX(Math.PI / 2), m.brass);
-    glass.position.set(-0.85, 0.97, -0.3);
-    g.add(div, glass);
     g.traverse((o) => {
       const mesh = o as THREE.Mesh;
       if (mesh.isMesh) {

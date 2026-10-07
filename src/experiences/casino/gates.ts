@@ -97,14 +97,14 @@ export class Gates {
     const m = host.mats;
     const velvet = own(new THREE.MeshStandardMaterial({ color: '#a8142c', roughness: 0.6 }));
     const lightMat = (color: string) => own(new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    const posts = new Batch();
     const mk = (id: GateId, x: number, from: number, to: number, rank: number, spot: { x: number; z: number; range: number }, glow: string) => {
-      const b = new Batch();
+      const b = posts;
       for (const z of [from - 0.05, to + 0.05]) {
         b.add(new THREE.CylinderGeometry(0.17, 0.2, 0.06, 18), m.brass, x, 0.03, z);
         b.add(new THREE.CylinderGeometry(0.04, 0.05, 0.95, 10), m.brass, x, 0.5, z);
         b.add(new THREE.SphereGeometry(0.075, 12, 10), m.brass, x, 1.0, z);
       }
-      b.build(host.scene);
       // The rope: a sagging tube between the stanchions.
       const pts: THREE.Vector3[] = [];
       for (let i = 0; i <= 16; i++) {
@@ -128,6 +128,7 @@ export class Gates {
     };
     mk('lounge', LOUNGE_GATE.rope, LOUNGE_GATE.from, LOUNGE_GATE.to, 1, SPOTS.loungeGate, '#9fb7e8');
     mk('wheelhouse', WHEELHOUSE_GATE.rope, WHEELHOUSE_GATE.from, WHEELHOUSE_GATE.to, 2, SPOTS.wheelhouseGate, '#ffcf7a');
+    posts.build(host.scene);
     // A painted sign by each gate.
     const sign = (text: string, sub: string, x: number, z: number, ry: number) => {
       const t = own(

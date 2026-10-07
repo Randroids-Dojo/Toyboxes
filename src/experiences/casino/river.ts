@@ -4,6 +4,7 @@
 
 import * as THREE from 'three';
 import type { Tier } from '../../world/space';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { WATER_Y } from './layout';
 import { canvasTex } from './materials';
 
@@ -80,6 +81,7 @@ export class River {
   private hillMat: THREE.MeshStandardMaterial;
   private windowMat: THREE.MeshStandardMaterial;
   private trees: THREE.InstancedMesh[] = [];
+  private windows: THREE.InstancedMesh[] = [];
   private stars: THREE.Points;
   private moon: THREE.Mesh;
   private flies: THREE.Points;
@@ -88,6 +90,7 @@ export class River {
   private scroll = 0;
 
   constructor(private scene: THREE.Scene) {
+    this.group.name = 'river';
     const own = <X extends { dispose(): void }>(x: X): X => {
       this.owned.push(x);
       return x;
@@ -133,54 +136,69 @@ export class River {
     // Banks: rolling hills on both sides, trees and cottages, two copies each that leapfrog.
     this.hillMat = own(new THREE.MeshStandardMaterial({ color: '#5f8f4a', roughness: 0.95, flatShading: true }));
     this.windowMat = own(new THREE.MeshStandardMaterial({ color: '#2a2018', emissive: new THREE.Color('#ffc46a'), emissiveIntensity: 0, roughness: 0.8 }));
-    const hillGeo = own(this.hillGeometry());
-    const trunk = own(new THREE.CylinderGeometry(0.25, 0.35, 2.2, 6).translate(0, 1.1, 0));
-    const crown = own(new THREE.ConeGeometry(2.0, 5.5, 7).translate(0, 4.6, 0));
-    const round = own(new THREE.IcosahedronGeometry(2.3, 0).translate(0, 4.0, 0));
-    const house = own(new THREE.BoxGeometry(5, 3.2, 4).translate(0, 1.6, 0));
-    const roof = own(new THREE.ConeGeometry(4.2, 2.6, 4).rotateY(Math.PI / 4).translate(0, 4.5, 0));
+    // Both banks' hills in one mesh; trunks merged into their crowns and roofs into their
+    // houses (vertex colours), so each copy of the scenery costs five draw calls.
+    const coloured = (parts: [THREE.BufferGeometry, string][]) => {
+      const list = parts.map(([g, col]) => {
+        const geo = g.index ? g.toNonIndexed() : g;
+        const c = new THREE.Color(col);
+        const n = geo.attributes.position.count;
+        const arr = new Float32Array(n * 3);
+        for (let i = 0; i < n; i++) arr.set([c.r, c.g, c.b], i * 3);
+        geo.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+        for (const k of Object.keys(geo.attributes)) if (!['position', 'normal', 'color'].includes(k)) geo.deleteAttribute(k);
+        return geo;
+      });
+      return own(mergeGeometries(list)!);
+    };
+    const hillOne = this.hillGeometry();
+    const hillOther = hillOne.clone().scale(1, 1, -1);
+    // The mirrored copy faces the wrong way after scaling; flip its winding back.
+    const idx = hillOther.index!;
+    for (let i = 0; i < idx.count; i += 3) {
+      const t = idx.getX(i + 1);
+      idx.setX(i + 1, idx.getX(i + 2));
+      idx.setX(i + 2, t);
+    }
+    hillOther.computeVertexNormals();
+    const hillGeo = own(mergeGeometries([hillOne.translate(0, 0, 70), hillOther.translate(0, 0, -70)])!);
+    hillOne.dispose();
+    hillOther.dispose();
+    const pineGeo = coloured([[new THREE.CylinderGeometry(0.25, 0.35, 2.2, 6).translate(0, 1.1, 0), '#5a3a24'], [new THREE.ConeGeometry(2.0, 5.5, 7).translate(0, 4.6, 0), '#2f6a3a']]);
+    const roundGeo = coloured([[new THREE.CylinderGeometry(0.25, 0.35, 2.2, 6).translate(0, 1.1, 0), '#5a3a24'], [new THREE.IcosahedronGeometry(2.3, 0).translate(0, 4.0, 0), '#4a8a3a']]);
+    const houseGeo = coloured([[new THREE.BoxGeometry(5, 3.2, 4).translate(0, 1.6, 0), '#efe2c8'], [new THREE.ConeGeometry(4.2, 2.6, 4).rotateY(Math.PI / 4).translate(0, 4.5, 0), '#a8432e']]);
     const win = own(new THREE.BoxGeometry(5.06, 0.9, 1.2).translate(0, 1.9, 0));
-    const trunkMat = own(new THREE.MeshStandardMaterial({ color: '#5a3a24', roughness: 0.9 }));
-    const pine = own(new THREE.MeshStandardMaterial({ color: '#2f6a3a', roughness: 0.9, flatShading: true }));
-    const leafy = own(new THREE.MeshStandardMaterial({ color: '#4a8a3a', roughness: 0.9, flatShading: true }));
-    const wall = own(new THREE.MeshStandardMaterial({ color: '#efe2c8', roughness: 0.8 }));
-    const roofMat = own(new THREE.MeshStandardMaterial({ color: '#a8432e', roughness: 0.8, flatShading: true }));
+    const treeMat = own(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, flatShading: true }));
+    const houseMat = own(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, flatShading: true }));
     let seed = 5;
     const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
     const TREES = 200;
     const HOUSES = 10;
     for (let copy = 0; copy < 2; copy++) {
       const bank = new THREE.Group();
-      for (const side of [-1, 1]) {
-        const hills = new THREE.Mesh(hillGeo, this.hillMat);
-        hills.position.z = side * 70;
-        hills.scale.z = side;
-        hills.receiveShadow = false;
-        bank.add(hills);
-      }
+      const hills = new THREE.Mesh(hillGeo, this.hillMat);
+      hills.receiveShadow = false;
+      bank.add(hills);
       const mats = new THREE.Matrix4();
-      const tT = new THREE.InstancedMesh(trunk, trunkMat, TREES);
-      const tC = new THREE.InstancedMesh(crown, pine, TREES / 2);
-      const tR = new THREE.InstancedMesh(round, leafy, TREES / 2);
+      const tC = new THREE.InstancedMesh(pineGeo, treeMat, TREES / 2);
+      const tR = new THREE.InstancedMesh(roundGeo, treeMat, TREES / 2);
       for (let i = 0; i < TREES; i++) {
         const side = rnd() < 0.5 ? -1 : 1;
         const x = -LOOP / 2 + rnd() * LOOP;
         const z = side * (34 + rnd() * 50);
-        const s = 0.8 + rnd() * 0.7;
+        const sc = 0.8 + rnd() * 0.7;
         const y = this.hillHeight(x, Math.abs(z) - 70) - 0.3;
-        mats.compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rnd() * 6), new THREE.Vector3(s, s, s));
-        tT.setMatrixAt(i, mats);
+        mats.compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rnd() * 6), new THREE.Vector3(sc, sc, sc));
         if (i % 2) tC.setMatrixAt(i >> 1, mats);
         else tR.setMatrixAt(i >> 1, mats);
       }
-      for (const t of [tT, tC, tR]) {
+      for (const t of [tC, tR]) {
         t.instanceMatrix.needsUpdate = true;
-        t.frustumCulled = false;
+        t.computeBoundingSphere();
         bank.add(t);
         this.trees.push(t);
       }
-      const hW = new THREE.InstancedMesh(house, wall, HOUSES);
-      const hR = new THREE.InstancedMesh(roof, roofMat, HOUSES);
+      const hW = new THREE.InstancedMesh(houseGeo, houseMat, HOUSES);
       const hWin = new THREE.InstancedMesh(win, this.windowMat, HOUSES);
       for (let i = 0; i < HOUSES; i++) {
         const side = i % 2 ? -1 : 1;
@@ -189,14 +207,14 @@ export class River {
         const y = this.hillHeight(x, Math.abs(z) - 70) - 0.2;
         mats.compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), (rnd() - 0.5) * 0.8), new THREE.Vector3(1, 1, 1));
         hW.setMatrixAt(i, mats);
-        hR.setMatrixAt(i, mats);
         hWin.setMatrixAt(i, mats);
       }
-      for (const t of [hW, hR, hWin]) {
+      for (const t of [hW, hWin]) {
         t.instanceMatrix.needsUpdate = true;
-        t.frustumCulled = false;
+        t.computeBoundingSphere();
         bank.add(t);
       }
+      this.windows.push(hWin);
       this.banks.push(bank);
       this.group.add(bank);
     }
@@ -284,7 +302,7 @@ export class River {
 
   setQuality(t: Tier): void {
     const trees = t === 'low' ? 30 : t === 'medium' ? 100 : 200;
-    for (const m of this.trees) m.count = Math.min(m.instanceMatrix.count, m === this.trees[0] || m === this.trees[3] ? trees : trees / 2);
+    for (const m of this.trees) m.count = Math.min(m.instanceMatrix.count, trees / 2);
     this.stars.geometry.setDrawRange(0, t === 'low' ? 400 : t === 'medium' ? 1500 : 4000);
     this.flies.visible = t !== 'low';
     this.flies.geometry.setDrawRange(0, t === 'medium' ? 60 : 200);
@@ -321,6 +339,8 @@ export class River {
     this.waterMat.color.copy(L.water);
     this.hillMat.color.copy(L.hills);
     this.windowMat.emissiveIntensity = nightT * 1.6;
+    // Cottage windows only matter once they glow.
+    for (const wm of this.windows) wm.visible = nightT > 0.05;
     (this.stars.material as THREE.PointsMaterial).opacity = nightT;
     (this.moon.material as THREE.MeshBasicMaterial).opacity = nightT;
     this.moon.visible = nightT > 0.02;

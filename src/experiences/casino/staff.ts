@@ -6,6 +6,7 @@
 
 import * as THREE from 'three';
 import { h } from '../../ui/ui';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { Batch } from './batch';
 import { C, type Mats } from './materials';
 
@@ -36,11 +37,40 @@ const LOOKS: Record<StaffId, Look> = {
 const tmpV = new THREE.Vector3();
 const tmpM = new THREE.Matrix4();
 
+/**
+ * Merges each part's pieces into one skinned geometry, every vertex bound
+ * fully to its part's bone, so a whole automaton is a single draw call.
+ */
+function skinned(parts: { batch: Batch; bone: number; at: THREE.Vector3 }[]): THREE.BufferGeometry {
+  const list: THREE.BufferGeometry[] = [];
+  for (const p of parts) {
+    for (const [, geos] of p.batch.drain()) {
+      for (const g of geos) {
+        g.translate(p.at.x, p.at.y, p.at.z);
+        const n = g.attributes.position.count;
+        const idx = new Uint16Array(n * 4);
+        const wt = new Float32Array(n * 4);
+        for (let i = 0; i < n; i++) {
+          idx[i * 4] = p.bone;
+          wt[i * 4] = 1;
+        }
+        g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(idx, 4));
+        g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(wt, 4));
+        list.push(g);
+      }
+    }
+  }
+  const merged = mergeGeometries(list)!;
+  for (const g of list) g.dispose();
+  return merged;
+}
+
 export class Automaton {
   readonly root = new THREE.Group();
-  readonly head = new THREE.Group();
-  readonly armL = new THREE.Group();
-  readonly armR = new THREE.Group();
+  readonly head = new THREE.Bone();
+  readonly armL = new THREE.Bone();
+  readonly armR = new THREE.Bone();
+  private mesh: THREE.SkinnedMesh;
   private gesture: Gesture = null;
   private gT = 0;
   private gDur = 1;
@@ -79,7 +109,6 @@ export class Automaton {
     b.add(new THREE.CylinderGeometry(0.025, 0.025, 0.18, 6).rotateX(Math.PI / 2), m.trim, 0, sh - 0.35, -0.38, 0, 0, 0, L.trim);
     b.add(new THREE.TorusGeometry(0.08, 0.022, 6, 12), m.trim, 0.06, sh - 0.35, -0.48, 0, Math.PI / 2, 0, L.trim);
     b.add(new THREE.TorusGeometry(0.08, 0.022, 6, 12), m.trim, -0.06, sh - 0.35, -0.48, 0, Math.PI / 2, 0, L.trim);
-    b.build(this.root);
     // Head: a brass dome with a dark face glass; the hat on top.
     this.head.position.y = sh + 0.3;
     const hb = new Batch();
@@ -115,24 +144,41 @@ export class Automaton {
         hb.add(new THREE.CylinderGeometry(0.015, 0.015, 0.2, 6), m.trim, 0, 0.3, 0, 0, 0, 0, L.trim);
         break;
     }
-    hb.build(this.head);
-    this.root.add(this.head);
     // Eyes follow the head; they are instances in the shared glow mesh.
     this.eyes.left.position.set(-0.075, 0.03, 0.235);
     this.eyes.right.position.set(0.075, 0.03, 0.235);
     this.head.add(this.eyes.left, this.eyes.right);
     // Arms: a shoulder ball, upper arm, forearm and a mitten hand.
+    const arms: Batch[] = [];
     for (const [g, sx] of [[this.armL, -1], [this.armR, 1]] as const) {
       g.position.set(sx * 0.36, sh - 0.2, 0);
       const ab = new Batch();
+      arms.push(ab);
       ab.add(new THREE.SphereGeometry(0.09, 12, 8), m.trim, 0, 0, 0, 0, 0, 0, L.trim);
       ab.add(new THREE.CylinderGeometry(0.055, 0.05, 0.3, 10), m.trim, 0, -0.17, 0, 0, 0, 0, L.body);
       ab.add(new THREE.SphereGeometry(0.06, 10, 8), m.trim, 0, -0.33, 0, 0, 0, 0, L.trim);
       ab.add(new THREE.CylinderGeometry(0.05, 0.045, 0.28, 10), m.trim, 0, -0.48, 0, 0, 0, 0, '#3a3a44');
       ab.add(new THREE.SphereGeometry(0.075, 12, 8).scale(1, 1.1, 0.8), m.trim, 0, -0.66, 0, 0, 0, 0, '#f4e7cc');
-      ab.build(g);
-      this.root.add(g);
     }
+    // One skinned mesh: bone 0 the body, then the head and the two arms.
+    const rootBone = new THREE.Bone();
+    rootBone.add(this.head, this.armL, this.armR);
+    const geo = skinned([
+      { batch: b, bone: 0, at: new THREE.Vector3() },
+      { batch: hb, bone: 1, at: this.head.position.clone() },
+      { batch: arms[0], bone: 2, at: this.armL.position.clone() },
+      { batch: arms[1], bone: 3, at: this.armR.position.clone() },
+    ]);
+    this.mesh = new THREE.SkinnedMesh(geo, m.trim);
+    this.mesh.add(rootBone);
+    this.mesh.updateMatrixWorld(true);
+    this.mesh.bind(new THREE.Skeleton([rootBone, this.head, this.armL, this.armR]));
+    this.mesh.castShadow = true;
+    this.mesh.receiveShadow = true;
+    geo.computeBoundingSphere();
+    this.mesh.boundingSphere = geo.boundingSphere!.clone();
+    this.mesh.boundingSphere.radius += 0.6;
+    this.root.add(this.mesh);
   }
 
   /** World point a bubble hangs from. */
@@ -353,11 +399,11 @@ export class Staff {
     const strum = this.all.get('strum');
     if (strum) {
       const banjo = new THREE.Group();
-      const head = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.06, 20).rotateX(Math.PI / 2), m.ivory);
-      const rim = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.025, 6, 20), m.brass);
-      const neck = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.6, 0.03), m.mahogany);
-      neck.position.set(0, 0.4, 0);
-      banjo.add(head, rim, neck);
+      const bb = new Batch();
+      bb.add(new THREE.CylinderGeometry(0.2, 0.2, 0.06, 20).rotateX(Math.PI / 2), m.trim, 0, 0, 0, 0, 0, 0, C.ivory);
+      bb.add(new THREE.TorusGeometry(0.2, 0.025, 6, 20), m.trim, 0, 0, 0, 0, 0, 0, C.brassMatte);
+      bb.add(new THREE.BoxGeometry(0.06, 0.6, 0.03), m.trim, 0, 0.4, 0, 0, 0, 0, C.mahogany);
+      bb.build(banjo);
       banjo.rotation.z = -0.9;
       banjo.position.set(0, 1.25, 0.36);
       strum.root.add(banjo);
@@ -366,12 +412,12 @@ export class Staff {
     const oompa = this.all.get('oompa');
     if (oompa) {
       const tuba = new THREE.Group();
-      const coil = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.07, 10, 24), m.brass);
-      const bell = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.08, 0.4, 20, 1, true), m.brass);
-      bell.position.set(0.1, 0.42, 0);
-      const bellIn = new THREE.Mesh(new THREE.CircleGeometry(0.27, 20).rotateX(-Math.PI / 2), m.brassDark);
-      bellIn.position.set(0.1, 0.6, 0);
-      tuba.add(coil, bell, bellIn);
+      const tb = new Batch();
+      tb.add(new THREE.TorusGeometry(0.22, 0.07, 10, 24), m.brass, 0, 0, 0);
+      // The bell is open, so it is drawn from both sides by a second, inward-facing copy.
+      tb.add(new THREE.CylinderGeometry(0.28, 0.08, 0.4, 20, 1, true), m.brass, 0.1, 0.42, 0);
+      tb.add(new THREE.CylinderGeometry(0.27, 0.07, 0.39, 20, 1, true).scale(-1, 1, 1), m.brass, 0.1, 0.42, 0);
+      tb.build(tuba);
       tuba.position.set(0.05, 1.3, 0.34);
       tuba.rotation.y = 0.4;
       oompa.root.add(tuba);

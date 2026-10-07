@@ -5,12 +5,15 @@
 
 import * as THREE from 'three';
 import type { Tier } from '../../world/space';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { Batch } from './batch';
 import { BLACKJACK, CAPTAIN_TABLE, CLERESTORY, FALLS, LOUNGE_TABLES, OLD_LUCKY, RIVER_WHEEL, ROULETTE, SALOON, STERN, LOGBOOK } from './layout';
 import { C, canvasTex, type Mats } from './materials';
 
 export interface Chandelier {
-  group: THREE.Group;
+  /** Its instance in the shared frame and crystal meshes. */
+  index: number;
+  visible: boolean;
   x: number;
   z: number;
   y: number;
@@ -38,6 +41,8 @@ function poolTexture(): THREE.CanvasTexture {
 export class Lights {
   readonly group = new THREE.Group();
   readonly chandeliers: Chandelier[] = [];
+  private chandFrames: THREE.InstancedMesh;
+  private chandCrystals: THREE.InstancedMesh;
   /** Every decorative bulb on the boat that is not part of a game. */
   readonly bulbs: THREE.InstancedMesh;
   private bulbBase: THREE.Color[] = [];
@@ -64,40 +69,43 @@ export class Lights {
     const bulbSpots: { p: THREE.Vector3; color: string; festoon?: number }[] = [];
     const crystalMat = own(new THREE.MeshStandardMaterial({ color: '#fff4dc', emissive: new THREE.Color('#ffd9a0'), emissiveIntensity: 0.05, roughness: 0.3, metalness: 0.1 }));
 
-    // Three chandeliers down the clerestory.
-    for (const x of [-7, 0, 7]) {
-      const firstBulb = bulbSpots.length;
-      const top = CLERESTORY.height - 0.12;
-      // Hung low enough for the follow camera, which looks down from about 5 m, to see.
-      const y = 4.25;
-      const g = new THREE.Group();
-      g.position.set(x, 0, 0);
-      const b = new Batch();
-      const cb = new Batch();
-      b.add(new THREE.CylinderGeometry(0.03, 0.03, top - y - 0.6, 6), m.brass, 0, (top + y + 0.6) / 2, 0);
-      b.add(new THREE.SphereGeometry(0.16, 14, 10), m.brass, 0, y + 0.55, 0);
-      b.add(new THREE.CylinderGeometry(0.22, 0.08, 0.5, 14), m.brass, 0, y + 0.25, 0);
-      b.add(new THREE.SphereGeometry(0.12, 12, 8), m.brass, 0, y - 0.05, 0);
-      for (const [r, yy, n] of [[0.95, y + 0.05, 10], [0.6, y + 0.5, 6]] as const) {
-        b.add(new THREE.TorusGeometry(r, 0.035, 8, 40).rotateX(Math.PI / 2), m.brass, 0, yy, 0);
-        for (let i = 0; i < n; i++) {
-          const a = (i / n) * Math.PI * 2;
-          const cx = Math.cos(a) * r;
-          const cz = Math.sin(a) * r;
-          // Arm curving out from the hub, a cup and a candle bulb.
-          b.add(new THREE.CylinderGeometry(0.015, 0.015, r, 5).rotateZ(Math.PI / 2).rotateY(-a), m.brass, cx / 2, yy - 0.04, cz / 2);
-          b.add(new THREE.CylinderGeometry(0.06, 0.035, 0.07, 10), m.brass, cx, yy + 0.04, cz);
-          bulbSpots.push({ p: new THREE.Vector3(x + cx, yy + 0.15, cz), color: C.chandelier });
-          // Crystal drops hang between the arms.
-          const a2 = a + Math.PI / n;
-          cb.add(new THREE.OctahedronGeometry(0.05, 0).scale(1, 1.8, 1), crystalMat, Math.cos(a2) * r, yy - 0.16, Math.sin(a2) * r);
-          cb.add(new THREE.OctahedronGeometry(0.035, 0).scale(1, 1.8, 1), crystalMat, Math.cos(a2) * r, yy - 0.3, Math.sin(a2) * r);
-        }
+    // Three chandeliers down the clerestory: one frame and one set of crystals, instanced three times.
+    const top = CLERESTORY.height - 0.12;
+    // Hung low enough for the follow camera, which looks down from about 5 m, to see.
+    const y = 4.25;
+    const b = new Batch();
+    const cb = new Batch();
+    const arms: { cx: number; cz: number; yy: number }[] = [];
+    b.add(new THREE.CylinderGeometry(0.03, 0.03, top - y - 0.6, 6), m.brass, 0, (top + y + 0.6) / 2, 0);
+    b.add(new THREE.SphereGeometry(0.16, 14, 10), m.brass, 0, y + 0.55, 0);
+    b.add(new THREE.CylinderGeometry(0.22, 0.08, 0.5, 14), m.brass, 0, y + 0.25, 0);
+    b.add(new THREE.SphereGeometry(0.12, 12, 8), m.brass, 0, y - 0.05, 0);
+    for (const [r, yy, n] of [[0.95, y + 0.05, 10], [0.6, y + 0.5, 6]] as const) {
+      b.add(new THREE.TorusGeometry(r, 0.035, 8, 40).rotateX(Math.PI / 2), m.brass, 0, yy, 0);
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        const cx = Math.cos(a) * r;
+        const cz = Math.sin(a) * r;
+        // Arm curving out from the hub, a cup and a candle bulb.
+        b.add(new THREE.CylinderGeometry(0.015, 0.015, r, 5).rotateZ(Math.PI / 2).rotateY(-a), m.brass, cx / 2, yy - 0.04, cz / 2);
+        b.add(new THREE.CylinderGeometry(0.06, 0.035, 0.07, 10), m.brass, cx, yy + 0.04, cz);
+        arms.push({ cx, cz, yy });
+        // Crystal drops hang between the arms.
+        const a2 = a + Math.PI / n;
+        cb.add(new THREE.OctahedronGeometry(0.05, 0).scale(1, 1.8, 1), crystalMat, Math.cos(a2) * r, yy - 0.16, Math.sin(a2) * r);
+        cb.add(new THREE.OctahedronGeometry(0.035, 0).scale(1, 1.8, 1), crystalMat, Math.cos(a2) * r, yy - 0.3, Math.sin(a2) * r);
       }
-      b.build(g);
-      cb.build(g, { cast: false });
-      this.group.add(g);
-      this.chandeliers.push({ group: g, x, z: 0, y, bulbs: [firstBulb, bulbSpots.length] });
+    }
+    const frameGeo = own(mergeGeometries([...b.drain().values()].flat())!);
+    const crystalGeo = own(mergeGeometries([...cb.drain().values()].flat())!);
+    this.chandFrames = new THREE.InstancedMesh(frameGeo, m.brass, 3);
+    this.chandCrystals = new THREE.InstancedMesh(crystalGeo, crystalMat, 3);
+    this.chandFrames.castShadow = true;
+    this.group.add(this.chandFrames, this.chandCrystals);
+    for (const [k, x] of [-7, 0, 7].entries()) {
+      const firstBulb = bulbSpots.length;
+      for (const a of arms) bulbSpots.push({ p: new THREE.Vector3(x + a.cx, a.yy + 0.15, a.cz), color: C.chandelier });
+      this.chandeliers.push({ index: k, visible: true, x, z: 0, y, bulbs: [firstBulb, bulbSpots.length] });
       // The light hangs just below the chandelier, so its own crystals do not blow out.
       const pl = new THREE.PointLight(C.chandelier, 13, 16, 1.6);
       pl.position.set(x, y - 0.7, 0);
@@ -123,28 +131,31 @@ export class Lights {
 
     // Light pools: on the felts, under the chandeliers, in front of Old Lucky.
     const poolTex = own(poolTexture());
-    this.poolMat = own(new THREE.MeshBasicMaterial({ map: poolTex, color: '#ffcf8a', transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8 }));
-    const greenPool = own(this.poolMat.clone());
+    const warmPool = own(new THREE.MeshBasicMaterial({ map: poolTex, color: '#ffcf8a', transparent: true, opacity: 0.32 }));
+    const greenPool = own(warmPool.clone());
     greenPool.color.set('#d8ffb0');
     greenPool.opacity = 0.22;
-    const bluePool = own(this.poolMat.clone());
+    const bluePool = own(warmPool.clone());
     bluePool.color.set('#9fb7e8');
     bluePool.opacity = 0.25;
-    const pool = (x: number, y: number, z: number, w: number, d: number, mat: THREE.Material) => {
-      const p = new THREE.Mesh(own(new THREE.PlaneGeometry(w, d).rotateX(-Math.PI / 2)), mat);
-      p.position.set(x, y, z);
-      p.renderOrder = 2;
-      this.group.add(p);
-      this.pools.push(p);
-    };
-    for (const x of [-7, 0, 7]) pool(x, 0.012, 0, 7, 7, this.poolMat);
-    pool(OLD_LUCKY.x, 0.012, -8.4, 7, 4.5, this.poolMat);
+    // Every pool in one mesh: the tint and strength ride in vertex colours (additive, so colour times strength).
+    const poolBatch = new Batch();
+    const allPools = own(new THREE.MeshBasicMaterial({ map: poolTex, vertexColors: true, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8 }));
+    this.poolMat = allPools;
+    const strength = (mat: THREE.MeshBasicMaterial) => mat.color.clone().multiplyScalar(mat.opacity / 0.32);
+    const pool = (x: number, y: number, z: number, w: number, d: number, mat: THREE.MeshBasicMaterial) => poolBatch.add(new THREE.PlaneGeometry(w, d).rotateX(-Math.PI / 2), allPools, x, y, z, 0, 0, 0, strength(mat));
+    for (const x of [-7, 0, 7]) pool(x, 0.012, 0, 7, 7, warmPool);
+    pool(OLD_LUCKY.x, 0.012, -8.4, 7, 4.5, warmPool);
     pool(ROULETTE.x, 1.0, ROULETTE.z, 3.6, 2.2, greenPool);
     pool(BLACKJACK.x, 0.96, BLACKJACK.z + 0.6, 3.0, 2.0, greenPool);
-    pool(LOGBOOK.table.x, 0.012, LOGBOOK.table.z, 4, 3.2, this.poolMat);
+    pool(LOGBOOK.table.x, 0.012, LOGBOOK.table.z, 4, 3.2, warmPool);
     pool(CAPTAIN_TABLE.x, 0.97, CAPTAIN_TABLE.z + 0.6, 3.0, 2.0, greenPool);
     pool(FALLS.x, 0.012, FALLS.z + 2.2, 5, 3.4, bluePool);
     for (const t of LOUNGE_TABLES) pool(t.x, 0.77, t.z, 0.9, 0.9, bluePool);
+    for (const p of poolBatch.build(this.group, { cast: false, receive: false })) {
+      p.renderOrder = 2;
+      this.pools.push(p);
+    }
 
     // Little lamps on the lounge tables.
     const ll = new Batch();
@@ -203,6 +214,7 @@ export class Lights {
   }
 
   setQuality(t: Tier): void {
+    this.chandCrystals.visible = t !== 'low';
     for (const l of this.chandLights) l.visible = t !== 'low';
     for (const l of this.extra) l.visible = t === 'high';
     for (const p of this.pools) p.visible = true;
@@ -213,10 +225,16 @@ export class Lights {
    * flies through them. `beat` gently pulses the festoons with the music.
    */
   update(t: number, night: number, cam: THREE.Vector3, beat: number): void {
+    const mm = new THREE.Matrix4();
     for (const ch of this.chandeliers) {
       const d = Math.hypot(cam.x - ch.x, cam.z - ch.z);
       const show = !(d < 2.4 && cam.y > ch.y - 1.5);
-      if (show !== ch.group.visible) {
+      // A gentle sway; a hidden chandelier shrinks to nothing.
+      mm.makeRotationY(Math.sin(t * 0.3 + ch.x) * 0.04).setPosition(ch.x, 0, ch.z);
+      if (!show) mm.makeScale(0, 0, 0);
+      this.chandFrames.setMatrixAt(ch.index, mm);
+      this.chandCrystals.setMatrixAt(ch.index, mm);
+      if (show !== ch.visible) {
         // Its bulbs live in the shared bulb mesh: shrink them away with it.
         const mm = new THREE.Matrix4();
         for (let i = ch.bulbs[0]; i < ch.bulbs[1]; i++) {
@@ -225,14 +243,15 @@ export class Lights {
         }
         this.bulbs.instanceMatrix.needsUpdate = true;
       }
-      ch.group.visible = show;
-      ch.group.rotation.y = Math.sin(t * 0.3 + ch.x) * 0.04;
+      ch.visible = show;
     }
+    this.chandFrames.instanceMatrix.needsUpdate = true;
+    this.chandCrystals.instanceMatrix.needsUpdate = true;
     const swell = 1 + this.glow * 0.8;
     for (const l of this.chandLights) l.intensity = 13 * this.dim * swell;
     this.warm.intensity = (0.55 + night * 0.1) * this.dim;
     this.m.bulb.emissiveIntensity = (0.75 + night * 0.25) * (0.6 + 0.4 * this.dim) * swell;
-    this.poolMat.opacity = (0.26 + night * 0.12) * this.dim;
+    this.poolMat.opacity = Math.min(1, (0.26 + night * 0.12) * this.dim / 0.32) * 0.32;
     // Festoons chase softly, two bulbs a beat, never faster than 3 flashes a second.
     const col = new THREE.Color();
     const step = Math.floor(beat * 2);

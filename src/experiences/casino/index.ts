@@ -12,6 +12,7 @@ import type { CameraShot, PlayerState, SpaceAction, SpaceView, Spot, Tier } from
 import { Hud, PostFX, Progress, music } from '../kit';
 import { formatCredits, type ExperienceCtx } from '../common';
 import { Ambience, sound } from './audio';
+import { Batch } from './batch';
 import { buildBoat, type BoatView } from './boat';
 import { Ceremonies } from './celebrate';
 import { Director, frame } from './director';
@@ -86,6 +87,9 @@ export class Casino implements SpaceView {
   private staff: Staff;
   private ambience = new Ambience();
   private zone: ZoneId | null = null;
+  /** Things that belong to one room, hidden when you cannot see that room. */
+  private zoneObjs: { obj: THREE.Object3D; zone: ZoneId }[] = [];
+  private shownZones = '';
   private introShown = false;
   private greeted = false;
   private pollAt = 0;
@@ -199,10 +203,45 @@ export class Casino implements SpaceView {
     }
     this.gates.openLogbook = () => this.logbook.open();
 
+    this.classifyZones();
     this.eco.onChange(() => this.paintHud());
     this.eco.onStamps = (ids, rankUp, rank) => this.stamped(ids, rankUp, rank);
     this.hud.setBet(this.host.bet('slot'));
     void this.firstLoad();
+  }
+
+  /** Sorts everything built into the rooms it stands in, for the per-room culling. */
+  private classifyZones(): void {
+    const skip = new Set<THREE.Object3D>([this.boat.group, this.lights.group]);
+    const box = new THREE.Box3();
+    const c = new THREE.Vector3();
+    for (const o of this.scene.children) {
+      if (skip.has(o) || (o as THREE.Points).isPoints || (o as THREE.Light).isLight || o.name === 'river') continue;
+      if ((o as THREE.InstancedMesh).isInstancedMesh && o.frustumCulled === false) continue;
+      box.setFromObject(o);
+      if (box.isEmpty()) continue;
+      box.getCenter(c);
+      const z = zoneAt(c.x, c.z) ?? zoneAt(o.position.x, o.position.z);
+      if (z) this.zoneObjs.push({ obj: o, zone: z });
+    }
+  }
+
+  /** Shows only the rooms you can see from where you are (all of them during a cinematic). */
+  private cullZones(): void {
+    const VIS: Record<ZoneId, ZoneId[]> = {
+      saloon: ['saloon', 'bay', 'stern', 'lounge'],
+      bay: ['saloon', 'bay', 'stern', 'lounge'],
+      stern: ['stern', 'saloon', 'bay'],
+      lounge: ['lounge', 'saloon', 'bay', 'wheelhouse'],
+      wheelhouse: ['wheelhouse', 'lounge', 'saloon'],
+    };
+    const here = zoneAt(this.focus.x, this.focus.z) ?? 'saloon';
+    const show = new Set<ZoneId>(this.director.playing ? ['saloon', 'bay', 'stern', 'lounge', 'wheelhouse'] : VIS[here]);
+    const key = [...show].sort().join();
+    if (key === this.shownZones) return;
+    this.shownZones = key;
+    for (const z of Object.keys(this.boat.zones) as ZoneId[]) this.boat.zones[z].visible = show.has(z);
+    for (const { obj, zone } of this.zoneObjs) obj.visible = show.has(zone);
   }
 
   // -------------------------------------------------------------------------
@@ -307,15 +346,12 @@ export class Casino implements SpaceView {
       const g = new THREE.Group();
       const glass = new THREE.Mesh(new THREE.BoxGeometry(0.02, 2.6, 2.2), this.mats.glass);
       glass.position.y = 1.47;
-      const bar = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.06, 2.3), this.mats.brass);
-      bar.position.y = 1.1;
-      g.add(glass, bar);
-      // A brass frame of four rails round the glass.
-      for (const [y, hh, d, z] of [[0.06, 0.12, 2.5, 0], [2.88, 0.12, 2.5, 0], [1.47, 2.9, 0.12, 1.19], [1.47, 2.9, 0.12, -1.19]] as const) {
-        const rail = new THREE.Mesh(new THREE.BoxGeometry(0.09, hh, d), this.mats.brass);
-        rail.position.set(0, y, z);
-        g.add(rail);
-      }
+      g.add(glass);
+      // A brass frame of four rails round the glass and a push bar, as one mesh.
+      const frameB = new Batch();
+      frameB.add(new THREE.BoxGeometry(0.1, 0.06, 2.3), this.mats.brass, 0, 1.1, 0);
+      for (const [y, hh, d, z] of [[0.06, 0.12, 2.5, 0], [2.88, 0.12, 2.5, 0], [1.47, 2.9, 0.12, 1.19], [1.47, 2.9, 0.12, -1.19]] as const) frameB.add(new THREE.BoxGeometry(0.09, hh, d), this.mats.brass, 0, y, z);
+      frameB.build(g);
       g.position.set(12.0, 0, side * 1.25);
       this.scene.add(g);
       return g;
@@ -393,6 +429,7 @@ export class Casino implements SpaceView {
     this.lights.setQuality(t);
     this.post.setQuality(t);
     this.fx.setQuality(t);
+    if (this.lucky?.reelGlass) this.lucky.reelGlass.visible = t !== 'low';
     this.scene.environment = t === 'low' ? null : this.envTex;
     this.sun.shadow.mapSize.set(t === 'high' ? 2048 : 1024, t === 'high' ? 2048 : 1024);
     this.sun.shadow.map?.dispose();
@@ -424,6 +461,7 @@ export class Casino implements SpaceView {
   }
 
   private pendingInfo: THREE.WebGLRenderer | null = null;
+  private topEdge = 0;
 
   resize(): void {
     this.post.resize();
@@ -436,6 +474,17 @@ export class Casino implements SpaceView {
    */
   cutaway(cam: THREE.Vector3): void {
     const f = this.director.focus ?? this.focus;
+    // Looking down past the top of the view, nothing above the camera can be seen: skip those ceilings.
+    const camera = this.ctx.camera;
+    const dir = camera.getWorldDirection(new THREE.Vector3());
+    const down = Math.asin(Math.max(-1, Math.min(1, -dir.y)));
+    const topEdge = down - THREE.MathUtils.degToRad(camera.fov) / 2;
+    this.topEdge = topEdge;
+    // Ceilings face down: from above one cannot be seen at all, and from below only if the view reaches up to it.
+    for (const c of this.boat.ceilings) {
+      const y = c.userData.ceiling as number;
+      c.visible = !(cam.y > y + 0.05 || (topEdge > 0.03 && y > cam.y - 0.05));
+    }
     for (const w of this.boat.walls) {
       const { a, b } = w.def;
       const camSide = (cam.x - a.x) * w.n.x + (cam.z - a.z) * w.n.z;
@@ -458,10 +507,10 @@ export class Casino implements SpaceView {
       if (cut !== w.cut) {
         w.cut = cut;
         w.full.visible = !cut;
-        w.stub.visible = cut;
+        this.boat.setCut(this.boat.walls.indexOf(w), cut);
       }
     }
-    for (const c of this.boat.columns) {
+    this.boat.columns.forEach((c, i) => {
       const vx = f.x - cam.x;
       const vz = f.z - cam.z;
       const l2 = vx * vx + vz * vz || 1;
@@ -469,11 +518,12 @@ export class Casino implements SpaceView {
       const d = Math.hypot(cam.x + vx * t - c.x, cam.z + vz * t - c.z);
       // Also fade a column right in front of the camera (seat framings come in close).
       const near = Math.hypot(c.x - cam.x, c.z - cam.z) < 2.2 && t > 0;
-      const want = (t > 0.02 && t < 0.97 && d < 0.8) || near ? 0.18 : 1;
+      const want = (t > 0.02 && t < 0.97 && d < 0.8) || near ? 0 : 1;
+      const was = c.fade;
       c.fade += (want - c.fade) * 0.2;
-      c.mat.opacity = c.fade;
-      c.mesh.castShadow = c.fade > 0.5;
-    }
+      if (Math.abs(c.fade - want) < 0.01) c.fade = want;
+      if (c.fade !== was) this.boat.setColumn(i, c.fade);
+    });
   }
 
   update(_night: number, t: number, phase: number, focus: THREE.Vector3): void {
@@ -488,6 +538,7 @@ export class Casino implements SpaceView {
     const dt = raw * this.scale;
     this.clockS += dt;
     this.focus.copy(focus);
+    this.cullZones();
     this.river.update(raw, phase, focus);
     this.boat.glass.emissive.copy(this.river.horizon).multiplyScalar(0.5);
     const beat = music.playing ? music.beat() : this.clockS * 1.73;
@@ -582,6 +633,7 @@ export class Casino implements SpaceView {
       pile: this.fx.pileCount,
       introShown: this.introShown,
       seated: this.director.seated,
+      view: { topEdge: Number(this.topEdge.toFixed(3)), camY: Number(this.ctx.camera.position.y.toFixed(2)), ceilings: this.boat.ceilings.filter((c) => c.visible).length },
       cinematic: this.director.playing,
       oldLucky: { x: OLD_LUCKY.x, z: OLD_LUCKY.z },
       roulette: { spinning: this.roulette.spinning, shownPocket: this.roulette.shownPocket, lastPocket: this.roulette.lastPocket, history: this.roulette.history.slice(0, 8) },
@@ -604,6 +656,31 @@ export class Casino implements SpaceView {
   /** Shows the outside as the helm would (visuals only, for screenshots). */
   debugScenery(s: 'town' | 'sunset' | 'moon'): void {
     this.river.scenery = s;
+  }
+
+  /** What draws from here, grouped by its top-level owner (for performance work). */
+  debugDrawList(focus?: string): Record<string, number> {
+    const cam = this.ctx.camera;
+    cam.updateMatrixWorld();
+    const fr = new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
+    const out: Record<string, number> = {};
+    const visible = (o: THREE.Object3D): boolean => {
+      for (let p: THREE.Object3D | null = o; p; p = p.parent) if (!p.visible) return false;
+      return true;
+    };
+    this.scene.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!(m.isMesh || (o as THREE.Points).isPoints) || !visible(o)) return;
+      if (o.frustumCulled && m.geometry && !fr.intersectsObject(o)) return;
+      let top: THREE.Object3D = o;
+      while (top.parent && top.parent !== this.scene) top = top.parent;
+      let name = top.name || (top.type === 'Group' ? `group@${top.position.x.toFixed(0)},${top.position.z.toFixed(0)}` : `${top.type}@${top.position.x.toFixed(0)},${top.position.z.toFixed(0)}`);
+      if (top === this.boat.group) name = `boat/${o.parent?.name || '?'}/${o.name || (m.material as THREE.Material).type}`;
+      if (focus && name === focus) name += `/${o.parent === top ? '' : `${o.parent?.type}@${o.parent?.position.x.toFixed(1)},${o.parent?.position.y.toFixed(1)}/`}${o.type}:${(m.material as THREE.Material).type}:${m.geometry?.type}`;
+      const n = Array.isArray(m.material) ? m.material.length : 1;
+      out[name] = (out[name] ?? 0) + n;
+    });
+    return out;
   }
 
   /** Reads your record from the server again (read only). */

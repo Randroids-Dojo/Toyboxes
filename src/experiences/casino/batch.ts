@@ -41,6 +41,13 @@ export class Batch {
     this.parts.set(mat, list);
   }
 
+  /** Hands back the transformed parts without merging them (and forgets them). */
+  drain(): Map<THREE.Material, THREE.BufferGeometry[]> {
+    const out = this.parts;
+    this.parts = new Map();
+    return out;
+  }
+
   get empty(): boolean {
     return this.parts.size === 0;
   }

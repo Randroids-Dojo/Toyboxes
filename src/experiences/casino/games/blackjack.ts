@@ -238,13 +238,12 @@ export class Blackjack {
     host.scene.add(g);
     const captain = o.table === 'captain';
     const b = new Batch();
-    const brass = new Batch();
     // Half-moon table, curve towards the player.
     b.add(new THREE.CylinderGeometry(1.8, 1.8, 0.9, 48, 1, false, -Math.PI / 2, Math.PI), m.trim, 0, 0.45, 0, 0, 0, 0, captain ? '#3a1e10' : C.mahogany);
     b.add(new THREE.BoxGeometry(3.6, 0.9, 0.1), m.trim, 0, 0.45, -0.05, 0, 0, 0, captain ? '#3a1e10' : C.mahogany);
     // Padded leather rail on the curve.
     b.add(new THREE.TorusGeometry(1.74, 0.08, 10, 48, Math.PI).rotateX(Math.PI / 2).rotateY(Math.PI), m.trim, 0, TOP + 0.03, 0, 0, 0, 0, '#2a120c');
-    brass.add(new THREE.TorusGeometry(1.8, 0.022, 6, 48, Math.PI).rotateX(Math.PI / 2).rotateY(Math.PI), m.brass, 0, 0.86, 0);
+    b.add(new THREE.TorusGeometry(1.8, 0.022, 6, 48, Math.PI).rotateX(Math.PI / 2).rotateY(Math.PI), m.trim, 0, 0.86, 0, 0, 0, 0, C.brassMatte);
     // The dealer's side: chip tray, shoe and discard rack.
     b.add(new THREE.BoxGeometry(1.1, 0.06, 0.26), m.trim, -0.2, TOP + 0.03, 0.18, 0, 0, 0, '#2a120c');
     const chipCols = ['#2b6f9e', '#2f8f5a', '#c8483a', '#23203a', '#7a4fb0', '#b8862e'];
@@ -252,10 +251,9 @@ export class Blackjack {
       for (let k = 0; k < 6; k++) b.add(new THREE.CylinderGeometry(0.06, 0.06, 0.012, 14), m.trim, -0.68 + i * 0.19, TOP + 0.07 + k * 0.013, 0.18, 0, 0, 0, c);
     });
     b.add(new THREE.BoxGeometry(0.32, 0.2, 0.44), m.trim, 0.95, TOP + 0.1, 0.32, 0, 0.25, 0, '#1d1830');
-    brass.add(new THREE.BoxGeometry(0.34, 0.03, 0.46), m.brass, 0.95, TOP + 0.21, 0.32, 0, 0.25, 0);
+    b.add(new THREE.BoxGeometry(0.34, 0.03, 0.46), m.trim, 0.95, TOP + 0.21, 0.32, 0, 0.25, 0, C.brassMatte);
     b.add(new THREE.BoxGeometry(0.28, 0.14, 0.36), m.trim, -0.98, TOP + 0.07, 0.3, 0, -0.25, 0, '#3a1a12');
     b.build(g);
-    brass.build(g);
     // Felt: a half disc with the table's rules printed round it.
     const felt = own(
       canvasTex(

@@ -257,24 +257,22 @@ export class Roulette {
     g.position.set(ROULETTE.x, 0, ROULETTE.z);
     host.scene.add(g);
     const b = new Batch();
-    const brass = new Batch();
     // Mahogany body with a padded rail all round.
     b.add(new THREE.BoxGeometry(ROULETTE.w - 0.1, 0.93, ROULETTE.d - 0.1), m.trim, 0, 0.465, 0, 0, 0, 0, C.mahogany);
     for (const [x, z, w, d] of [[0, ROULETTE.d / 2 - 0.06, ROULETTE.w, 0.14], [0, -ROULETTE.d / 2 + 0.06, ROULETTE.w, 0.14], [ROULETTE.w / 2 - 0.06, 0, 0.14, ROULETTE.d], [-ROULETTE.w / 2 + 0.06, 0, 0.14, ROULETTE.d]] as const) {
       b.add(new THREE.BoxGeometry(w, 0.12, d), m.trim, x, TOP + 0.02, z, 0, 0, 0, '#3a1a12');
     }
-    brass.add(new THREE.BoxGeometry(ROULETTE.w + 0.02, 0.03, ROULETTE.d + 0.02), m.brass, 0, 0.85, 0);
+    b.add(new THREE.BoxGeometry(ROULETTE.w + 0.02, 0.03, ROULETTE.d + 0.02), m.trim, 0, 0.85, 0, 0, 0, 0, C.brassMatte);
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) b.add(new THREE.CylinderGeometry(0.06, 0.08, 0.1, 10), m.trim, sx * (ROULETTE.w / 2 - 0.2), 0.05, sz * (ROULETTE.d / 2 - 0.2), 0, 0, 0, C.brassMatte);
     // The wheel's bowl, rising from the felt at the left end.
     const bowl = ([[0.66, 0], [0.7, 0.08], [0.69, 0.14], [0.62, 0.15], [0.56, 0.1], [0.52, 0.06], [0.5, 0.05]] as [number, number][]).map(([r, y]) => new THREE.Vector2(r, y));
     b.add(new THREE.LatheGeometry(bowl, 48), m.trim, WHEEL_X, TOP, 0, 0, 0, 0, '#4a2a14');
-    brass.add(new THREE.TorusGeometry(0.69, 0.025, 8, 64).rotateX(Math.PI / 2), m.brass, WHEEL_X, TOP + 0.14, 0);
+    b.add(new THREE.TorusGeometry(0.69, 0.025, 8, 64).rotateX(Math.PI / 2), m.trim, WHEEL_X, TOP + 0.14, 0, 0, 0, 0, C.brassMatte);
     // Felt with the layout painted on it.
     const felt = new THREE.Mesh(own(new THREE.PlaneGeometry(ROULETTE.w - 0.2, ROULETTE.d - 0.2).rotateX(-Math.PI / 2)), own(new THREE.MeshStandardMaterial({ map: own(feltTexture()), roughness: 0.95 })));
     felt.position.y = TOP;
     felt.receiveShadow = true;
     b.build(g);
-    brass.build(g);
     g.add(felt);
     // The wheel head: the face and a turret with a cross handle.
     this.wheel.position.set(WHEEL_X, TOP + 0.05, 0);
@@ -344,6 +342,7 @@ export class Roulette {
       });
     }
     this.chipMesh.count = i;
+    this.chipMesh.visible = i > 0;
     this.chipMesh.instanceMatrix.needsUpdate = true;
     if (this.chipMesh.instanceColor) this.chipMesh.instanceColor.needsUpdate = true;
   }
