@@ -7,6 +7,7 @@
 
 import { COMET_MOTES, ringFromLog, ringMinMs, stormTotal } from './galaxy-rules.js';
 import type { Experience } from './model';
+import { FART_MODES } from './fart/boards.js';
 import { neonModes } from './neon/rules.js';
 
 export interface ScoreMode {
@@ -48,7 +49,7 @@ export const SCORE_MODES: Record<Experience['kind'], ScoreMode[]> = {
     { id: 'comet', label: 'Comet surf', better: 'higher', unit: 'points', min: 0, max: COMET_MOTES },
   ],
   neon: neonModes(),
-  fart: [],
+  fart: FART_MODES,
 };
 
 export function scoreMode(kind: Experience['kind'], id: string): ScoreMode | null {

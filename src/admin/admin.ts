@@ -690,7 +690,7 @@ function renderAreaPages(a: Area): HTMLElement | null {
 function renderExperiencePreview(a: Area): HTMLElement {
   const exp = a.experience!;
   if (exp.kind === 'fart') {
-    return el('div', { class: 'inspector' }, el('h4', {}, 'Fart simulator'), el('p', { class: 'row-sub' }, 'Time cartoon puffs to clear five gold hoops in thirty seconds. Local solo rounds with a pressure meter, sound, results and replay.'));
+    return el('div', { class: 'inspector' }, el('h4', {}, 'Fart simulator'), el('p', { class: 'row-sub' }, 'Little Puffington: a fete village where toots are a superpower. Fifteen mischief jobs, four trials with shared boards, unlockable toot voices and a medal ceremony.'));
   }
   if (exp.kind === 'neon') {
     return el('div', { class: 'inspector' }, el('h4', {}, 'Neon space party'), el('p', { class: 'row-sub' }, 'Tag moving drones with lasers and glowing batons, then dance on the lit floor panels. One local round against robot dancers.'));
