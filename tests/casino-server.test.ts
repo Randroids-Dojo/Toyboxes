@@ -205,6 +205,7 @@ describe('plays', () => {
 
 describe('stamps and ranks', () => {
   it('the first plays earn the boarding stamps and Bosun', async () => {
+    rig.queue.push(REEL_STRIP.indexOf('star'), REEL_STRIP.indexOf('bar'), REEL_STRIP.indexOf('lemon'));
     const first = await post({ action: 'slot', bet: 10 });
     expect(first.body.newStamps).toEqual(['aboard', 'lever']);
     expect((await post({ action: 'roulette', bets: [{ type: 'red', amount: 10 }] })).body.newStamps).toContain('redblack');
