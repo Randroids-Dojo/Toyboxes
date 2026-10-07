@@ -39,6 +39,8 @@ type PadParts = ReturnType<typeof padDecal>;
 /** A star sling pad: decal, beacon, hologram of where it goes and a sign. */
 export interface SlingPad {
   spot: { x: number; y: number; z: number };
+  /** 0 hidden to 1 shown: the hologram and sign fade when the camera is close. */
+  shown: number;
   decal: PadParts;
   beacon: ReturnType<typeof beam>;
   holo: THREE.Object3D;
@@ -55,9 +57,10 @@ function slingPad(x: number, y: number, z: number, color: string, uniforms: Unif
   const beacon = beam(color, 9, 0.9, uniforms, 0.45);
   group.add(beacon.mesh);
   holo.position.y = 2.4;
+  holo.scale.multiplyScalar(0.7);
   group.add(holo);
-  const sign = new Sign(color, 3.6);
-  sign.sprite.position.y = 3.9;
+  const sign = new Sign(color, 3.2);
+  sign.sprite.position.y = 4.3;
   group.add(sign.sprite);
   // Four little crystal posts around the pad.
   const post = new THREE.ConeGeometry(0.12, 0.7, 5).translate(0, 0.35, 0);
@@ -69,7 +72,25 @@ function slingPad(x: number, y: number, z: number, color: string, uniforms: Unif
     group.add(m);
   }
   parent.add(group);
-  return { spot: { x, y, z }, decal, beacon, holo, sign, group };
+  return { spot: { x, y, z }, shown: 1, decal, beacon, holo, sign, group };
+}
+
+/** Fades a pad's hologram and sign when the camera comes close, so they never fill the screen. */
+export function padNear(p: SlingPad, cam: THREE.Vector3, dt: number): void {
+  const d = Math.hypot(cam.x - p.spot.x, cam.z - p.spot.z, (cam.y - p.spot.y - 2.4) * 0.6);
+  const want = d < 3.2 ? 0 : d < 5.5 ? (d - 3.2) / 2.3 : 1;
+  p.shown += (want - p.shown) * Math.min(1, dt * 8);
+  const v = p.shown > 0.02;
+  p.holo.visible = v;
+  p.sign.sprite.visible = v;
+  (p.sign.sprite.material as THREE.SpriteMaterial).opacity = p.shown;
+  p.holo.traverse((m) => {
+    const mat = (m as THREE.Mesh).material as THREE.Material | undefined;
+    if (mat && 'opacity' in mat) {
+      mat.transparent = true;
+      (mat as THREE.MeshBasicMaterial).opacity = Math.min((mat.userData.base as number | undefined) ?? 0.9, p.shown);
+    }
+  });
 }
 
 /** Tiny glowing models of each destination, for the sling holograms and the orrery. */
@@ -219,8 +240,8 @@ export class Hub {
     this.shrineRing = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.08, 12, 48), new THREE.MeshBasicMaterial({ color: '#53f0c0' }));
     this.shrineRing.position.y = 2.4;
     sh.add(this.shrineRing);
-    this.shrineBeam = beam('#53f0c0', 4, 0.8, uniforms, 0.35);
-    this.shrineBeam.mesh.position.y = 1.0;
+    this.shrineBeam = beam('#53f0c0', 3.2, 0.5, uniforms, 0.2);
+    this.shrineBeam.mesh.position.y = 1.02;
     sh.add(this.shrineBeam.mesh);
     const shrineLabel = new Sign('#53f0c0', 3.6);
     shrineLabel.set('Feeding frenzy', null, false);
@@ -308,19 +329,15 @@ export class Hub {
       p.beacon.u.uAlpha.value = on * 0.45 + p.decal.u.uCharge.value * 0.6;
       p.holo.rotation.y += dt * (0.8 + p.decal.u.uCharge.value * 8);
       p.holo.position.y = 2.4 + Math.sin(time * 1.4 + p.spot.x) * 0.12;
-      p.holo.visible = true;
       p.holo.traverse((m) => {
-        const mat = (m as THREE.Mesh).material as THREE.MeshBasicMaterial | undefined;
-        if (mat && 'opacity' in mat) {
-          mat.transparent = true;
-          mat.opacity = on ? 0.9 : 0.25;
-        }
+        const mat = (m as THREE.Mesh).material as THREE.Material | undefined;
+        if (mat) mat.userData.base = on ? 0.9 : 0.25;
       });
       p.sign.set(ISLAND_NAME[k], on ? null : `${o.need[k]} ★ to open`, !on);
     }
     this.shrineRing.rotation.y += dt * 1.4;
     this.shrineRing.position.y = 2.4 + Math.sin(time * 1.6) * 0.15;
-    this.shrineBeam.u.uAlpha.value = o.frenzy ? 0.35 : 0.08;
+    this.shrineBeam.u.uAlpha.value = o.frenzy ? 0.22 : 0.05;
     this.horizonBeam.u.uAlpha.value += ((o.horizon ? 0.55 : 0) - this.horizonBeam.u.uAlpha.value) * Math.min(1, dt * 2);
     this.chartTop.rotation.y = Math.sin(time * 0.2) * 0.25;
     for (const [id, list] of Object.entries(this.chartPips)) {
@@ -393,6 +410,9 @@ export const RING_RUNS: [number, number][] = [
   [RING_GAPS[1][1], RING_GAPS[2][0]],
   [RING_GAPS[2][1], RING_GAPS[3][0]],
 ];
+
+/** The sling home sits on the inner half, clear of the camera behind the start line. */
+export const RING_BACK_R = RING.inner + 1.7;
 
 export type GateState = 'idle' | 'next' | 'hit' | 'miss' | 'done';
 
@@ -568,7 +588,7 @@ export class Ringworld {
     const sp = ringPoint(RING_START_S, RING.mid);
     this.start = slingPad(sp.x, top, sp.z, '#53f0c0', uniforms, miniature('ring', 0.8), g);
     this.start.beacon.u.uAlpha.value = 0.25;
-    const bp = ringPoint(RING_RETURN_S, RING.mid);
+    const bp = ringPoint(RING_RETURN_S, RING_BACK_R);
     this.back = slingPad(bp.x, top, bp.z, '#b9a4ff', uniforms, miniature('hub', 1.2), g);
     this.back.sign.set('Back to the Rim', null, false);
     this.start.sign.set('Ring run', null, false);
@@ -692,7 +712,8 @@ export class Cinder {
       const pos = p.getAttribute('position');
       const cols = new Float32Array(pos.count * 3);
       for (let i = 0; i < pos.count; i++) {
-        const v = 0.15 + ((Math.sin(pos.getY(i) * 7 + pos.getX(i) * 3) + 1) / 2) * 0.5;
+        const band = Math.pow(Math.max(0, Math.sin(pos.getY(i) * 3.1 + Math.atan2(pos.getZ(i), pos.getX(i)) * 3)), 24);
+        const v = 0.02 + band * 0.8;
         cols[i * 3] = cols[i * 3 + 1] = cols[i * 3 + 2] = v;
       }
       p.setAttribute('color', new THREE.BufferAttribute(cols, 3));
@@ -818,6 +839,59 @@ export class Cinder {
 // ---------------------------------------------------------------------------
 // The Comet dock
 
+/** Frosted ice for the dock's top: deep blue, frost rings and cracks. */
+function iceTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = c.height = 512;
+  const g = c.getContext('2d')!;
+  const grad = g.createRadialGradient(256, 256, 20, 256, 256, 256);
+  grad.addColorStop(0, '#4f86b8');
+  grad.addColorStop(0.7, '#2d5c8c');
+  grad.addColorStop(1, '#6fb2e0');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 512, 512);
+  let s = 21;
+  const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+  // Frost speckle.
+  for (let i = 0; i < 2600; i++) {
+    g.fillStyle = `rgba(220,240,255,${0.05 + rnd() * 0.12})`;
+    const r = rnd() * 2.2;
+    g.beginPath();
+    g.arc(rnd() * 512, rnd() * 512, r, 0, Math.PI * 2);
+    g.fill();
+  }
+  // Rings and a six-armed frost star.
+  g.strokeStyle = 'rgba(200,236,255,0.55)';
+  g.lineWidth = 3;
+  for (const r of [70, 150, 228]) {
+    g.beginPath();
+    g.arc(256, 256, r, 0, Math.PI * 2);
+    g.stroke();
+  }
+  g.lineWidth = 2;
+  for (let k = 0; k < 6; k++) {
+    const a = (k / 6) * Math.PI * 2;
+    g.beginPath();
+    g.moveTo(256, 256);
+    g.lineTo(256 + Math.cos(a) * 240, 256 + Math.sin(a) * 240);
+    g.stroke();
+    for (let j = 1; j < 5; j++) {
+      const bx = 256 + Math.cos(a) * j * 48;
+      const by = 256 + Math.sin(a) * j * 48;
+      for (const side of [-1, 1]) {
+        g.beginPath();
+        g.moveTo(bx, by);
+        g.lineTo(bx + Math.cos(a + side * 0.7) * 22, by + Math.sin(a + side * 0.7) * 22);
+        g.stroke();
+      }
+    }
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+
 export class Dock {
   readonly group = new THREE.Group();
   readonly colliders: Collider[] = [];
@@ -833,8 +907,9 @@ export class Dock {
   constructor(scene: THREE.Scene, uniforms: Uniforms) {
     const g = this.group;
     const top = DOCK.top;
-    this.iceMat = new THREE.MeshStandardMaterial({ color: '#a9d8f5', roughness: 0.18, metalness: 0.05, emissive: new THREE.Color('#2a5f8a'), emissiveIntensity: 0.55, flatShading: true });
-    S.fakeIridescence(this.iceMat, uniforms, 0.5);
+    const ice = iceTexture();
+    this.iceMat = new THREE.MeshStandardMaterial({ map: ice, color: '#ffffff', roughness: 0.22, metalness: 0.08, emissive: new THREE.Color('#3a8ad0'), emissiveMap: ice, emissiveIntensity: 0.35 });
+    S.fakeIridescence(this.iceMat, uniforms, 0.3);
     // An ice disc with a faceted edge.
     const disc = new THREE.CylinderGeometry(DOCK.r, DOCK.r - 0.4, 1.2, 14).translate(0, -0.6, 0);
     const discMesh = new THREE.Mesh(disc, this.iceMat);

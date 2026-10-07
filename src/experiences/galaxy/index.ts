@@ -14,6 +14,7 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { SavePass } from 'three/examples/jsm/postprocessing/SavePass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import './galaxy.css';
@@ -55,7 +56,7 @@ import {
 } from '../../shared/galaxy-rules';
 import { gsfx, HUB_SONG } from './audio';
 import { BlackHole } from './blackhole';
-import { Cinder, Dock, Hub, ISLAND_COLOR, ISLAND_NAME, Ringworld, Stair } from './islands';
+import { Cinder, Dock, Hub, ISLAND_COLOR, ISLAND_NAME, RING_BACK_R, Ringworld, Stair, padNear } from './islands';
 import { Comet } from './modes/comet';
 import { Finale } from './modes/finale';
 import { Frenzy, Wake } from './modes/frenzy';
@@ -147,6 +148,7 @@ export class Galaxy implements SpaceView {
   private lens: ShaderPass | null = null;
   private final: ShaderPass | null = null;
   private composerKey = '';
+  private pre: SavePass | null = null;
   private cine: Cine | null = null;
   private stars: FlyingStar[] = [];
   private lastTop = 0;
@@ -674,7 +676,7 @@ export class Galaxy implements SpaceView {
       out.push(...this.kickActions(p));
     } else if (this.zone === 'ring' && near(RING.top)) {
       const sp = ringPoint(RING_START_S, RING.mid);
-      const bp = ringPoint(RING_RETURN_S, RING.mid);
+      const bp = ringPoint(RING_RETURN_S, RING_BACK_R);
       out.push({ x: sp.x, z: sp.z, range: 1.6, label: 'Start the ring run', short: 'Start', run: () => this.startRound(new RingRun(this)) });
       out.push({ x: bp.x, z: bp.z, range: 1.6, label: 'Fly back to the Rim', short: 'Fly', run: () => this.fly('hub', 'ring') });
     } else if (this.zone === 'storm' && near(CINDER.top)) {
@@ -1101,6 +1103,7 @@ export class Galaxy implements SpaceView {
       pad.holo.rotation.y += dt * 0.8;
       pad.holo.position.y = 2.2 + Math.sin(this.time * 1.4 + pad.spot.x) * 0.12;
     }
+    for (const pad of [this.hub.pads.ring, this.hub.pads.storm, this.hub.pads.comet, this.ring.start, this.ring.back, this.cinder.start, this.cinder.back, this.dock.back]) padNear(pad, cam.position, dt);
     this.round?.update(dt, this.time);
 
     // Flying stars.
@@ -1255,14 +1258,19 @@ export class Galaxy implements SpaceView {
       return;
     }
     this.composer?.dispose();
+    this.pre?.renderTarget.dispose();
     this.composerKey = key;
     const composer = new EffectComposer(renderer);
     composer.addPass(new RenderPass(this.scene, camera));
+    this.pre = null;
     if (q.lens) {
       this.lens = new ShaderPass({ uniforms: { tDiffuse: { value: null }, uCenter: { value: new THREE.Vector2(0.5, 0.5) }, uRadius: { value: 0.05 }, uAspect: { value: 1 }, uStrength: { value: 0.9 } }, vertexShader: S.QUAD_VERT, fragmentShader: S.LENS_FRAG });
       composer.addPass(this.lens);
     } else this.lens = null;
     if (q.bloom > 0) {
+      // The picture before bloom, for inside the black hole.
+      this.pre = new SavePass();
+      composer.addPass(this.pre);
       const res = new THREE.Vector2(size.x, size.y).multiplyScalar(this.tier === 'high' ? 1 : 0.5);
       // Only bright things bloom: the disk, the orbs, the seams and the stars.
       composer.addPass(new UnrealBloomPass(res, q.bloom, 0.5, 0.62));
@@ -1270,6 +1278,7 @@ export class Galaxy implements SpaceView {
     this.final = new ShaderPass({
       uniforms: {
         tDiffuse: { value: null },
+        tPre: { value: null },
         uTime: { value: 0 },
         uWarp: { value: 0 },
         uTunnel: { value: 0 },
@@ -1284,6 +1293,8 @@ export class Galaxy implements SpaceView {
       vertexShader: S.QUAD_VERT,
       fragmentShader: S.FINAL_FRAG,
     });
+    // Set after construction: render target textures cannot be cloned into uniforms.
+    this.final.uniforms.tPre.value = this.pre?.renderTarget.texture ?? null;
     composer.addPass(this.final);
     composer.addPass(new OutputPass());
     this.composer = composer;
@@ -1320,7 +1331,7 @@ export class Galaxy implements SpaceView {
       u.uWarp.value = this.ctx.reduceMotion() ? 0 : warp * warp;
       u.uTime.value = this.time;
       u.uHoleCenter.value.set(scr.ahead ? scr.x : -9, scr.ahead ? scr.y : -9);
-      u.uHoleRadius.value = scr.ahead && this.fade.tunnel < 0.5 ? scr.r : 0;
+      u.uHoleRadius.value = scr.ahead && this.fade.tunnel < 0.5 && this.pre ? scr.r : 0;
       u.uAspect.value = aspect;
       u.uTunnel.value = this.fade.tunnel;
       u.uSpin.value = this.fade.spin;
@@ -1349,6 +1360,7 @@ export class Galaxy implements SpaceView {
     this.hud.dispose();
     this.spark.dispose();
     this.composer?.dispose();
+    this.pre?.renderTarget.dispose();
     this.env?.dispose();
     this.sky.dispose();
     this.hole.dispose();

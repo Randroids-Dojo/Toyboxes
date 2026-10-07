@@ -157,7 +157,7 @@ export function underside(radius: number, depth: number, seed: number, mat: THRE
       const along = Math.min(1, Math.max(0, (top - y) / len));
       const j = (hashNoise(Math.round(x * 3), Math.round(y * 3), Math.round(z * 3) + seed) - 0.5) * w * 0.5 * (1 - along * 0.5);
       if (y < top - 0.01) p.setXYZ(k, x + j, y + j * 0.6, z - j);
-      const gl = Math.pow(along, 2.2) * 0.9 + 0.05;
+      const gl = Math.pow(along, 3) * 0.75 + 0.02;
       colors[k * 3] = colors[k * 3 + 1] = colors[k * 3 + 2] = gl;
     }
     g.setAttribute('color', new THREE.BufferAttribute(colors, 3));

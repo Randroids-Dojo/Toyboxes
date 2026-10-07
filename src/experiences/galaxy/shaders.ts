@@ -193,13 +193,13 @@ ${NOISE}
 void main() {
   vec3 p = normalize(vPos);
   float bands = p.y * 9.0 + fbm3(p * 3.0 + uTime * 0.03, uDetail) * 2.4;
-  vec3 deep = vec3(0.1, 0.24, 0.52);
-  vec3 light = vec3(0.36, 0.62, 0.86);
+  vec3 deep = vec3(0.07, 0.17, 0.42);
+  vec3 light = vec3(0.27, 0.52, 0.78);
   float b = 0.5 + 0.5 * sin(bands);
   vec3 col = mix(deep, light, b * b);
   // Storm swirls in the bands.
   col = mix(col, vec3(0.62, 0.82, 0.96), smoothstep(0.72, 0.9, fbm3(p * 7.0 + vec3(uTime * 0.02), uDetail)) * 0.35);
-  float lit = clamp(dot(vNormal, normalize(uLightDir)) * 0.6 + 0.35, 0.12, 0.9);
+  float lit = clamp(dot(vNormal, normalize(uLightDir)) * 0.55 + 0.3, 0.1, 0.78);
   float rim = pow(1.0 - max(dot(vNormal, vView), 0.0), 3.5);
   col = col * lit + vec3(0.25, 0.71, 0.55) * rim * 0.55;
   gl_FragColor = vec4(col, 1.0);
@@ -386,7 +386,7 @@ uniform float uTime;
 varying vec2 vUv;
 varying float vFres;
 void main() {
-  float fade = pow(1.0 - vUv.y, 1.4);
+  float fade = pow(1.0 - vUv.y, 1.4) * smoothstep(0.0, 0.12, vUv.y);
   float pulse = 0.75 + 0.25 * sin(vUv.y * 30.0 - uTime * 6.0);
   float a = fade * pulse * pow(vFres, 1.5) * uAlpha;
   if (a < 0.002) discard;
@@ -516,6 +516,7 @@ void main() {
  */
 export const FINAL_FRAG = /* glsl */ `
 uniform sampler2D tDiffuse;
+uniform sampler2D tPre;
 uniform float uTime;
 uniform float uWarp;
 uniform float uTunnel;
@@ -550,10 +551,13 @@ void main() {
   col.g = texture2D(tDiffuse, w).g;
   col.b = texture2D(tDiffuse, w - c * ab).b;
   col += vec3(0.6, 0.4, 1.0) * uWarp * (1.0 - r) * 0.8;
-  // Bloom must not light up the inside of the black hole. Same warp as the picture.
+  // Bloom must not light up the inside of the black hole: there, show the
+  // picture from before the bloom (so anything in front of the hole still
+  // shows). Same warp as the picture.
   vec2 hd = w - uHoleCenter;
   hd.x *= uAspect;
-  col *= mix(0.03, 1.0, smoothstep(uHoleRadius * 0.86, uHoleRadius * 1.02, length(hd)));
+  float inside = 1.0 - smoothstep(uHoleRadius * 0.86, uHoleRadius * 1.02, length(hd));
+  if (inside > 0.0) col = mix(col, texture2D(tPre, w).rgb, inside);
   // The finale's warp: a tunnel of the drawing's six streak colours.
   if (uTunnel > 0.0) {
     vec2 p = c * vec2(uAspect, 1.0);
