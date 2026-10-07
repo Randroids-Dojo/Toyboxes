@@ -19,6 +19,7 @@ import { handValue, isBlackjack, newShoe, rouletteReturn, settle, type BjResult,
 import { minLapMs } from '../src/shared/track.js';
 import { MAX_LOG, SCORE_MODES, beats, scoreMode, scoreProblem } from '../src/shared/score-modes.js';
 import { browserKey } from './crypto.js';
+import { kartKeys } from './kart.js';
 import { ApiError, limit } from './http.js';
 import { loadRoom } from './rooms.js';
 import { getStore } from './store.js';
@@ -264,6 +265,7 @@ export async function clearScores(roomId: string, areaId: string) {
     `casinoboard:${roomId}:${areaId}`,
     ...ids.map((id) => `casino:${roomId}:${areaId}:${id}`),
     ...modes.map((m) => `modeboard:${roomId}:${areaId}:${m}`),
+    ...(await kartKeys(roomId, areaId)),
   );
   return { ok: true };
 }

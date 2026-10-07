@@ -9,7 +9,7 @@ import { KART_BOOST } from '../shared/track';
 
 export type VehicleKind = 'scooter' | 'kart';
 
-interface Tuning {
+export interface Tuning {
   maxSpeed: number;
   reverse: number;
   accel: number;
@@ -35,7 +35,8 @@ export class Vehicle {
   readonly root = new THREE.Group();
   readonly body = new THREE.Group();
   readonly seat = new THREE.Group();
-  readonly t: Tuning;
+  /** Handling numbers. Race karts give themselves their own copy to tune. */
+  t: Tuning;
   pos = new THREE.Vector3();
   yaw = 0;
   speed = 0;
@@ -46,9 +47,9 @@ export class Vehicle {
   /** Held still, e.g. on the grid before a race starts. */
   frozen = false;
   readonly home: { x: number; z: number; yaw: number };
-  private wheels: THREE.Object3D[] = [];
-  private frontPivots: THREE.Object3D[] = [];
-  private lean = 0;
+  protected wheels: THREE.Object3D[] = [];
+  protected frontPivots: THREE.Object3D[] = [];
+  protected lean = 0;
   bumped = 0;
   /** Race track rules: corner grip, drifting and boosts. */
   racing = false;
@@ -63,7 +64,11 @@ export class Vehicle {
   /** The last throttle input, for rocket starts. */
   throttleIn = 0;
   /** Visual slide angle while drifting. */
-  private slide = 0;
+  protected slide = 0;
+  /** How fast a drift charges its mini-turbo (1 is normal). */
+  driftRate = 1;
+  /** A drift's turn: share of full turn with the stick centred, and how much steering into or out of it adds. */
+  protected driftArc = { base: 0.45, into: 0.55, out: 0.3 };
 
   constructor(
     readonly kind: VehicleKind,
@@ -86,12 +91,12 @@ export class Vehicle {
     this.sync();
   }
 
-  private wheel(r: number, w: number): THREE.Mesh {
+  protected wheel(r: number, w: number): THREE.Mesh {
     const g = cached(`wheel${r}${w}`, () => new THREE.CylinderGeometry(r, r, w, 16).rotateZ(Math.PI / 2));
     return mesh(g, plastic('#24212e', { rough: 0.85 }));
   }
 
-  private buildKart(color: string): void {
+  protected buildKart(color: string): void {
     const paint = plastic(color, { rough: 0.45 });
     const dark = plastic('#2b2738', { rough: 0.7 });
     this.body.add(mesh(roundBox(1.15, 0.22, 1.9, 0.08), dark, 0, 0.24, 0));
@@ -195,7 +200,8 @@ export class Vehicle {
     if (this.drift) {
       // Steering into the drift tightens it, steering out widens it, but it always turns.
       const into = this.steer * this.drift;
-      rate = this.drift * t.turn * 1.1 * (into >= 0 ? 0.45 + 0.55 * into : 0.45 + 0.3 * into);
+      const a = this.driftArc;
+      rate = this.drift * t.turn * 1.1 * (into >= 0 ? a.base + a.into * into : a.base + a.out * into);
     }
     // Tyres only hold so much in a corner: too fast and the kart runs wide.
     if (this.racing && v > 1) {
@@ -207,7 +213,8 @@ export class Vehicle {
 
     this.pos.x += Math.sin(this.yaw) * this.speed * dt;
     this.pos.z += Math.cos(this.yaw) * this.speed * dt;
-    const hit = resolveCircle(this.pos, t.radius, colliders);
+    // Things lower than the kart (a kerb under a raised deck) pass under it.
+    const hit = resolveCircle(this.pos, t.radius, colliders, this.pos.y);
     if (hit) {
       const fx = Math.sin(this.yaw);
       const fz = Math.cos(this.yaw);
@@ -232,7 +239,7 @@ export class Vehicle {
    * Holding brake while turning at speed starts a drift instead of braking.
    * Letting go after long enough gives a mini-turbo. Returns the brake to apply.
    */
-  private driftInput(dt: number, steer: number, brake: number): number {
+  protected driftInput(dt: number, steer: number, brake: number): number {
     if (!this.drift) {
       if (brake > 0.5 && Math.abs(steer) > 0.3 && this.speed > 8 && this.grip >= 1) {
         this.drift = Math.sign(steer);
@@ -241,7 +248,7 @@ export class Vehicle {
       return this.drift ? 0 : brake;
     }
     if (brake > 0.5 && this.speed > 5.5 && this.grip >= 1) {
-      this.driftTime += dt;
+      this.driftTime += dt * this.driftRate;
       // A drift bleeds a little speed.
       this.speed -= 1.2 * dt;
       return 0;

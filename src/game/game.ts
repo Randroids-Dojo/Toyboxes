@@ -24,7 +24,7 @@ import { Casino } from '../experiences/casino';
 import { Galaxy } from '../experiences/galaxy';
 import { NeonParty } from '../experiences/neon';
 import { FartSimulator } from '../experiences/fart';
-import { KartTrack } from '../experiences/kart';
+import { KartWorld } from '../experiences/kart/index';
 import type { CameraShot, CaptureLabels, PlayerState, SpaceView, Tier } from '../world/space';
 import { Arranger } from './arrange';
 import { CameraRig } from './camera';
@@ -529,7 +529,7 @@ export class Game {
 
   private buildArea(room: RoomPublic, area: Area): void {
     if (area.experience?.kind === 'kart') {
-      this.setScene({ kind: 'area', room, area, interior: new KartTrack(this.experienceCtx(room, area)) });
+      this.setScene({ kind: 'area', room, area, interior: new KartWorld(this.experienceCtx(room, area)) });
       return;
     }
     if (area.experience?.kind === 'casino') {
@@ -1017,6 +1017,10 @@ export class Game {
     const items = [
       ...(this.updateReady ? [{ label: 'Get the new version', action: () => this.refreshForUpdate(), primary: true }] : []),
       { label: 'Resume', action: () => close(), primary: !this.updateReady },
+      ...(this.view()?.pauseItems?.() ?? []).map((it) => ({ label: it.label, action: () => {
+        close();
+        it.run();
+      } })),
       { label: 'Settings', action: () => settingsPanel(this.ui, (s) => this.applySettings(s)) },
       { label: 'Change my name', action: () => void this.rename() },
       { label: 'Reset the toys', action: () => {

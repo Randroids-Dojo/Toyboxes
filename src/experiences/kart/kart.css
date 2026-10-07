@@ -1,0 +1,583 @@
+/* Toybox Grand Prix: the race HUD and menus. Chunky toy shapes: cream on
+   ink, rounded, with the circuit's accent. Laid out for wide screens and a
+   390 px phone in portrait. */
+
+.kz-hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  font-family: var(--body);
+  color: #fffaf0;
+  --kz-ink: #1d1830;
+}
+
+.kz-hud.hidden {
+  display: none;
+}
+
+/* While racing, the room's place chip makes way for the race HUD. */
+.hud.kz-on .hud-top {
+  display: none;
+}
+
+.kz-tl {
+  position: absolute;
+  left: calc(14px + var(--safe-l, 0px));
+  top: calc(12px + var(--safe-t, 0px));
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.kz-pos {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  background: var(--kz-ink);
+  border: 3px solid #05030b;
+  border-radius: 18px;
+  padding: 2px 14px 6px 12px;
+  box-shadow: 0 5px 0 #05030b;
+  transform-origin: 30% 60%;
+}
+
+.kz-hud[data-mode='solo'] .kz-pos,
+.kz-hud[data-mode='free'] .kz-pos,
+.kz-hud[data-mode='solo'] .kz-strip,
+.kz-hud[data-mode='free'] .kz-strip,
+.kz-hud[data-mode='free'] .kz-item.empty,
+.kz-hud[data-mode='solo'] .kz-item {
+  display: none;
+}
+
+.kz-pos-n {
+  font: 400 3.4rem/1 var(--display);
+  color: #ffd24a;
+  -webkit-text-stroke: 2px #05030b;
+  paint-order: stroke fill;
+}
+
+.kz-pos small {
+  font: 400 1.25rem var(--display);
+  color: #fffaf0;
+  opacity: 0.9;
+}
+
+.kz-pos.up {
+  animation: kz-pop 0.45s cubic-bezier(0.2, 1.8, 0.4, 1);
+}
+
+.kz-pos.down {
+  animation: kz-drop 0.45s ease;
+}
+
+@keyframes kz-pop {
+  0% {
+    transform: scale(1.35) rotate(-6deg);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+@keyframes kz-drop {
+  0% {
+    transform: translateY(6px) scale(0.9);
+    filter: saturate(0.4);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+.kz-clock {
+  background: rgba(29, 24, 48, 0.86);
+  border: 3px solid #05030b;
+  border-radius: 16px;
+  padding: 6px 12px 7px;
+  box-shadow: 0 5px 0 #05030b;
+  min-width: 150px;
+}
+
+.kz-lap {
+  font: 700 0.8rem var(--body);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+
+.kz-time {
+  font: 400 1.9rem/1.05 var(--display);
+  font-variant-numeric: tabular-nums;
+}
+
+.kz-time.flash {
+  color: #ffd24a;
+  animation: kz-pop 0.4s ease;
+}
+
+.kz-sub {
+  font: 700 0.85rem var(--body);
+  opacity: 0.85;
+  min-height: 1.1em;
+}
+
+.kz-sub[data-tone='good'] {
+  color: #6ff0b0;
+  opacity: 1;
+}
+
+.kz-sub[data-tone='bad'] {
+  color: #ff8a7a;
+  opacity: 1;
+}
+
+.kz-sub[data-tone='gold'] {
+  color: #ffd24a;
+  opacity: 1;
+}
+
+.kz-map {
+  position: absolute;
+  right: calc(14px + var(--safe-r, 0px));
+  bottom: calc(14px + var(--safe-b, 0px));
+  width: 156px;
+  height: 156px;
+  border-radius: 22px;
+  background: rgba(29, 24, 48, 0.55);
+  border: 3px solid rgba(5, 3, 11, 0.8);
+}
+
+.kz-item {
+  position: absolute;
+  right: calc(12px + var(--safe-r, 0px));
+  top: calc(68px + var(--safe-t, 0px));
+  width: 92px;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+}
+
+.kz-item-art {
+  width: 84px;
+  height: 84px;
+  border-radius: 22px;
+  background: radial-gradient(circle at 40% 35%, #3a2f66, #1d1830);
+  border: 3px solid #05030b;
+  box-shadow: 0 5px 0 #05030b, inset 0 0 0 3px rgba(255, 210, 74, 0.55);
+}
+
+.kz-item.empty .kz-item-art {
+  box-shadow: 0 5px 0 #05030b, inset 0 0 0 3px rgba(255, 255, 255, 0.08);
+  opacity: 0.5;
+}
+
+/* An empty slot shows a faint question mark: drive through a capsule. */
+.kz-item.empty::after {
+  content: '?';
+  position: absolute;
+  top: 0;
+  width: 84px;
+  height: 84px;
+  display: grid;
+  place-items: center;
+  font: 400 2.6rem var(--display);
+  color: rgba(255, 250, 240, 0.35);
+}
+
+.kz-item.rolling .kz-item-art {
+  animation: kz-roll 0.12s linear infinite;
+}
+
+.kz-item.land .kz-item-art {
+  animation: kz-pop 0.45s cubic-bezier(0.2, 1.8, 0.4, 1);
+}
+
+@keyframes kz-roll {
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+.kz-item-label {
+  font: 700 0.72rem var(--body);
+  text-align: center;
+  background: rgba(29, 24, 48, 0.8);
+  border-radius: 10px;
+  padding: 2px 8px;
+}
+
+.kz-item-label:empty {
+  display: none;
+}
+
+.kz-strip {
+  position: absolute;
+  left: calc(14px + var(--safe-l, 0px));
+  top: calc(104px + var(--safe-t, 0px));
+  display: grid;
+  gap: 4px;
+}
+
+.kz-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font: 700 0.78rem var(--body);
+  background: rgba(29, 24, 48, 0.72);
+  border-radius: 99px;
+  padding: 2px 10px 2px 2px;
+  transition: transform 0.35s cubic-bezier(0.2, 1, 0.3, 1);
+}
+
+.kz-chip i {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid #05030b;
+  display: grid;
+  place-items: center;
+  font: 400 0.7rem var(--display);
+  font-style: normal;
+  color: #1d1830;
+}
+
+.kz-chip.you {
+  background: #ffd24a;
+  color: #1d1830;
+}
+
+.kz-chip.rival i {
+  box-shadow: 0 0 0 2px #ff7a3d, 0 0 10px #ff7a3d;
+}
+
+.kz-warn {
+  position: absolute;
+  left: 50%;
+  top: 26%;
+  transform: translateX(-50%);
+  font: 400 2rem var(--display);
+  color: #fffaf0;
+  background: #e8574a;
+  border: 3px solid #05030b;
+  border-radius: 18px;
+  padding: 6px 18px 8px 14px;
+  box-shadow: 0 5px 0 #05030b;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  animation: kz-blink 0.8s steps(2) infinite;
+}
+
+.kz-warn.hidden {
+  display: none;
+}
+
+.kz-warn-arrow {
+  width: 0;
+  height: 0;
+  border-top: 12px solid transparent;
+  border-bottom: 12px solid transparent;
+  border-right: 18px solid #fffaf0;
+}
+
+@keyframes kz-blink {
+  50% {
+    filter: brightness(1.25);
+  }
+}
+
+.kz-plane {
+  position: absolute;
+  left: 50%;
+  bottom: 30%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 22px solid transparent;
+  border-right: 22px solid transparent;
+  border-top: 30px solid #ff8a7a;
+  filter: drop-shadow(0 3px 0 #05030b);
+  animation: kz-bob 0.4s ease-in-out infinite alternate;
+}
+
+.kz-plane.hidden {
+  display: none;
+}
+
+@keyframes kz-bob {
+  to {
+    transform: translate(-50%, 8px);
+  }
+}
+
+.kz-hud.kz-danger::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  box-shadow: inset 0 0 60px 10px rgba(232, 87, 74, 0.55);
+  animation: kz-blink 0.5s steps(2) infinite;
+}
+
+/* Touch screens: the item sits under the clock, the map moves up out of the buttons' way. */
+body[data-device='touch'] .kz-map {
+  top: calc(66px + var(--safe-t, 0px));
+  bottom: auto;
+  width: 116px;
+  height: 116px;
+}
+
+body[data-device='touch'] .kz-item {
+  top: calc(190px + var(--safe-t, 0px));
+}
+
+@media (max-width: 600px) {
+  .kz-pos-n {
+    font-size: 2.6rem;
+  }
+  .kz-clock {
+    min-width: 0;
+    padding: 4px 10px 5px;
+  }
+  .kz-time {
+    font-size: 1.5rem;
+  }
+  .kz-strip {
+    top: calc(92px + var(--safe-t, 0px));
+  }
+  .kz-chip span {
+    display: none;
+  }
+  .kz-chip {
+    padding: 2px;
+  }
+  .kz-warn {
+    font-size: 1.5rem;
+  }
+}
+
+/* ---- Menus */
+
+.km {
+  width: min(560px, calc(100vw - 24px));
+}
+
+.km-body {
+  display: grid;
+  gap: 10px;
+}
+
+.km-carousel {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.km-carousel.km-small {
+  margin-bottom: 6px;
+}
+
+.km-arrow {
+  min-width: 48px;
+  font: 400 1.8rem/1 var(--display);
+  padding: 4px 10px;
+}
+
+.km-circuit {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  text-align: center;
+}
+
+.km-art {
+  width: 100%;
+  max-width: 260px;
+  height: auto;
+  border-radius: 16px;
+  border: 3px solid #05030b;
+  box-shadow: 0 4px 0 #05030b;
+}
+
+.km-cname {
+  font: 400 1.5rem var(--display);
+  color: #ffd24a;
+  text-align: center;
+}
+
+.km-cblurb,
+.km-note {
+  font-size: 0.88rem;
+  opacity: 0.8;
+  line-height: 1.35;
+}
+
+.km-cfacts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  font: 700 0.78rem var(--body);
+}
+
+.km-cfacts span {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 99px;
+  padding: 3px 10px;
+}
+
+.km-medal {
+  background: var(--m) !important;
+  color: #1d1830;
+}
+
+.km-label {
+  font: 400 1.05rem var(--display);
+  margin-top: 4px;
+}
+
+.km-label small {
+  font: 600 0.82rem var(--body);
+  opacity: 0.75;
+}
+
+.km-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.km-row .btn {
+  flex: 1 1 auto;
+  min-height: 44px;
+  padding: 6px 12px;
+}
+
+.km-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.km-big {
+  min-height: 64px;
+  font-size: 1.02rem;
+}
+
+.km-foot {
+  margin-top: 4px;
+}
+
+.km-kart {
+  width: 220px;
+  height: 110px;
+  display: block;
+  margin: 0 auto 4px;
+  border-radius: 14px;
+}
+
+.km-swatches {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+}
+
+.km-swatch {
+  min-height: 44px;
+  padding: 0;
+  background: var(--sw) !important;
+  border-radius: 50%;
+  aspect-ratio: 1;
+}
+
+.km-swatch.on {
+  outline: 4px solid #fffaf0;
+  outline-offset: 2px;
+}
+
+.km-swatch.locked {
+  opacity: 0.35;
+  background: repeating-linear-gradient(45deg, var(--sw), var(--sw) 6px, #1d1830 6px, #1d1830 10px) !important;
+}
+
+.km-assist {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.km-h3 {
+  font: 400 1.1rem var(--display);
+  margin: 12px 0 4px;
+  color: #ffd24a;
+}
+
+.km-board {
+  margin: 0;
+  padding-left: 1.6em;
+  display: grid;
+  gap: 4px;
+  font-weight: 650;
+}
+
+.km-board li {
+  display: list-item;
+}
+
+.km-board li > * {
+  vertical-align: middle;
+}
+
+.km-bname {
+  display: inline-block;
+  min-width: 40%;
+}
+
+.km-board small {
+  opacity: 0.6;
+  margin: 0 6px;
+}
+
+.km-board b {
+  font-variant-numeric: tabular-nums;
+  margin-right: 8px;
+}
+
+.km-board li.you {
+  color: #ffd24a;
+}
+
+.km-ghostbtn {
+  min-height: 36px;
+  padding: 2px 10px;
+  font-size: 0.8rem;
+}
+
+.km-sketch {
+  width: 100%;
+  height: auto;
+  border-radius: 14px;
+  border: 3px solid #05030b;
+}
+
+.km-help dt {
+  opacity: 0.95;
+}
+
+.km-help dd {
+  text-align: right;
+  opacity: 0.85;
+}
+
+@media (max-width: 600px) {
+  .km-grid {
+    grid-template-columns: 1fr;
+  }
+  .km-big {
+    min-height: 52px;
+  }
+  .km-swatches {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}

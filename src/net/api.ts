@@ -4,6 +4,13 @@
 import type { Page, PropPlacement, RoomPublic, RoomTheme, SlotSummary, Stroke } from '../shared/model';
 import type { BjView, RouletteBet } from '../shared/casino-games';
 import type { CasinoStats, SlotSymbol } from '../shared/slots';
+import type { Ghost } from '../shared/kart/ghost';
+import type { BodyId } from '../shared/kart/rules';
+
+export interface KartRow extends BoardRow {
+  body: BodyId;
+  ghost: boolean;
+}
 
 export interface BoardRow {
   name: string;
@@ -85,6 +92,13 @@ export const api = {
       { 'x-browser-id': browserId },
     ),
   scoreName: (browserId: string, name: string) => call<{ ok: true }>('POST', '/api/scores', { action: 'name', browserId, name }),
+  /** A time-trial lap with its ghost; the server re-checks it before it goes on the board. */
+  kartLap: (roomId: string, areaId: string, browserId: string, name: string, circuit: string, body: BodyId, ms: number, ghost: Ghost) =>
+    call<{ best: number; improved: boolean; rank: number | null }>('POST', '/api/scores', { action: 'kartlap', roomId, areaId, browserId, name, circuit, body, ms, ghost }),
+  kartBoards: (roomId: string, areaId: string, browserId: string) =>
+    call<{ kind: 'kart2'; circuits: string[]; boards: Record<string, { board: KartRow[]; best: number | null }> }>('GET', `/api/scores?roomId=${encodeURIComponent(roomId)}&areaId=${encodeURIComponent(areaId)}&kart=1`, undefined, { 'x-browser-id': browserId }),
+  kartGhost: (roomId: string, areaId: string, circuit: string, rank: number) =>
+    call<{ ghost: Ghost; name: string }>('GET', `/api/scores?roomId=${encodeURIComponent(roomId)}&areaId=${encodeURIComponent(areaId)}&circuit=${encodeURIComponent(circuit)}&ghost=${rank}`),
 };
 
 export function retryText(r: { extra: Record<string, unknown> }): string {

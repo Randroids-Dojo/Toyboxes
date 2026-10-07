@@ -26,7 +26,7 @@ Randroid's room 1 asked for two things on its sketchbook pages:
 
 | Page | Idea | Built | Evidence |
 | --- | --- | --- | --- |
-| 1 | A go-kart track to race CPU players and set personal best lap times | The **Kart track** inner area: timed laps, personal bests, a best-laps board and 3-lap races. Rebuilt after the page was edited (below) | `scripts/experiencetest.ts` (desktop and `PHONE=1`), `tests/track.test.ts`, `tests/scores.test.ts` |
+| 1 | A go-kart track to race CPU players and set personal best lap times | The **Kart track** inner area, now the **Toybox Grand Prix**: four circuits, seven toy drivers, a cup, single races, time trials against ghosts and server-checked lap boards. Rebuilt after the page was edited (below) | `scripts/karttest.ts` (desktop, `PHONE=1`, `PAD=1`, `REMOTE=1`), `tests/kart-circuits.test.ts`, `tests/kart-rules.test.ts`, `tests/kart-server.test.ts`, `tests/track.test.ts` |
 | 2 | A casino with a giant slot machine you walk up to and spin; credits earned and spent tracked over time | The **Casino** inner area, with a giant slot machine with a lever, server-decided spins, totals and a balance-over-time chart per player, and a top balances board | same |
 
 Page 1 was edited: "make it an actually fun race", check for z-fighting and overlapping track pieces, and put characters in the computer karts. Built automatically on 2026-10-05:
@@ -34,6 +34,15 @@ Page 1 was edited: "make it an actually fun race", check for z-fighting and over
 - **No z-fighting:** the road sits at ground level with the grass below it, the curbs are raised strips, and paint (start line, grid, boost pads, lamp light) is pulled forward in depth. `tests/track.test.ts` checks the corner radius, curb folds and the gap between separate parts of the road, and `trackProblem` now rejects courses with corners too tight for the curbs.
 - **A real race:** drifting with mini-turbos, boost pads, slipstreams, rocket starts, start lights, corner grip, a six-kart grid, a minimap, a final lap call and a results list.
 - **Characters:** Bolt the robot, Hopper the frog guy, Mittens the cat, Puddles the duck and Rex the dino, each with their own driving style. They steer, look into corners, blink, and cheer or sulk at the finish.
+
+Rebuilt as the **Toybox Grand Prix** (2026-10-07): tiny karts, giant rooms.
+- **Four circuits:** Block Town (the original Grand Prix line, so the old lap board carries over) in a playroom with a TOYBOX arch, rocking horse, crayon fence, spinning top, toy train and a domino run that topples ahead of the leader; Picnic Park with the Watermelon Jump, a juice-box straw over the hairpin, a giant gnome and ants on Anthill Rise; Sandcastle Cove with bouncing beach balls on the boardwalk, a plank bridge over the channel to the sea and a tunnel through a sandcastle; Starlight Bedroom at night with the Book Stack Leap, a run under the bed and a sleeping cat whose tail sweeps the chicane.
+- **Racing:** an eight-kart grid, Windup, Battery and Rocket classes, the Toybox Cup (four races, points, standings, podium and trophies), single races, free drive, six items, drifts with a hop and two mini-turbo stages, tricks off jumps, boost pads, slipstreams, rocket starts and the Grabber.
+- **Every input path:** auto gas on touch and TV, a TV remote layout (OK drifts and cashes in, Up uses the item), easy drift and steer assist, and Back on a controller asks before leaving a race.
+- **No z-fighting:** every horizontal surface sits on a layer of its own; `tests/kart-circuits.test.ts` checks corner radii, curb folds, the ground between separate parts of the road, ramps and tunnels on straights and gentle slopes; the playtest runs an audit of overlapping coplanar faces on all four circuits and fails on any.
+- **Boards:** time trial laps only, checked by the server from the lap's recorded path (`server/kart.ts`); medals, trophies and unlocks stay on the device.
+- **Onboarding:** an intro card once, a warm-up lap behind Bolt with tip boards in each device's own controls, and short tips only until you have done the thing.
+- **Characters:** Bolt the robot and Hopper the frog guy lead a cast of seven with voices, cheers, sulks, waves and dizzy stars. Rex the dino is now Stomp.
 
 Page 2 was edited to ask for other casino games as well. Built automatically on 2026-10-05: a **roulette wheel** and a **blackjack table** with a robot dealer in the Casino, sharing its credits. The server decides every spin and every card. Evidence: `scripts/experiencetest.ts` (desktop and `PHONE=1`), `tests/casino-games.test.ts`.
 
@@ -48,7 +57,7 @@ Room 12 (estevan) asked for a "black hole galaxy" (page 1, with a drawing of a r
 - Load https://toyboxes.games on the Samsung S90H browser: check that focus is visible, the remote's arrows, OK and Back work, the on-screen keyboard and PIN pad work from the couch, and whether the TV browser exposes a paired controller.
 - Play on a real phone: stick feel, drag-to-look, the system keyboard over the sketchbook, and frame rate.
 - Judge vehicle handling, camera comfort and night readability; the numbers are in `src/world/vehicles.ts`, `src/game/camera.ts` and `src/world/sky.ts`.
-- Race the computer drivers and tune their pace (`skill` and `nerve` in `src/experiences/kart-drivers.ts`); try the casino's pace of wins over a longer session.
+- Race the computer drivers and tune their pace (`skill` and `nerve` in `src/experiences/kart/drivers.ts`, class numbers in `src/shared/kart/rules.ts`) and the time trial medal times (`src/shared/kart/circuits.ts`); try the casino's pace of wins over a longer session.
 - Drift on a real phone with two thumbs (stick and Brake together). Headless touch emulation only tracks one finger, so the phone playtest checks the stick and the Brake button separately.
 
 ## Choices made where the GDD left them open
