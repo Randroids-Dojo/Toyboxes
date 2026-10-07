@@ -20,6 +20,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import './galaxy.css';
 import { sfx, sfxSpace } from '../../audio/sfx';
 import { api, type BoardRow } from '../../net/api';
+import { confirmBox } from '../../ui/dialogs';
 import { button, h, type Panel } from '../../ui/ui';
 import { disposeTree } from '../../world/kit';
 import type { Collider } from '../../world/physics';
@@ -223,7 +224,7 @@ export class Galaxy implements SpaceView {
     this.hole.setFed(this.holeFed(total), true);
     this.applyConstellations(true);
     this.stair.setCount(this.stairCount(total), true);
-    this.sky.setPour(total >= STAR_GOAL ? 1 : 0);
+    this.sky.setPour(total >= STAR_GOAL && !this.save.data.reborn ? 1 : 0);
     this.sky.setBloom(this.save.data.bloomed ? 1 : 0);
     this.dock.comet.visible = total >= UNLOCK.comet;
     this.blossoms.show(this.hub.horizonBlossom, total >= STAR_GOAL);
@@ -315,6 +316,7 @@ export class Galaxy implements SpaceView {
 
   /** The bloom's aftermath: a small, hungry black hole and every constellation lit. */
   rebirth(): void {
+    this.sky.setPour(0);
     this.hole.setFed(this.holeFed(this.shownFed), true);
     this.hole.burp(2);
     this.applyConstellations(true);
@@ -957,8 +959,7 @@ export class Galaxy implements SpaceView {
           'Start the galaxy again',
           () => {
             ui.close(panel);
-            void import('../../ui/dialogs').then(async ({ confirmBox }) => {
-              const ok = await confirmBox(ui, { title: 'Start the galaxy again?', body: 'Your stars go back into the sky. Your best scores stay.', ok: 'Start again', cancel: 'Keep my galaxy' });
+            void confirmBox(ui, { title: 'Start the galaxy again?', body: 'Your stars go back into the sky. Your best scores stay.', ok: 'Start again', cancel: 'Keep my galaxy' }).then((ok) => {
               if (ok) this.restartJourney();
             });
           },
@@ -1115,7 +1116,7 @@ export class Galaxy implements SpaceView {
       pad.holo.rotation.y += dt * 0.8;
       pad.holo.position.y = 2.2 + Math.sin(this.time * 1.4 + pad.spot.x) * 0.12;
     }
-    for (const pad of [this.hub.pads.ring, this.hub.pads.storm, this.hub.pads.comet, this.ring.start, this.ring.back, this.cinder.start, this.cinder.back, this.dock.back]) padNear(pad, cam.position, dt);
+    for (const pad of [this.hub.pads.ring, this.hub.pads.storm, this.hub.pads.comet, this.ring.start, this.ring.back, this.cinder.start, this.cinder.back, this.dock.back]) padNear(pad, cam.position, dt, this.playerPos);
     this.hub.fade.update(cam.position, dt);
     // Low tier: far boards and signs are not drawn at all.
     if (this.tier === 'low') {
@@ -1343,7 +1344,7 @@ export class Galaxy implements SpaceView {
       pm.dispose();
       envSphere.geometry.dispose();
       this.hub.tileMats.physical.envMap = this.env;
-      this.hub.tileMats.physical.envMapIntensity = 0.55;
+      this.hub.tileMats.physical.envMapIntensity = 0.4;
       this.hub.tileMats.physical.needsUpdate = true;
     }
     if (this.tier === 'low') return false;

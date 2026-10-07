@@ -59,8 +59,8 @@ function slingPad(x: number, y: number, z: number, color: string, uniforms: Unif
   holo.position.y = 2.4;
   holo.scale.multiplyScalar(0.7);
   group.add(holo);
-  const sign = new Sign(color, 3.2);
-  sign.sprite.position.y = 4.3;
+  const sign = new Sign(color, 2.8);
+  sign.sprite.position.y = 4.2;
   group.add(sign.sprite);
   // Four little crystal posts around the pad.
   const posts = mergeGeometries(
@@ -102,9 +102,11 @@ export class NearFade {
 }
 
 /** Fades a pad's hologram and sign when the camera comes close, so they never fill the screen. */
-export function padNear(p: SlingPad, cam: THREE.Vector3, dt: number): void {
+export function padNear(p: SlingPad, cam: THREE.Vector3, dt: number, player?: THREE.Vector3): void {
   const d = Math.hypot(cam.x - p.spot.x, cam.z - p.spot.z, (cam.y - p.spot.y - 2.4) * 0.6);
-  const want = d < 3.2 ? 0 : d < 5.5 ? (d - 3.2) / 2.3 : 1;
+  // Standing at the pad, the prompt says it all: the sign steps aside.
+  const pd = player ? Math.hypot(player.x - p.spot.x, player.z - p.spot.z) + (Math.abs(player.y - p.spot.y) > 2 ? 9 : 0) : 99;
+  const want = Math.min(d < 3.2 ? 0 : d < 5.5 ? (d - 3.2) / 2.3 : 1, pd < 2.5 ? 0 : pd < 4 ? (pd - 2.5) / 1.5 : 1);
   p.shown += (want - p.shown) * Math.min(1, dt * 8);
   const v = p.shown > 0.02;
   p.holo.visible = v;
@@ -220,7 +222,7 @@ export class Hub {
       physical: new THREE.MeshPhysicalMaterial({ color: '#140c30', roughness: 0.26, metalness: 0.1, iridescence: 1, iridescenceIOR: 1.5, iridescenceThicknessRange: [180, 700], clearcoat: 0.35, clearcoatRoughness: 0.3, emissive: new THREE.Color('#2a1060'), emissiveIntensity: 0.5 }),
       plain: new THREE.MeshStandardMaterial({ color: '#1c1238', roughness: 0.4, metalness: 0.25, emissive: new THREE.Color('#241052'), emissiveIntensity: 0.5 }),
     };
-    S.fakeIridescence(this.tileMats.plain, uniforms, 0.75);
+    S.fakeIridescence(this.tileMats.plain, uniforms, 0.5);
     this.tiles = new THREE.InstancedMesh(tileGeo, this.tileMats.plain, centres.length);
     const m4 = new THREE.Matrix4();
     centres.forEach((c, i) => {
@@ -294,7 +296,7 @@ export class Hub {
     this.shrineBeam = beam('#53f0c0', 3.2, 0.5, uniforms, 0.2);
     this.shrineBeam.mesh.position.y = 1.02;
     sh.add(this.shrineBeam.mesh);
-    const shrineLabel = new Sign('#53f0c0', 3.6);
+    const shrineLabel = new Sign('#53f0c0', 3.0);
     shrineLabel.set('Feeding frenzy', null, false);
     shrineLabel.sprite.position.y = 3.7;
     sh.add(shrineLabel.sprite);
@@ -344,7 +346,7 @@ export class Hub {
     place('comet', 0.62, 0.62, 3, 'comet', 0.45);
     this.chartTop.add(bake(minis), this.pips);
     ch.add(this.chartTop);
-    const chartLabel = new Sign('#b9a4ff', 3.2);
+    const chartLabel = new Sign('#b9a4ff', 2.5);
     chartLabel.set('Star chart', null, false);
     chartLabel.sprite.position.y = 2.9;
     ch.add(chartLabel.sprite);
@@ -1021,6 +1023,8 @@ export class Dock {
     this.tail.frustumCulled = false;
     this.comet.add(this.tail);
     this.comet.position.copy(this.mooring);
+    // Moored side-on, so its tail streams across the view from the dock.
+    this.comet.rotation.y = Math.PI / 2;
     g.add(this.comet);
     this.start = slingPad(this.rideSpot.x - 0.4, top, this.rideSpot.z - 3.2, '#53f0c0', uniforms, miniature('comet', 0.8), g);
     this.start.group.visible = false;
@@ -1038,14 +1042,15 @@ export class Dock {
     n.rotation.y += dt * 0.6;
     n.rotation.x += dt * 0.25;
     // Riding: a small board of ice under your feet; the long tail becomes ribbons.
-    n.scale.setScalar(riding ? 0.62 : 1);
+    n.scale.setScalar(riding ? 0.62 : 0.8);
     const coma = this.comet.getObjectByName('coma')!;
-    coma.quaternion.copy(camera.quaternion);
-    coma.scale.setScalar(riding ? 1.8 : 3.6);
+    // The coma is a child of the turned comet: face the camera in world space.
+    coma.quaternion.copy(this.comet.quaternion).invert().multiply(camera.quaternion);
+    coma.scale.setScalar(riding ? 1.8 : 2.8);
     this.tail.visible = !riding;
     if (!riding) {
       this.comet.position.set(this.mooring.x, this.mooring.y + Math.sin(time * 1.1) * 0.25, this.mooring.z);
-      this.comet.rotation.set(0, 0, 0);
+      this.comet.rotation.set(0, Math.PI / 2, 0);
     }
     if (this.tail.visible) {
       const m4 = new THREE.Matrix4();

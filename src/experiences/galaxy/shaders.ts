@@ -65,30 +65,43 @@ void main() {
   vec3 green = vec3(0.25, 0.71, 0.55);
   vec3 blue = vec3(0.29, 0.64, 0.87);
   vec3 gold = vec3(0.96, 0.72, 0.25);
-  vec3 col = deep * (0.75 + 0.5 * d.y);
+  vec3 col = deep * (0.95 + 0.35 * d.y);
   col = mix(col, purple * 0.6, smoothstep(0.4, 0.8, w));
   col = mix(col, blue * 0.5, smoothstep(0.55, 0.85, fbm3(q * 2.1 + 4.0, uOctaves)) * 0.55);
   col = mix(col, green * 0.55, smoothstep(0.62, 0.92, fbm3(q * 1.3 - 2.0, uOctaves)) * 0.5);
   col += gold * pow(smoothstep(0.72, 1.0, w), 3.0) * 0.8;
   // Brighter towards the black hole.
   float toward = max(0.0, dot(d, uHoleDir));
-  col += vec3(0.5, 0.32, 0.9) * (pow(toward, 30.0) * 0.4 + pow(toward, 6.0) * 0.06) * (1.0 + uFlare * 0.8);
-  // After the bloom: a spiral galaxy where the black hole was.
+  col += vec3(0.5, 0.32, 0.9) * (pow(toward, 30.0) * 0.4 + pow(toward, 6.0) * 0.06) * (1.0 + uFlare * 0.8) * (1.0 - uBloom * 0.7);
+  // After the bloom: a spiral galaxy where the black hole was, seen at a
+  // slant, with dusty arms in the drawing's colours and a warm core.
   if (uBloom > 0.0) {
     vec3 up = vec3(0.0, 1.0, 0.0);
     vec3 ax = normalize(cross(up, uHoleDir));
     vec3 ay = normalize(cross(uHoleDir, ax));
     vec2 p = vec2(dot(d, ax), dot(d, ay)) / max(0.2, toward);
-    p = mat2(0.94, 0.34, -0.34, 0.94) * p * vec2(1.0, 1.6);
-    float r = length(p) * 2.6;
+    p = mat2(0.91, 0.42, -0.42, 0.91) * p;
+    p.y *= 2.2;
+    float r = length(p) * 2.4;
     float a = atan(p.y, p.x);
-    float arms = 0.5 + 0.5 * sin(2.0 * a - log(r + 0.05) * 4.2 + uTime * 0.12);
-    arms = pow(arms, 3.0) * smoothstep(1.6, 0.15, r);
-    float core = exp(-r * r * 9.0);
-    float dust = fbm3(vec3(p * 5.0, uTime * 0.05), uOctaves);
-    vec3 armCol = mix(mix(purple, gold, smoothstep(0.2, 0.9, r)), mix(green, blue, dust), smoothstep(0.5, 1.4, r));
-    vec3 g = armCol * arms * (0.6 + 0.8 * dust) * 1.4 + vec3(1.0, 0.92, 0.75) * core * 1.6;
-    col += g * uBloom * step(0.0, toward);
+    float spiral = 2.0 * a - log(r + 0.03) * 5.0 + uTime * 0.05;
+    float arms = pow(0.5 + 0.5 * cos(spiral), 2.5);
+    float lane = smoothstep(0.55, 0.95, 0.5 + 0.5 * cos(spiral + 0.9));
+    float dust = fbm3(vec3(p * 6.0, 3.0), uOctaves);
+    float disc = smoothstep(1.7, 0.2, r);
+    vec3 inner = mix(vec3(0.98, 0.82, 0.5), purple, smoothstep(0.15, 0.6, r));
+    vec3 outer = mix(blue, green, smoothstep(0.9, 1.5, r) * 0.7 + dust * 0.3);
+    vec3 armCol = mix(inner, outer, smoothstep(0.45, 1.2, r));
+    vec3 gal = armCol * arms * disc * (0.55 + 0.6 * dust) * (1.0 - lane * 0.7) * 1.55;
+    gal += armCol * disc * disc * 0.12;
+    // Young stars sparkling along the arms.
+    vec2 sc = p * 90.0;
+    vec2 cell = floor(sc);
+    float hsh = hash31(vec3(cell, 7.0));
+    float spark = smoothstep(0.42, 0.0, length(fract(sc) - 0.5)) * step(0.9, hsh) * arms * disc;
+    gal += vec3(1.0, 0.95, 0.9) * spark * 0.8;
+    gal += vec3(1.0, 0.9, 0.7) * exp(-r * r * 26.0) * 0.85;
+    col = mix(col, col * 0.6, disc * uBloom * 0.5) + gal * uBloom * step(0.0, toward);
   }
   // Stars.
   vec3 sp = d * 380.0;
@@ -233,6 +246,7 @@ uniform float uTime;
 uniform float uScale;
 attribute float aSeed;
 varying float vSeed;
+varying float vNear;
 void main() {
   vSeed = aSeed;
   vec3 p = position;
@@ -242,13 +256,16 @@ void main() {
   p.xz = mat2(c, -s, s, c) * p.xz;
   p.y += sin(uTime * 0.6 + aSeed * 40.0) * 0.6;
   vec4 mv = modelViewMatrix * vec4(p, 1.0);
-  gl_PointSize = uScale * (0.6 + aSeed) / -mv.z;
+  // Motes right by the camera would be big blurry blobs: fade them out.
+  vNear = smoothstep(3.0, 9.0, -mv.z);
+  gl_PointSize = min(18.0, uScale * (0.6 + aSeed) / -mv.z);
   gl_Position = projectionMatrix * mv;
 }`;
 
 export const MOTE_FRAG = /* glsl */ `
 uniform float uTime;
 varying float vSeed;
+varying float vNear;
 void main() {
   vec2 c = gl_PointCoord * 2.0 - 1.0;
   float d = dot(c, c);
@@ -258,7 +275,8 @@ void main() {
   vec3 g = vec3(1.0, 0.78, 0.35);
   vec3 col = vSeed < 0.33 ? a : vSeed < 0.66 ? b : g;
   float tw = 0.6 + 0.4 * sin(uTime * 2.0 + vSeed * 30.0);
-  gl_FragColor = vec4(col * tw, (1.0 - d) * 0.9);
+  gl_FragColor = vec4(col * tw, (1.0 - d) * 0.9 * vNear);
+  if (vNear < 0.01) discard;
   ${OUT}
 }`;
 
