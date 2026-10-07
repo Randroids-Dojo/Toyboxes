@@ -618,12 +618,16 @@ export function buildStation(scene: THREE.Scene, ownerName: string): StationPart
       S.add(new THREE.BoxGeometry(0.4, 3.2, Math.abs(len)), wallMat, x, 1.6, mid);
       G.add(new THREE.BoxGeometry(0.05, 0.08, Math.abs(len)), neonCyan, x - side * 0.215, 2.7, mid);
       G.add(new THREE.BoxGeometry(0.05, 0.08, Math.abs(len)), neonCyan, x - side * 0.215, 0.3, mid);
-      colliders.push(box(x, mid, 0.2, Math.abs(len) / 2, 0, 3.2, 0.5, true));
+      // As tall as the gate for the camera, so it never skims the top with the wall filling the view.
+      colliders.push(box(x, mid, 0.2, Math.abs(len) / 2, 0, 4.6, 0.5, true));
     }
     // Gate frame at the arena wall with a light curtain.
     // The gate's top bar sits high, above where the follow camera passes.
     S.add(new THREE.BoxGeometry(2 * AIRLOCK_HALF + 0.8, 0.4, 0.6), wallMat, 0, 4.8, ARENA.z1 - 0.3);
-    for (const side of [-1, 1]) S.add(new THREE.BoxGeometry(0.4, 4.6, 0.6), wallMat, side * (AIRLOCK_HALF + 0.2), 2.3, ARENA.z1 - 0.3);
+    for (const side of [-1, 1]) {
+      S.add(new THREE.BoxGeometry(0.4, 4.6, 0.6), wallMat, side * (AIRLOCK_HALF + 0.2), 2.3, ARENA.z1 - 0.3);
+      colliders.push(box(side * (AIRLOCK_HALF + 0.2), ARENA.z1 - 0.3, 0.2, 0.3, 0, 4.6, 0.5, true));
+    }
     G.add(new THREE.BoxGeometry(2 * AIRLOCK_HALF, 0.07, 0.07), neonCyan, 0, 4.58, ARENA.z1 - 0.62);
     const curtain = new THREE.ShaderMaterial({
       transparent: true,
@@ -664,9 +668,12 @@ export function buildStation(scene: THREE.Scene, ownerName: string): StationPart
       [ARENA.x1 + t / 2, (ARENA.z0 + ARENA.z1) / 2, t, D + 2 * t],
       [0, ARENA.z0 - t / 2, W, t],
     ];
+    // The solid walls stand taller for the camera than they look, so it looks
+    // over them from well above or stays inside, rather than skim the top
+    // with the dark wall filling the bottom of the view and hiding you.
     for (const [x, z, w, d] of walls) {
       S.add(new THREE.BoxGeometry(w, WALL_H, d), wallMat, x, WALL_H / 2, z);
-      colliders.push(box(x, z, w / 2, d / 2, 0, WALL_H, 0.5, true));
+      colliders.push(box(x, z, w / 2, d / 2, 0, WALL_H + 1.2, 0.5, true));
     }
     // South wall, either side of the airlock: solid below, glass above.
     for (const side of [-1, 1]) {
