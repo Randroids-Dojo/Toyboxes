@@ -1,0 +1,304 @@
+/* The Golden Paddle: every casino style (HUD, panels, logbook, charts).
+   Imported from src/experiences/casino/index.ts. */
+
+:root {
+  --gp-ui: #13212b;
+  --gp-ui-2: #1a2d38;
+  --gp-ivory: #f4e7cc;
+  --gp-muted: #a9b8bd;
+  --gp-brass: #e0ac45;
+  --gp-brass-dark: #a8782c;
+  --gp-teal: #1d4f55;
+  --gp-coral: #d8574a;
+  --gp-felt: #1e7a4f;
+  --gp-earned: #c27c1a;
+  --gp-spent: #2b9cb0;
+  --gp-zero: #6b7680;
+  --gp-up: #8fd19e;
+  --gp-down: #f0a08a;
+}
+
+/* ---- HUD card */
+
+.ch-hud {
+  position: absolute;
+  top: calc(58px + var(--safe-t));
+  left: calc(12px + var(--safe-l));
+  min-width: 210px;
+  padding: 10px 14px 10px;
+  border-radius: 16px;
+  color: var(--gp-ivory);
+  background: linear-gradient(180deg, rgba(26, 45, 56, 0.94), rgba(19, 33, 43, 0.94));
+  border: 2px solid var(--gp-brass);
+  box-shadow: 0 0 0 3px rgba(19, 33, 43, 0.9), 0 10px 28px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+  font-family: var(--body);
+}
+
+.ch-top {
+  display: grid;
+}
+
+.ch-top small {
+  font: 700 0.62rem/1.1 var(--body);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gp-brass);
+}
+
+.ch-odo {
+  font: 400 2rem/1.05 var(--display);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  color: #fff6e0;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+  transition: color 0.2s;
+}
+
+.ch-odo.rolling {
+  color: #ffd98a;
+}
+
+.ch-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+  font-weight: 700;
+  font-size: 0.86rem;
+}
+
+.ch-bet {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--gp-brass);
+  color: var(--gp-ui);
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+}
+
+.ch-bet.flip {
+  animation: ch-flip 0.42s ease-out;
+}
+
+@keyframes ch-flip {
+  0% {
+    transform: rotateX(90deg);
+  }
+  60% {
+    transform: rotateX(-12deg);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+.ch-net {
+  color: var(--gp-muted);
+}
+
+.ch-net[data-tone='up'] {
+  color: var(--gp-up);
+}
+
+.ch-net[data-tone='down'] {
+  color: var(--gp-down);
+}
+
+.ch-rank {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(224, 172, 69, 0.3);
+}
+
+.ch-badge {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  flex: none;
+}
+
+.ch-badge.pulse {
+  animation: ch-pulse 0.7s ease-out;
+}
+
+@keyframes ch-pulse {
+  0% {
+    transform: scale(1);
+  }
+  30% {
+    transform: scale(1.3);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.ch-ring {
+  position: absolute;
+  inset: 0;
+  transform: rotate(-90deg);
+}
+
+.ch-ring-track {
+  fill: rgba(224, 172, 69, 0.12);
+  stroke: rgba(224, 172, 69, 0.25);
+  stroke-width: 4;
+}
+
+.ch-ring-fill {
+  fill: none;
+  stroke: var(--gp-brass);
+  stroke-width: 4;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.ch-anchor {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  color: var(--gp-brass);
+}
+
+.ch-anchor svg {
+  width: 20px;
+  height: 20px;
+}
+
+.ch-rank-text {
+  display: grid;
+  gap: 1px;
+  font-size: 0.82rem;
+  line-height: 1.2;
+}
+
+.ch-rank-name {
+  font: 400 1rem/1.1 var(--display);
+  letter-spacing: 0.02em;
+  color: #fff6e0;
+}
+
+.ch-rank-count {
+  color: var(--gp-muted);
+  font-weight: 700;
+}
+
+.ch-next {
+  color: var(--gp-ivory);
+  opacity: 0.85;
+  max-width: 220px;
+}
+
+.ch-next:empty {
+  display: none;
+}
+
+/* The stamp: an inked card slams in, then flies into the badge. */
+.ch-stamp-card {
+  position: absolute;
+  top: 34%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.ch-stamp-ink {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 14px 26px 16px;
+  border-radius: 10px;
+  background: #f4e7cc;
+  color: #8a2a1e;
+  border: 4px double #b8342c;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.35);
+  transform: rotate(-6deg);
+}
+
+.ch-stamp-ink small {
+  font: 700 0.66rem/1 var(--body);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.ch-stamp-ink b {
+  font: 400 1.7rem/1.1 var(--display);
+  letter-spacing: 0.02em;
+}
+
+.ch-stamp-card.go .ch-stamp-ink {
+  animation: ch-stamp 1.7s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+@keyframes ch-stamp {
+  0% {
+    transform: scale(2.2) rotate(-14deg);
+    opacity: 0;
+  }
+  14% {
+    transform: scale(0.94) rotate(-6deg);
+    opacity: 1;
+  }
+  22% {
+    transform: scale(1) rotate(-6deg);
+  }
+  70% {
+    transform: scale(1) rotate(-6deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-40vw, -26vh) scale(0.2) rotate(-30deg);
+    opacity: 0;
+  }
+}
+
+/* Toasts move below the HUD card on narrow screens. */
+@media (max-width: 640px) {
+  .hud.has-casino-hud .toasts {
+    top: calc(170px + var(--safe-t));
+  }
+  .ch-hud {
+    min-width: 0;
+    padding: 7px 11px 8px;
+    border-radius: 13px;
+  }
+  .ch-odo {
+    font-size: 1.5rem;
+  }
+  .ch-row {
+    font-size: 0.76rem;
+    gap: 7px;
+  }
+  .ch-bet {
+    font-size: 0.8rem;
+  }
+  .ch-rank {
+    margin-top: 6px;
+    padding-top: 6px;
+    gap: 8px;
+  }
+  .ch-badge {
+    width: 30px;
+    height: 30px;
+  }
+  .ch-next {
+    max-width: 150px;
+    font-size: 0.74rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ch-stamp-card.go .ch-stamp-ink,
+  .ch-badge.pulse,
+  .ch-bet.flip {
+    animation-duration: 0.01s;
+  }
+}
