@@ -35,6 +35,7 @@ import type { BrainEvent } from './sim/people';
 import { Boards } from './boards';
 import { RocketRings } from './modes/rings';
 import { LibraryTrial } from './modes/library';
+import { BandBash } from './modes/band';
 
 const DAY = {
   hemiSky: new THREE.Color(0xcfefff),
@@ -58,6 +59,7 @@ export type TrialFactory = (w: TrialWorld, opts: Record<string, unknown>) => Tri
 export const TRIALS: Partial<Record<TrialId, TrialFactory>> = {
   rings: (w, o) => new RocketRings(w, o),
   library: (w, o) => new LibraryTrial(w, o),
+  band: (w, o) => new BandBash(w, o),
 };
 
 export class FartSimulator implements SpaceView {
@@ -806,7 +808,8 @@ export class FartSimulator implements SpaceView {
       this.crumbMesh.setMatrixAt(i, m);
     });
     this.crumbMesh.instanceMatrix.needsUpdate = true;
-    this.vil.update(dt, music.playing === PUFFINGTON_MARCH.name ? music.beat() : -1);
+    const playing = music.playing;
+    this.vil.update(dt, playing === PUFFINGTON_MARCH.name || playing === 'band-march' || playing === 'band-polka' || playing === 'band-check' ? music.beat() : -1);
     this.props.update(t);
     if (!this.trial) this.musicLevel(focus);
     this.trial?.update(dt, t);

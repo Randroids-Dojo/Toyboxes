@@ -3,6 +3,7 @@
 // the trials have their own tunes.
 
 import type { Song, Track } from '../../audio/music';
+import { CHARTS, type Chart, type SongId } from '../../shared/fart/charts';
 
 const bars = (...b: string[]) => b.join(' ');
 
@@ -114,4 +115,93 @@ export const PICNIC_WALTZ: Song = {
       ],
     },
   ],
+};
+
+// ---------------------------------------------------------------------------
+// Brass Band Bash: the band's parts without the tuba (you play that), built
+// from the shared charts so the music leaves room for every note you toot.
+
+
+const NOTE_NAMES = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
+const nn = (m: number) => `${NOTE_NAMES[m % 12]}${Math.floor(m / 12) - 1}`;
+
+/** The trumpet's call: the rhythm you echo, played half a bar earlier. */
+function callTrack(chart: Chart): string {
+  const out: string[] = [];
+  chart.bars.forEach((bar) => {
+    const steps = ['.', '.', '.', '.', '.', '.', '.', '.'];
+    for (let i = 0; i < 8; i++) if (bar.pattern[i] === 'c' && i >= 4) steps[i - 4] = nn(bar.root + 24);
+    out.push(...steps);
+  });
+  return out.join(' ');
+}
+
+/** Chords as pah hits on the off-beats for every bar. */
+function pahTrack(chart: Chart, every: 'march' | 'polka'): string {
+  return chart.bars
+    .map((bar) => {
+      const r = bar.root + 24;
+      const third = bar.chord.endsWith('m') ? r + 3 : r + 4;
+      const ch = `[${nn(r)} ${nn(third)} ${nn(r + 7)}]`;
+      return every === 'march' ? `. . ${ch} . . . ${ch} .` : `. ${ch} . ${ch} . ${ch} . ${ch}`;
+    })
+    .join(' ');
+}
+
+/** A bouncy polka melody made from each bar's chord. */
+function polkaMelody(chart: Chart): string {
+  const shapes = [[4, 7, 12, 7, 16, 12, 7, 4], [12, 16, 19, 16, 12, 7, 4, 7], [7, 12, 16, 12, 19, 16, 12, 7], [16, 14, 12, 11, 12, 7, 4, 0]];
+  return chart.bars
+    .map((bar, i) => {
+      if (i < 2 || i === chart.bars.length - 1) return '. . . . . . . .';
+      const s = shapes[i % shapes.length];
+      return s.map((d, k) => (k % 4 === 3 && i % 2 ? '-' : nn(bar.root + 36 + d))).join(' ');
+    })
+    .join(' ');
+}
+
+export function bandSong(id: SongId): Song {
+  const chart = CHARTS[id];
+  const bars = chart.bars.length;
+  const count = 'x...x...x...x...';
+  if (id === 'march') {
+    const intro = { name: 'intro', bars: 2, tracks: [{ voice: 'rim' as const, pattern: count, gain: 0.3 }, { voice: 'snare' as const, pattern: '....x.......x...', gain: 0.25 }] };
+    const body: Track[] = [
+      { voice: 'square', every: 2, gain: 0.3, pan: 0.15, pattern: marchA[0].pattern + ' ' + marchB[0].pattern },
+      { voice: 'brass', every: 4, gain: 0.2, pan: -0.2, pattern: marchA[1].pattern + ' ' + marchB[1].pattern },
+      { voice: 'kick', pattern: 'x.......x.......', gain: 0.5 },
+      { voice: 'snare', pattern: '....x.......x...', gain: 0.3 },
+      { voice: 'hat', pattern: '..x...x...x...x.', gain: 0.1 },
+    ];
+    const rest = chart.bars.slice(2);
+    const sub: Chart = { ...chart, bars: rest };
+    body.push({ voice: 'brass', every: 2, gain: 0.13, pattern: pahTrack(sub, 'march') });
+    body.push({ voice: 'trumpet' as never, every: 2, gain: 0.3, pattern: callTrack(sub) });
+    return { name: 'band-march', bpm: chart.bpm, space: 0.45, gain: 0.85, order: ['intro', 'main'], sections: [intro, { name: 'main', bars: bars - 2, tracks: fixTrumpet(body) }] };
+  }
+  const intro = { name: 'intro', bars: 2, tracks: [{ voice: 'rim' as const, pattern: count, gain: 0.3 }, { voice: 'hat' as const, pattern: 'x.x.x.x.x.x.x.x.', gain: 0.12 }] };
+  const rest = chart.bars.slice(2);
+  const sub: Chart = { ...chart, bars: rest };
+  const body: Track[] = [
+    { voice: 'square', every: 2, gain: 0.26, pan: 0.15, pattern: polkaMelody(sub) },
+    { voice: 'brass', every: 2, gain: 0.13, pattern: pahTrack(sub, 'polka') },
+    { voice: 'brass', every: 2, gain: 0.3, pattern: callTrack(sub) },
+    { voice: 'kick', pattern: 'x...x...x...x...', gain: 0.45 },
+    { voice: 'snare', pattern: '..x...x...x...x.', gain: 0.26 },
+    { voice: 'hat', pattern: 'x.x.x.x.x.x.x.x.', gain: 0.08 },
+  ];
+  return { name: 'band-polka', bpm: chart.bpm, space: 0.4, gain: 0.85, order: ['intro', 'main'], sections: [intro, { name: 'main', bars: bars - 2, tracks: body }] };
+}
+
+/** There is no trumpet voice in the sequencer: the call is played on brass. */
+function fixTrumpet(t: Track[]): Track[] {
+  return t.map((x) => ((x.voice as string) === 'trumpet' ? { ...x, voice: 'brass' } : x));
+}
+
+/** A steady drum for the rhythm check. */
+export const CALIBRATE_SONG: Song = {
+  name: 'band-check',
+  bpm: 100,
+  space: 0.2,
+  sections: [{ name: 'a', bars: 4, tracks: [{ voice: 'kick', pattern: 'x...x...x...x...', gain: 0.7 }, { voice: 'hat', pattern: '..x...x...x...x.', gain: 0.1 }] }],
 };

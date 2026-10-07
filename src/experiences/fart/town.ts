@@ -94,6 +94,18 @@ export class Village3 {
   private statue: Person;
   readonly senses: Senses;
   onEvent: (e: BrainEvent) => void = () => {};
+  /** Band reactions during Brass Band Bash. */
+  private react: { kind: 'nod' | 'frown' | 'beat'; t: number } | null = null;
+  private cue: 'point' | 'palm' | null = null;
+
+  bandReact(kind: 'nod' | 'frown' | 'beat'): void {
+    this.react = { kind, t: 0 };
+  }
+
+  maestroCue(c: 'point' | 'palm' | null): void {
+    this.cue = c;
+  }
+
   /** Picnickers shown in free play (Picnic Panic adds its own). */
   picnicCount = 4;
   private t = 0;
@@ -215,6 +227,10 @@ export class Village3 {
 
   /** Poses every rig from its brain. */
   update(dt: number, beat: number): void {
+    if (this.react) {
+      this.react.t += dt;
+      if (this.react.t > 0.6) this.react = null;
+    }
     for (const a of this.actors.values()) this.pose(a, dt, beat);
     this.flock.birds.forEach((b, i) => this.bird(this.birds[i], b));
     this.flock2.birds.forEach((b, i) => this.bird(this.birds2[i], b));
@@ -385,6 +401,21 @@ export class Village3 {
         p.armL = { x: 0.9, z: 0.6 + Math.sin(ph * 0.5) * 0.2 };
         p.face = 'happy';
         p.headYaw = Math.sin(ph * 0.5) * 0.2;
+        // Cues for the band trial: the baton points at you, or a palm says rest.
+        if (this.cue === 'point') {
+          p.armR = { x: 1.6, z: -0.5 };
+          p.headYaw = -0.5;
+          p.face = 'suspicious';
+        } else if (this.cue === 'palm') {
+          p.armL = { x: 1.7, z: 0.9 };
+          p.face = 'angry';
+        }
+      } else if (b.spec.id === 'tuba' && this.react) {
+        p.face = this.react.kind === 'frown' ? 'suspicious' : 'happy';
+        p.headPitch = this.react.kind === 'nod' ? Math.sin(this.react.t * 20) * 0.25 : this.react.kind === 'frown' ? -0.15 : 0;
+        p.headRoll = this.react.kind === 'frown' ? 0.2 : 0;
+        p.armR = { x: 1.0, z: 0.4 };
+        p.armL = { x: 1.0, z: 0.4 };
       } else {
         p.bob = Math.abs(Math.sin(ph)) * 0.03;
         p.armR = { x: 1.0, z: 0.4 };

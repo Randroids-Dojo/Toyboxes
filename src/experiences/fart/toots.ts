@@ -151,9 +151,35 @@ export interface TootOpts {
 
 /** Plays a toot. Returns its length in seconds. */
 export function toot(o: TootOpts): number {
+  return play(o)?.dur ?? 0;
+}
+
+/** A toot that holds until you let go (the band's long notes). */
+export function tootHeld(o: TootOpts): { stop(): void } {
+  const v = play({ ...o, extras: false });
+  return {
+    stop: () => {
+      const g = graph();
+      if (!g || !v) return;
+      const t = g.ctx.currentTime;
+      if (t >= v.end) return;
+      v.out.gain.cancelScheduledValues(t);
+      v.out.gain.setTargetAtTime(0.0001, t, 0.03);
+      for (const s of v.srcs) {
+        try {
+          s.stop(t + 0.15);
+        } catch {
+          // Already stopped.
+        }
+      }
+    },
+  };
+}
+
+function play(o: TootOpts): { dur: number; end: number; out: GainNode; srcs: AudioScheduledSourceNode[] } | null {
   const g = graph();
-  if (!g) return 0;
-  if (active >= MAX_VOICES && o.size !== 'note') return 0;
+  if (!g) return null;
+  if (active >= MAX_VOICES && o.size !== 'note') return null;
   const c = g.ctx;
   const voice = o.voice ?? 'classic';
   const R = recipe(o.gas, o.size);
@@ -301,7 +327,8 @@ export function toot(o: TootOpts): number {
     s.start(t0);
     s.stop(end + 0.05);
   }
-  for (const s of [...srcs, vib, buzz]) {
+  const all: AudioScheduledSourceNode[] = [...srcs, vib, buzz];
+  for (const s of all) {
     s.start(t0);
     s.stop(end + 0.05);
   }
@@ -322,7 +349,7 @@ export function toot(o: TootOpts): number {
   }
   // The rare afterthought.
   if ((o.extras ?? true) && dur >= 0.8 && Math.random() < 0.3) afterthought(0.5 + Math.random() * 0.4 + (o.at ?? 0) + dur);
-  return dur;
+  return { dur, end, out, srcs: all };
 }
 
 /** One small high squeak, some time after a long toot. */
