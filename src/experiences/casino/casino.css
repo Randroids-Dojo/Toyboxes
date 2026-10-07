@@ -1573,3 +1573,59 @@ body[data-device='touch'] .lb-hint {
     font-size: 0.8rem;
   }
 }
+
+/* ---- Monty's gate card and Penny's cage */
+
+.gate-card .gate-pic {
+  height: 110px;
+  margin: -6px -6px 10px;
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 78% 30%, #fffbe8 0 7%, rgba(255, 251, 232, 0.25) 8% 14%, transparent 15%),
+    radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.9) 0 0.6%, transparent 0.7%),
+    radial-gradient(circle at 40% 38%, rgba(255, 255, 255, 0.8) 0 0.5%, transparent 0.6%),
+    radial-gradient(circle at 60% 15%, rgba(255, 255, 255, 0.8) 0 0.5%, transparent 0.6%),
+    linear-gradient(180deg, #141738, #262a5c 70%, #3a4a8a);
+  border: 2px solid rgba(159, 183, 232, 0.6);
+}
+
+.gate-card .gate-pic.wheelhouse {
+  background:
+    radial-gradient(circle at 50% 95%, #ffd27a 0 18%, rgba(255, 154, 106, 0.5) 30%, transparent 55%),
+    linear-gradient(180deg, #3b4f96, #ff9a6a 80%, #ffcf7a);
+  border-color: rgba(224, 172, 69, 0.7);
+}
+
+.gate-count {
+  font-weight: 800;
+}
+
+.gate-progress {
+  height: 10px;
+  border-radius: 5px;
+  background: rgba(244, 231, 204, 0.12);
+  overflow: hidden;
+  margin: -4px 0 8px;
+}
+
+.gate-progress i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #d39a32, #f2c463);
+}
+
+.gate-tries {
+  margin: 4px 0 0;
+  padding-left: 1.2em;
+  display: grid;
+  gap: 4px;
+  font-size: 0.92rem;
+}
+
+.gate-tries b {
+  color: #ffd98a;
+}
+
+.penny-card .lb-tiles {
+  margin-top: 6px;
+}

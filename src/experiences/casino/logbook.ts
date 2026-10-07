@@ -392,7 +392,8 @@ export class Logbook {
   // The panel
 
   framing() {
-    return frame(LOGBOOK.table.x - 0.4, 3.6, LOGBOOK.table.z - 3.4, LOGBOOK.table.x, -0.9, LOGBOOK.table.z + 0.6, 50);
+    // Facing the shelves, so the split-flap board sits above the panel.
+    return frame(LOGBOOK.table.x - 0.3, 2.7, LOGBOOK.table.z - 4.4, LOGBOOK.table.x, 2.1, LOGBOOK.shelves.z, 54);
   }
 
   actions(_p: PlayerState, act: (label: string, short: string, run: () => void) => SpaceAction): SpaceAction[] {
@@ -441,6 +442,7 @@ export class Logbook {
     this.render();
     host.ctx.ui.open(panel);
     host.director.setSeat(this.framing());
+    if (!host.save.data.tried.logbook) host.save.update((d) => (d.tried.logbook = true));
     sound.flap();
     void host.eco.load();
   }

@@ -26,6 +26,7 @@ import { CasinoHud } from './hud';
 import { ARRIVAL, BLACKJACK, CAPTAIN_TABLE, COLLIDERS, EXIT, OLD_LUCKY, SPOTS, STAGE, zoneAt, type ColliderDef, type ZoneId } from './layout';
 import { Lights } from './lighting';
 import { Logbook } from './logbook';
+import { Gates } from './gates';
 import { makeMats, tierMats, type Mats } from './materials';
 import { River } from './river';
 import { Staff, type StaffId } from './staff';
@@ -72,6 +73,7 @@ export class Casino implements SpaceView {
   private roulette: Roulette;
   private wheel: RiverWheel;
   private logbook: Logbook;
+  private gates: Gates;
   private doors: { left: THREE.Group; right: THREE.Group; open: number } | null = null;
   private blackjack: Blackjack;
   private captain: Blackjack;
@@ -166,6 +168,8 @@ export class Casino implements SpaceView {
     this.lucky.onBonus = (b) => this.wheel.bonus(b.segment, b.value, b.mult, this.lucky.framing(), this.lucky.framing());
     this.doors = this.buildDoors();
     this.logbook = new Logbook(this.host, this.boat.walls.find((w) => w.def.id === 'port')?.full ?? null);
+    this.gates = new Gates(this.host, this.staff);
+    this.gates.openLogbook = () => this.logbook.open();
 
     this.eco.onChange(() => this.paintHud());
     this.eco.onStamps = (ids, rankUp, rank) => this.stamped(ids, rankUp, rank);
@@ -251,6 +255,11 @@ export class Casino implements SpaceView {
         sound.bell(3);
         sound.fanfare('big');
         this.kit.banner(`${names[rank]}!`, { sub: opens[rank], color: '#ffd24a', ms: 3200, size: 'xl' });
+        // Stand up from any table, then the camera pans to the gate that just opened.
+        if (rank <= 2) {
+          this.ctx.ui.closeAll();
+          this.gates.rankUp(rank);
+        }
       }, 1200 * ids.length);
     }
   }
@@ -295,7 +304,7 @@ export class Casino implements SpaceView {
   actions(player: PlayerState): SpaceAction[] {
     if (player.riding) return [];
     const act = (label: string, short: string, run: () => void) => ({ label, short, run }) as SpaceAction;
-    return [...this.lucky.actions(player, act), ...this.roulette.actions(player, act), ...this.blackjack.actions(player, act), ...this.wheel.actions(player, act), ...this.logbook.actions(player, act), ...this.captain.actions(player, act)];
+    return [...this.lucky.actions(player, act), ...this.roulette.actions(player, act), ...this.blackjack.actions(player, act), ...this.wheel.actions(player, act), ...this.logbook.actions(player, act), ...this.gates.actions(player, act), ...this.captain.actions(player, act)];
   }
 
   kickAction(player: PlayerState): { label: string; run: () => void } | null {
@@ -330,6 +339,10 @@ export class Casino implements SpaceView {
     // Walking through the coin pile pushes it about.
     const sp = Math.hypot(player.vx, player.vz);
     if (sp > 0.3 && this.fx.coinCount) this.fx.push(player.x, player.z, 0.45, sp * 0.6, 0.4);
+  }
+
+  extraColliders(): Collider[] {
+    return this.gates.colliders();
   }
 
   holdsTime(): boolean {
@@ -450,6 +463,7 @@ export class Casino implements SpaceView {
     this.roulette.update(dt);
     this.wheel.update(dt, { boost: this.cer.boost });
     this.logbook.update(raw);
+    this.gates.update(dt, this.player);
     this.updateDoors(raw);
     this.blackjack.update(dt);
     this.captain.update(dt);
@@ -490,6 +504,7 @@ export class Casino implements SpaceView {
     this.roulette.dispose();
     this.wheel.dispose();
     this.logbook.dispose();
+    this.gates.dispose();
     this.blackjack.dispose();
     this.captain.dispose();
     this.staff.dispose();
