@@ -951,6 +951,9 @@ export class KartWorld implements SpaceView {
     return { label: '', short: '', run: () => {} };
   }
 
+  /** The intro card, the warm-up lap and the tip boards teach the kart; the town's ride tip would cover the lap timer. */
+  readonly quietRideHint = true;
+
   rideBack(player: PlayerState): boolean {
     if (player.riding !== this.kart) return false;
     const s = this.session;

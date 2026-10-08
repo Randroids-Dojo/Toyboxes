@@ -116,6 +116,8 @@ export interface SpaceView {
   rideAction?(player: PlayerState): { label: string; short: string; run: () => void } | null;
   /** Back while riding. Return true when the space handled it (e.g. no getting out mid-race); otherwise you get off. */
   rideBack?(player: PlayerState): boolean;
+  /** The space teaches its own vehicle controls, so the town's first-ride tip stays away. */
+  quietRideHint?: boolean;
   /** The kick button on foot. Return a label when the space uses it here. */
   kickAction?(player: PlayerState): { label: string; run: () => void } | null;
   /** Something that pauses with the menu, like a race. */
