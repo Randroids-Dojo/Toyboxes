@@ -43,7 +43,7 @@ npx tsx scripts/audiotest.ts          # every world's music while a phone player
 npm run build && npx vite preview --port 4317 & npx tsx scripts/updatetest.ts   # update banner, refresh back to the same spot, install row
 ```
 
-The playtests claim rooms in the dev server's memory store; restart `npm run dev` for a clean town. The dev admin password is `toyboxes-dev`.
+The playtests claim rooms in the dev server's memory store; restart `npm run dev` for a clean town. The dev admin password is `toyboxes-dev`. Any world playtest takes `CPU_SLOWDOWN=3` to run as on a weak phone or a busy machine.
 
 ## Where things are
 

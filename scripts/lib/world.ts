@@ -10,7 +10,8 @@
 //
 // Device from the environment: PHONE=1, PAD=1 or REMOTE=1 (desktop otherwise).
 // Server from TOYBOXES_BASE (default http://localhost:5207/). Local memory
-// servers only.
+// servers only. CPU_SLOWDOWN=3 slows the page's CPU, as on a weak phone or a
+// busy machine, to shake out timing that only works at a high frame rate.
 
 import { mkdirSync } from 'node:fs';
 import { chromium, type Browser, type Page } from 'playwright-core';
@@ -117,6 +118,8 @@ export async function openWorld(opts: {
   await ctx.addInitScript((id) => localStorage.setItem('toyboxes.identity', JSON.stringify({ browserId: id, name: 'Tester' })), browserId);
   await ctx.addInitScript(([time, quality]) => localStorage.setItem('toyboxes.settings', JSON.stringify({ time, quality })), [opts.time ?? 'day', opts.quality ?? 'auto'] as const);
   const page = await ctx.newPage();
+  const slowdown = Number(process.env.CPU_SLOWDOWN ?? 1);
+  if (slowdown > 1) await (await ctx.newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: slowdown });
   const errors: string[] = [];
   page.on('pageerror', (e) => {
     errors.push(e.message);

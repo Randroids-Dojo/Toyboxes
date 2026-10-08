@@ -101,6 +101,11 @@ await gas(false);
 
 // ---- 4. Drift into a mini-turbo on the first corner.
 await w.call('debugTeleportS', 30, 1.5);
+// The race started a moment ago, so the pack is on this stretch: send it on
+// ahead, or a bump from a computer kart can stop you short of the corner or
+// knock you off the road, where a drift cannot start.
+const pack = (await exp()).cpus.length;
+for (let i = 0; i < pack; i++) await w.call('debugPlaceCpu', i, 150 + i * 14, ((i % 3) - 1) * 2.5);
 await page.waitForTimeout(200);
 await gas(true);
 // Up to speed on the straight, then drift as the corner begins.
@@ -108,6 +113,8 @@ await w.until(async () => {
   const k = (await exp()).kart;
   return k.speed > 10 && k.s > 78.5;
 }, 'speed for a drift at the corner', 10000);
+e = await exp();
+log('drift at s', e.kart.s.toFixed(1), 'nearest computer kart', Math.min(...e.cpus.map((c: { s: number }) => Math.abs(c.s - e.kart.s))).toFixed(0), 'm');
 await drift();
 await w.until(async () => (await exp()).save.stats.turbos > 0, 'a mini-turbo', 9000);
 log('mini-turbo');
