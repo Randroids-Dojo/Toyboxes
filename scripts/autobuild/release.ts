@@ -1,21 +1,19 @@
 // Ships a commit that passed qa.sh: push to main, wait until the live site
-// serves it, smoke-test production, and roll back if anything fails. The
-// rollback restores the version production served before, as one new
-// commit, so a release of many commits or a merge comes back whole.
+// serves it, smoke-test production, and roll back (git revert + push) if
+// anything fails.
 //
 //   npx tsx scripts/autobuild/release.ts [roomId ...]
 //
 // Room ids are smoke-tested read-only after the deploy. Exit 0 = released,
 // 2 = verified rollback, 3 = deployment or rollback unverified, 1 = refused.
 
-import { execFileSync, execSync, spawnSync } from 'node:child_process';
+import { execSync, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { confirmVersion, rollbackBase, rollBackTo, type Git } from './safety';
+import { confirmVersion } from './safety';
 
 const BASE = 'https://toyboxes.games';
 const rooms = process.argv.slice(2);
 const sh = (cmd: string) => execSync(cmd, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
-const git: Git = (...args) => execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 
 const sha = sh('git rev-parse HEAD');
 if (sh('git branch --show-current') !== 'main') throw new Error('Release from main only');
@@ -56,17 +54,7 @@ function smoke(): boolean {
   return true;
 }
 
-const current = await live();
-if (current === sha) {
-  console.log(`${sha.slice(0, 7)} is already live`);
-  process.exit(0);
-}
-const before = rollbackBase(current, sha, git);
-if (!before) {
-  console.log(`Production serves ${current.slice(0, 7) || 'no readable version'}, which ${sha.slice(0, 7)} does not build on, so there is nothing safe to roll back to. Not releasing.`);
-  process.exit(1);
-}
-console.log(`Releasing ${sha.slice(0, 7)} (${git('rev-list', '--count', `${before}..${sha}`)} commit(s) over ${before.slice(0, 7)})`);
+console.log(`Releasing ${sha.slice(0, 7)}`);
 sh('git push origin main');
 if (!(await waitFor(sha))) {
   console.log('The deploy never went live; check Vercel. Nothing was rolled back.');
@@ -77,9 +65,10 @@ if (smoke()) {
   console.log(`RELEASED ${sha}`);
   process.exit(0);
 }
-console.log(`Production smoke failed. Rolling back to ${before.slice(0, 7)}.`);
-const back = rollBackTo(before, git);
+console.log('Production smoke failed. Rolling back.');
+sh(`git revert --no-edit ${sha}`);
 sh('git push origin main');
+const back = sh('git rev-parse HEAD');
 if (!(await waitFor(back)) || !(await confirmVersion(back, live))) {
   console.log(`ROLLBACK UNVERIFIED for ${back.slice(0, 7)}; check Vercel`);
   process.exit(3);

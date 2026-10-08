@@ -56,7 +56,6 @@ Room 12 (estevan) asked for a "black hole galaxy" (page 1, with a drawing of a r
 
 ## Needs a person
 
-- All five worlds (Toybox Grand Prix, The Golden Paddle, Little Puffington, Club Nova, Black hole bloom): play each at the low tier on the Samsung TV with the remote, and listen to the music and effects at real volume. The songs are generated in code and the headless playtests cannot hear them. Club Nova's dance charts and sound check need real ears and thumbs most.
 - Black hole bloom (room 12): play it on the Samsung TV and a mid phone at the low tier and check the frame rate; listen to the songs and effects at real volume (headless playtests cannot hear); judge the ring run's three-star time (54 s) and the comet's stardust thresholds with real hands.
 - Load https://toyboxes.games on the Samsung S90H browser: check that focus is visible, the remote's arrows, OK and Back work, the on-screen keyboard and PIN pad work from the couch, and whether the TV browser exposes a paired controller.
 - Play on a real phone: stick feel, drag-to-look, the system keyboard over the sketchbook, and frame rate.

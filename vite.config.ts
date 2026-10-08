@@ -95,8 +95,8 @@ export default defineConfig(({ command }) => {
     chunkSizeWarningLimit: 700,
     rollupOptions: {
       input: {
-        main: resolve(import.meta.dirname, 'index.html'),
-        admin: resolve(import.meta.dirname, 'admin/index.html'),
+        main: resolve(__dirname, 'index.html'),
+        admin: resolve(__dirname, 'admin/index.html'),
       },
       output: {
         manualChunks(id: string) {

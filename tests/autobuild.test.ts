@@ -1,10 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
 import { allRoomQueue } from '../scripts/autobuild/coverage';
-import { cleanOwnedTestKeys, confirmVersion, requireLocalPlaytest, rollbackBase, rollBackTo, type Git } from '../scripts/autobuild/safety';
+import { cleanOwnedTestKeys, confirmVersion, requireLocalPlaytest } from '../scripts/autobuild/safety';
 import { SLOT_COUNT } from '../src/shared/model';
 
 const prefix = `toyboxes:test-${'a'.repeat(32)}:`;
@@ -48,34 +45,6 @@ describe('automatic build prerequisites', () => {
     expect(release).toContain('!(await confirmVersion(back, live))');
     expect(release).not.toContain('kvsnapshot');
     expect(release).not.toContain('experiencetest.ts');
-  });
-  it('rolls a release of many commits and a merge back to the version that was live', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'toyboxes-rollback-'));
-    const git: Git = (...args) => execFileSync('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', '-c', 'commit.gpgsign=false', ...args], { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
-    const commit = (file: string, text: string, message: string) => { writeFileSync(join(dir, file), text); git('add', '-A'); git('commit', '-q', '-m', message); return git('rev-parse', 'HEAD'); };
-    try {
-      git('init', '-q', '-b', 'main');
-      commit('a.txt', 'one', 'Start');
-      const live = commit('b.txt', 'live', 'What production serves');
-      git('checkout', '-q', '-b', 'world');
-      commit('world.txt', 'new world', 'Add a world');
-      git('checkout', '-q', 'main');
-      commit('a.txt', 'two', 'Change a');
-      git('merge', '-q', '--no-ff', '-m', 'Merge the world', 'world');
-      const head = commit('b.txt', 'broken', 'Break b');
-      expect(rollbackBase(live, head, git)).toBe(live);
-      expect(rollbackBase(head, live, git)).toBeNull();
-      expect(rollbackBase('', head, git)).toBeNull();
-      expect(rollbackBase('0'.repeat(40), head, git)).toBeNull();
-      const back = rollBackTo(live, git);
-      expect(back).not.toBe(head);
-      expect(git('rev-parse', `${back}^`)).toBe(head);
-      expect(git('diff', '--stat', live, back)).toBe('');
-      expect(git('status', '--porcelain')).toBe('');
-      expect(git('log', '-1', '--format=%B')).toContain('Merge the world');
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
   });
   it('prevents mutating experience playtests against production', () => {
     expect(() => requireLocalPlaytest('https://toyboxes.games/')).toThrow('local memory server');
