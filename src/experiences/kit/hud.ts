@@ -301,36 +301,54 @@ export class Hud {
 
   // ---- cards
 
-  /** The first-visit card. Resolves at once if this device has seen it. */
+  /**
+   * The first-visit card. Resolves at once if this device has seen it. If a
+   * dialog is open (the pause menu after a slow load, say), the card waits
+   * for it to close rather than land on top. It never opens, and never
+   * resolves, once the world is gone.
+   */
   intro(opts: IntroOpts): Promise<void> {
     const all = seen();
     if (all[opts.key] && !opts.force) return Promise.resolve();
     return new Promise((resolve) => {
       const ui = this.ctx.ui;
-      const touch = ui.device === 'touch';
-      const tips = opts.tips.map((t) => {
-        const keys = touch ? (t.touch ? [h('kbd', { class: 'key key-touch' }, t.touch)] : []) : t.keys.filter((g) => ui.glyph(g)).map((g) => ui.key(g));
-        if (!touch && t.keys.includes('move') && IS_TV) keys.splice(0, keys.length, h('kbd', { class: 'key' }, 'Arrows'));
-        return h('li', {}, h('span', { class: 'xk-keys' }, ...keys), h('span', {}, t.text));
-      });
-      const go = button(opts.button ?? "Let's go", () => ui.close(panel), 'primary');
-      const panel: Panel = {
-        el: h('div', { class: `card xk-card xk-card-${this.theme.panel ?? 'dark'} xk-intro` }, h('div', { class: 'xk-card-kicker' }, 'How to play'), h('h2', {}, opts.title), h('p', { class: 'xk-tagline' }, opts.tagline), h('ul', { class: 'xk-tips' }, ...tips), h('div', { class: 'actions' }, go)),
-        onBack: () => ui.close(panel),
-        onClose: () => {
-          const s = seen();
-          s[opts.key] = Date.now();
-          try {
-            localStorage.setItem(SEEN_KEY, JSON.stringify(s));
-          } catch {
-            // Private mode: it shows again next time.
-          }
-          resolve();
-        },
-        initial: () => go,
+      const show = () => {
+        if (this.disposed) return;
+        if (ui.isOpen) {
+          window.setTimeout(show, 250);
+          return;
+        }
+        this.openIntro(opts, resolve);
       };
-      ui.open(panel);
+      show();
     });
+  }
+
+  private openIntro(opts: IntroOpts, resolve: () => void): void {
+    const ui = this.ctx.ui;
+    const touch = ui.device === 'touch';
+    const tips = opts.tips.map((t) => {
+      const keys = touch ? (t.touch ? [h('kbd', { class: 'key key-touch' }, t.touch)] : []) : t.keys.filter((g) => ui.glyph(g)).map((g) => ui.key(g));
+      if (!touch && t.keys.includes('move') && IS_TV) keys.splice(0, keys.length, h('kbd', { class: 'key' }, 'Arrows'));
+      return h('li', {}, h('span', { class: 'xk-keys' }, ...keys), h('span', {}, t.text));
+    });
+    const go = button(opts.button ?? "Let's go", () => ui.close(panel), 'primary');
+    const panel: Panel = {
+      el: h('div', { class: `card xk-card xk-card-${this.theme.panel ?? 'dark'} xk-intro` }, h('div', { class: 'xk-card-kicker' }, 'How to play'), h('h2', {}, opts.title), h('p', { class: 'xk-tagline' }, opts.tagline), h('ul', { class: 'xk-tips' }, ...tips), h('div', { class: 'actions' }, go)),
+      onBack: () => ui.close(panel),
+      onClose: () => {
+        const s = seen();
+        s[opts.key] = Date.now();
+        try {
+          localStorage.setItem(SEEN_KEY, JSON.stringify(s));
+        } catch {
+          // Private mode: it shows again next time.
+        }
+        resolve();
+      },
+      initial: () => go,
+    };
+    ui.open(panel);
   }
 
   /** The end-of-round card. Resolves with the chosen button id, or 'back'. */
