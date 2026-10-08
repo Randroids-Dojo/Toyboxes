@@ -395,9 +395,23 @@ export class Game {
     this.grounded = true;
     this.groundY = 0;
     this.yaw = yaw;
-    this.avatar.root.position.copy(this.pos);
-    this.avatar.root.rotation.y = yaw;
+    this.placeAvatar();
     this.rig.snap(this.follow(), yaw);
+  }
+
+  /**
+   * Puts the figure where the player is. While riding it sits in the seat, so
+   * its position is in seat space and stays at the seat's origin; a world
+   * position there would carry the driver far away from the kart.
+   */
+  private placeAvatar(): void {
+    if (this.riding) {
+      this.avatar.root.position.set(0, 0, 0);
+      this.avatar.root.rotation.set(0, 0, 0);
+    } else {
+      this.avatar.root.position.copy(this.pos);
+      this.avatar.root.rotation.y = this.yaw;
+    }
   }
 
   private colliders(): Collider[] {
@@ -535,7 +549,7 @@ export class Game {
           this.pos.y = y;
           this.groundY = groundHeight(x, z, PLAYER_R * 0.7, this.colliders(), y + 0.01);
           this.grounded = y <= this.groundY + 0.02;
-          this.avatar.root.position.copy(this.pos);
+          this.placeAvatar();
         }
         this.rig.snap(this.follow(), yaw);
       },
@@ -719,7 +733,7 @@ export class Game {
     this.avatar.root.rotation.set(0, 0, 0);
     this.engine.start(v.kind);
     sfx.mount();
-    if (!local.seenHint(`ride-${this.ui.device}`)) {
+    if (!this.view()?.quietRideHint && !local.seenHint(`ride-${this.ui.device}`)) {
       local.markHint(`ride-${this.ui.device}`);
       this.ui.toast(this.ui.device === 'pad' ? 'RT to go, LT to brake, A to get off' : this.ui.device === 'touch' ? 'Push the stick up to go. Brake button stops.' : 'W to go, S to brake, E to get off');
     }
@@ -1486,6 +1500,8 @@ export class Game {
       camYaw: this.controlYaw(),
       yaw: this.yaw,
       riding: this.riding?.kind ?? null,
+      /** While riding, how far the figure is from the vehicle (it should sit in it). */
+      riderGap: this.riding ? this.avatar.root.getWorldPosition(new THREE.Vector3()).setY(0).distanceTo(new THREE.Vector3(this.riding.pos.x, 0, this.riding.pos.z)) : null,
       speed: this.riding ? this.riding.speed : this.vel.length(),
       prompt: this.riding ? (this.view()?.rideAction?.(this.playerState())?.label ?? 'Get off') : (this.current?.label ?? null),
       room: this.currentRoom()?.id ?? null,

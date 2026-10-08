@@ -93,6 +93,10 @@ log('rocket start boost', e.kart.boost.toFixed(2));
 if (e.kart.boost <= 0.3) throw new Error(`No rocket start: ${JSON.stringify(e.kart)}`);
 await page.waitForTimeout(1500);
 await w.shot('07-racing');
+// The race start teleports you to the grid: you must still be sitting in your kart.
+const gap = (await state()).riderGap;
+log('driver to kart', gap?.toFixed(2));
+if (gap === null || gap > 0.6) throw new Error(`Your figure is ${gap?.toFixed(1)} m from your kart, not in its seat`);
 await gas(false);
 
 // ---- 4. Drift into a mini-turbo on the first corner.
