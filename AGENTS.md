@@ -39,6 +39,7 @@ npx tsx scripts/casinotest.ts         # the riverboat casino voyage: every game,
 npx tsx scripts/farttest.ts           # Little Puffington: toots, mischief, all four trials, the Toot-o-Matic; PHONE=1, PAD=1, REMOTE=1
 npx tsx scripts/neontest.ts           # Club Nova: sound check, a party night (laser tag, a duel, the dance off), boards, wardrobe; PHONE=1, PAD=1, REMOTE=1
 npx tsx scripts/galaxytest.ts         # Black hole bloom: the wake, ring run, rock rain, comet surf, frenzy, the finale; PHONE=1, PAD=1, REMOTE=1 (STAGES=... for a subset)
+npx tsx scripts/audiotest.ts          # every world's music while a phone player taps, at 4x CPU slowdown: nothing late or skipped (WORLDS=fart,neon for a subset)
 npm run build && npx vite preview --port 4317 & npx tsx scripts/updatetest.ts   # update banner, refresh back to the same spot, install row
 ```
 
@@ -62,6 +63,7 @@ Each experience is meant to feel like its own game. New and rebuilt worlds live 
 - `Particles`, `Ribbon`, `Shockwaves` (`kit/particles.ts`): one draw call per system, budgets scaled by `setQuality`. Call `update(dt)` every frame.
 - `PostFX` (`kit/post.ts`): tiered bloom and a colour grade through the `render` hook. The low tier draws plainly, so nothing essential may depend on it.
 - `music` (`src/audio/music.ts`): songs as data on a procedural sequencer, with layers, section queueing and looping, ducking, a muffling filter, pause and resume, and an audio-clock `beat()` corrected for output latency. It plays on the Music level in Settings. Stop it in `dispose`. `tone` and `noise` in `src/audio/sfx.ts` make one-off effects.
+- Music timing: the sequencer schedules 250 ms ahead on the audio clock, woken by a timer in a worker. Chrome holds back page timers for about 100 ms after every touch starts, which made the music stutter on phones while tapping, so never drive music, beats or anything heard in time from `setTimeout`, `setInterval` or the frame loop; schedule on the audio clock. `toyboxes.debug.music()` reports the sequencer's health, and `scripts/audiotest.ts` checks it in every world under phone taps.
 - `Progress` (`kit/progress.ts`): stars, unlocks and choices saved on this device.
 - World boards: list modes in `src/shared/score-modes.ts`, post with `api.score` and read with `api.modeBoards`. The server checks each result against the mode's range, so set `min` and `max` from what a perfect run can do. A mode can also require a run ticket (`ticket.minMs`, started with `api.runStart`) and can have the server work the score out from a run log (`fromLog`, pure shared code).
 
