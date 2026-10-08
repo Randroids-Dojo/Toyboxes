@@ -1520,6 +1520,12 @@ export class Game {
     },
     /** Pins the graphics tier, as the Graphics setting would. */
     setQuality: (q: local.Quality) => this.applySettings({ ...this.settings, quality: q }),
+    /** The music sequencer's scheduling health; `reset` starts a fresh count. Loaded on demand to keep it out of the first download. */
+    music: async (reset = false) => {
+      const { music } = await import('../audio/music');
+      if (reset) music.resetHealth();
+      return { playing: music.playing, ...music.health() };
+    },
   };
 
   onHidden(hidden: boolean): void {

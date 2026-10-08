@@ -9,6 +9,11 @@
 //   music.queue('final');         // jump to a section at the next bar
 //   music.beat();                 // current beat, as heard
 //   music.stop();                 // fade out (call from dispose)
+//
+// Notes are scheduled LOOKAHEAD seconds ahead on the audio clock, woken by a
+// timer in a worker. Chrome holds back page timers for about 100 ms after
+// every touch starts, so a page timer starved the sequencer on phones and the
+// music stuttered while tapping. `music.health()` reports how close it came.
 
 import { audioGraph } from './sfx';
 
@@ -67,8 +72,48 @@ export interface Song {
 const STEPS_PER_BEAT = 4;
 const BEATS_PER_BAR = 4;
 const STEPS_PER_BAR = STEPS_PER_BEAT * BEATS_PER_BAR;
-const LOOKAHEAD = 0.14;
+const LOOKAHEAD = 0.25;
 const TICK_MS = 25;
+
+let clockUrl: string | null = null;
+
+/**
+ * Calls `f` every TICK_MS from a worker timer, which page work and touch
+ * input do not hold back; a page timer where workers are unavailable.
+ * Returns the stop function and which clock it is.
+ */
+function startClock(f: () => void): { stop: () => void; kind: 'worker' | 'timer' } {
+  try {
+    clockUrl ??= URL.createObjectURL(new Blob([`setInterval(() => postMessage(0), ${TICK_MS});`], { type: 'text/javascript' }));
+    const w = new Worker(clockUrl);
+    w.onmessage = f;
+    return { stop: () => w.terminate(), kind: 'worker' };
+  } catch {
+    const id = setInterval(f, TICK_MS);
+    return { stop: () => clearInterval(id), kind: 'timer' };
+  }
+}
+
+/**
+ * How well the sequencer kept ahead of the music since the page loaded or
+ * `resetHealth()`. The first wakeup after a start or resume schedules with a
+ * deliberately short lead and does not count towards `minLeadMs`.
+ */
+export interface MusicHealth {
+  /** Steps scheduled. */
+  steps: number;
+  /** Steps scheduled after their time had already come (heard late). */
+  late: number;
+  /** Steps skipped after a stall of more than 0.2 s. */
+  dropped: number;
+  /** The least time ahead a step was scheduled, in ms. */
+  minLeadMs: number;
+  /** The longest wait between two wakeups of the sequencer, in ms. */
+  maxGapMs: number;
+  /** When that wait ended, on the performance.now() clock. */
+  maxGapAt: number;
+  clock: 'worker' | 'timer' | null;
+}
 
 // ---------------------------------------------------------------------------
 // Parsing (pure, unit tested)
@@ -486,7 +531,11 @@ class Music {
   private orderIdx = 0;
   private sectionStep = 0;
   private nextTime = 0;
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private timer: { stop: () => void; kind: 'worker' | 'timer' } | null = null;
+  private stats: MusicHealth = Music.freshHealth(null);
+  private lastTick = 0;
+  /** The first wakeup after starting the clock. */
+  private fresh = true;
   private bus: GainNode | null = null;
   private dry: GainNode | null = null;
   private wet: GainNode | null = null;
@@ -503,6 +552,29 @@ class Music {
   private paused: number | null = null;
   private lowpass: BiquadFilterNode | null = null;
   private only_: string | null = null;
+
+  private static freshHealth(clock: MusicHealth['clock']): MusicHealth {
+    return { steps: 0, late: 0, dropped: 0, minLeadMs: Infinity, maxGapMs: 0, maxGapAt: 0, clock };
+  }
+
+  private startTimer(): void {
+    this.timer = startClock(() => this.tick());
+    this.stats.clock = this.timer.kind;
+    this.lastTick = performance.now();
+    this.fresh = true;
+  }
+
+  /** Scheduling health (playtests read it). */
+  health(): MusicHealth {
+    return { ...this.stats };
+  }
+
+  /** Starts counting health afresh, e.g. before a stress test. */
+  resetHealth(): void {
+    this.stats = Music.freshHealth(this.timer?.kind ?? null);
+    this.lastTick = performance.now();
+    this.fresh = true;
+  }
 
   /** Starts a song (or keeps it going if it is already playing). */
   play(song: Song, opts: { fadeIn?: number; section?: string } = {}): void {
@@ -555,7 +627,7 @@ class Music {
     this.totalSteps = 0;
     this.nextTime = c.currentTime + 0.12;
     this.anchor = { time: this.nextTime, beat: 0 };
-    this.timer = setInterval(() => this.tick(), TICK_MS);
+    this.startTimer();
     this.tick();
   }
 
@@ -605,13 +677,26 @@ class Music {
     const g = audioGraph();
     if (!g || !this.song) return;
     const c = g.ctx;
+    const now = performance.now();
+    const fresh = this.fresh;
+    this.fresh = false;
+    if (!fresh && now - this.lastTick > this.stats.maxGapMs) {
+      this.stats.maxGapMs = now - this.lastTick;
+      this.stats.maxGapAt = now;
+    }
+    this.lastTick = now;
     // After a suspend, skip ahead rather than play a burst of missed notes.
     if (this.nextTime < c.currentTime - 0.2) {
       const missed = Math.ceil((c.currentTime - this.nextTime) / this.stepDur());
       for (let i = 0; i < missed; i++) this.advance();
       this.nextTime += missed * this.stepDur();
+      if (c.state === 'running') this.stats.dropped += missed;
     }
     while (this.nextTime < c.currentTime + LOOKAHEAD) {
+      const lead = (this.nextTime - c.currentTime) * 1000;
+      this.stats.steps++;
+      if (!fresh) this.stats.minLeadMs = Math.min(this.stats.minLeadMs, lead);
+      if (lead < 0) this.stats.late++;
       this.schedule(g, this.nextTime);
       this.advance();
       this.nextTime += this.stepDur();
@@ -692,7 +777,7 @@ class Music {
     if (!g || !this.song || this.paused !== null) return;
     const heard = Math.max(0, this.beat());
     this.paused = heard;
-    if (this.timer) clearInterval(this.timer);
+    this.timer?.stop();
     this.timer = null;
     // Rewind the sequencer to the heard step so nothing is skipped.
     const heardStep = Math.floor(heard * STEPS_PER_BEAT);
@@ -715,7 +800,7 @@ class Music {
     this.paused = null;
     this.bus?.gain.cancelScheduledValues(c.currentTime);
     this.bus?.gain.setTargetAtTime(this.song.gain ?? 1, c.currentTime, 0.03);
-    this.timer = setInterval(() => this.tick(), TICK_MS);
+    this.startTimer();
     this.tick();
   }
 
@@ -763,7 +848,7 @@ class Music {
   }
 
   stop(fade = 0.8): void {
-    if (this.timer) clearInterval(this.timer);
+    this.timer?.stop();
     this.timer = null;
     const g = audioGraph();
     const bus = this.bus;
