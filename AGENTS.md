@@ -36,6 +36,9 @@ npx tsx scripts/kittest.ts            # the worlds kit: HUD, particles, post, mu
 npx tsx scripts/experiencetest.ts     # the casino (slots, roulette, blackjack, credits) and a visit to the kart track; PHONE=1 for touch
 npx tsx scripts/karttest.ts           # the Toybox Grand Prix: warm-up, race, drift, items, results, time trial, every circuit's z-audit and budgets; PHONE=1, PAD=1, REMOTE=1
 npx tsx scripts/casinotest.ts         # the riverboat casino voyage: every game, stamps and ranks, the lounge, the logbook, tiers; PHONE=1, PAD=1, REMOTE=1
+npx tsx scripts/farttest.ts           # Little Puffington: toots, mischief, all four trials, the Toot-o-Matic; PHONE=1, PAD=1, REMOTE=1
+npx tsx scripts/neontest.ts           # Club Nova: sound check, a party night (laser tag, a duel, the dance off), boards, wardrobe; PHONE=1, PAD=1, REMOTE=1
+npx tsx scripts/galaxytest.ts         # Black hole bloom: the wake, ring run, rock rain, comet surf, frenzy, the finale; PHONE=1, PAD=1, REMOTE=1 (STAGES=... for a subset)
 npm run build && npx vite preview --port 4317 & npx tsx scripts/updatetest.ts   # update banner, refresh back to the same spot, install row
 ```
 
@@ -47,7 +50,7 @@ The playtests claim rooms in the dev server's memory store; restart `npm run dev
 - `src/world/` builds the town, interiors, toys, vehicles and day/night. `physics.ts` is a flat 2D solver with heights.
 - `src/input/` maps devices to one action model. `src/ui/` holds dialogs, the PIN pad, on-screen keyboard and sketchbook.
 - `server/` holds storage, crypto, room logic and admin logic. `api/` are thin Vercel handlers.
-- `src/experiences/` holds built experiences (kart track, casino). They implement `SpaceView` (`src/world/space.ts`); the game handles entering, riding, interacting, kicking and pausing through its optional hooks.
+- `src/experiences/` holds the worlds (kart, casino, fart, neon, galaxy), one folder each. They implement `SpaceView` (`src/world/space.ts`); the game handles entering, riding, interacting, kicking and pausing through its optional hooks. `docs/worlds/` has each world's design and the decisions behind it.
 - `src/shared/track.ts` turns a sketch into a track and validates it (corner radius, curb folds, overlaps); `src/shared/circuits.ts` builds designed circuits; `src/experiences/kart/` is the Toybox Grand Prix (its circuits, rules and lap ghosts are in `src/shared/kart/`, and `server/kart.ts` re-checks board laps); `src/shared/slots.ts` holds Old Lucky's reels, paytable, jackpots and the casino stats shape (the server decides spins; keep the return near 95%, `tests/casino-rules.test.ts`). `src/shared/casino-games.ts` and `src/shared/casino/` hold the other games' rules, stamps, ranks and stats migration; `server/casino.ts` decides every result (`api/casino.ts`; the old `api/scores.ts` casino actions are aliases). The world itself is `src/experiences/casino/`.
 - `docs/VERB_SHEET.md` describes the core interactions; keep it in step with gameplay changes.
 
