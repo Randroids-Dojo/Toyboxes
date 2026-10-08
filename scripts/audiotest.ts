@@ -4,6 +4,8 @@
 // is tapped (its touch buttons and the open screen) for a while with the CPU
 // slowed down, and the sequencer's health is checked: nothing heard late or
 // skipped, no long wait between its wakeups, and a safe lead on the speakers.
+// First, audio is stopped the way iOS stops it after a call or another app,
+// and one tap must bring it back.
 //
 //   TOYBOXES_BASE=http://localhost:5207/ npx tsx scripts/audiotest.ts
 //   WORLDS=fart,neon for a subset, THROTTLE=4 (CPU slowdown), SECONDS=10 per world.
@@ -13,6 +15,7 @@ import { openWorld } from './lib/world';
 
 interface Health {
   playing: string | null;
+  audio: string;
   steps: number;
   late: number;
   dropped: number;
@@ -56,6 +59,16 @@ for (const spec of WORLDS.filter((s) => !only || only.includes(s.kind))) {
   await page.waitForTimeout(1500);
   await closeCards();
 
+  // Stopped like iOS after a call: one tap on the open screen brings it back.
+  const vp = page.viewportSize()!;
+  await w.dbg('interruptAudio');
+  await page.waitForTimeout(300);
+  const stopped = (await w.dbg<Health>('music')).audio;
+  await page.touchscreen.tap(vp.width * 0.6, vp.height * 0.3);
+  await page.waitForTimeout(600);
+  const back = (await w.dbg<Health>('music')).audio;
+  if (stopped === 'running' || back !== 'running') failures.push(`${spec.kind}: audio was ${stopped} after the interruption and ${back} after a tap`);
+
   // Count sources that start from here on and are still playing, and keep
   // the long frames (with the scripts in them) to explain a stall.
   await page.evaluate(() => {
@@ -81,7 +94,6 @@ for (const spec of WORLDS.filter((s) => !only || only.includes(s.kind))) {
     if (box && (await page.locator(sel).isVisible())) buttons.push(box);
   }
   // The open screen above the buttons: a touch there only looks around.
-  const vp = page.viewportSize()!;
   const targets = [...buttons, { x: vp.width * 0.6, y: vp.height * 0.3, width: 2, height: 2 }];
   await w.dbg('music', true);
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: THROTTLE });
@@ -101,7 +113,7 @@ for (const spec of WORLDS.filter((s) => !only || only.includes(s.kind))) {
   const h = await w.dbg<Health>('music');
   const sources = await page.evaluate(() => (window as any).__sources as { live: number; peak: number });
   await w.shot('after-taps');
-  const line = `${spec.kind}: ${taps} taps, ${h.playing}, ${h.steps} steps on the ${h.clock} clock, ${h.late} late, ${h.dropped} skipped, lead at least ${Math.round(h.minLeadMs)} ms, longest wait ${Math.round(h.maxGapMs)} ms, ${sources.peak} sources at once`;
+  const line = `${spec.kind}: audio ${stopped} then ${back} after a tap; ${taps} taps, ${h.playing}, ${h.steps} steps on the ${h.clock} clock, ${h.late} late, ${h.dropped} skipped, lead at least ${Math.round(h.minLeadMs)} ms, longest wait ${Math.round(h.maxGapMs)} ms, ${sources.peak} sources at once`;
   console.log(line);
   const bad: string[] = [];
   if (!h.playing) bad.push('the music stopped');
