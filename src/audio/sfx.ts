@@ -29,18 +29,62 @@ function ac(): Ctx | null {
   noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
   const d = noiseBuf.getChannelData(0);
   for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  syncSession();
   return ctx;
 }
 
-/** Call from a user gesture; browsers start audio suspended. */
+type Session = { type: string };
+
+/**
+ * Safari on iOS mutes Web Audio in silent mode unless the page's audio
+ * session plays like media, the way video on the web does. Play through
+ * silent mode while there is anything to hear, and step aside (so other
+ * apps' music carries on) when the volume is all the way down.
+ */
+function syncSession(): void {
+  const session = (navigator as Navigator & { audioSession?: Session }).audioSession;
+  if (!session) return;
+  const want = volume > 0 ? 'playback' : 'ambient';
+  try {
+    if (session.type !== want) session.type = want;
+  } catch {
+    // An older session API: leave it be.
+  }
+}
+
+/**
+ * Starts audio, or brings it back. Call it from every gesture that counts:
+ * pointerup, touchend, click or keydown. Browsers start audio suspended,
+ * and Safari on iOS only lets it start or resume inside one of those
+ * (pointerdown and touchstart do not count). iOS also leaves audio
+ * "interrupted" after a call or a trip to another app, so this resumes any
+ * context that is not running.
+ */
 export function unlockAudio(): void {
   const c = ac();
-  if (c && c.state === 'suspended') void c.resume();
+  if (!c || c.state === 'running' || c.state === 'closed') return;
+  syncSession();
+  void c.resume().catch(() => {});
+  // Older iOS also needs a sound started inside the gesture: a silent blip.
+  try {
+    const blip = c.createBufferSource();
+    blip.buffer = c.createBuffer(1, 1, c.sampleRate);
+    blip.connect(c.destination);
+    blip.start();
+  } catch {
+    // Nothing to unlock with; resume() above is the real work.
+  }
+}
+
+/** Whether audio is playing now (`running`), waiting for a gesture, or gone. */
+export function audioState(): AudioContextState | 'interrupted' | 'none' {
+  return (ctx?.state as AudioContextState | 'interrupted' | undefined) ?? 'none';
 }
 
 export function setVolume(v: number): void {
   volume = v;
   if (master && ctx) master.gain.setTargetAtTime(v, ctx.currentTime, 0.02);
+  syncSession();
 }
 
 /** Music sits under the sound effects on its own level. */
@@ -59,10 +103,15 @@ export function audioGraph(): { ctx: AudioContext; out: GainNode; music: GainNod
   return { ctx: c, out: master, music: musicBus, noise: noiseBuf };
 }
 
+/**
+ * Pauses audio while the page is hidden and resumes it on return. Safari
+ * may refuse a resume outside a gesture; the next tap brings it back then
+ * (see `unlockAudio`).
+ */
 export function suspendAudio(on: boolean): void {
   if (!ctx) return;
-  if (on) void ctx.suspend();
-  else void ctx.resume();
+  if (on) void ctx.suspend().catch(() => {});
+  else void ctx.resume().catch(() => {});
 }
 
 /** Drops repeats of the same cue that land too close together. */

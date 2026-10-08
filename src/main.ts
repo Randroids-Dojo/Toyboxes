@@ -106,14 +106,21 @@ async function boot(): Promise<void> {
     if (ui.isOpen) ui.menu('back');
     else game.openPause();
   });
-  const firstGesture = () => {
-    unlockAudio();
-    guard();
-    removeEventListener('pointerdown', firstGesture);
-    removeEventListener('keydown', firstGesture);
-  };
-  addEventListener('pointerdown', firstGesture);
-  addEventListener('keydown', firstGesture);
+  // Only some events count as a gesture that may start audio or add the
+  // guard: pointerup, touchend, click and keydown (on a touch screen,
+  // pointerdown and touchstart do not, and Safari on iOS holds to that).
+  // Audio listens for the whole visit, because iOS stops it after a call or
+  // a trip to another app and only a gesture brings it back.
+  for (const type of ['pointerup', 'touchend', 'click', 'keydown']) {
+    addEventListener(
+      type,
+      () => {
+        unlockAudio();
+        guard();
+      },
+      { capture: true, passive: true },
+    );
+  }
 
   let last = performance.now();
   let running = true;

@@ -2,7 +2,7 @@
 // your toy figure, the vehicles, and the flows for claiming and editing rooms.
 
 import * as THREE from 'three';
-import { Engine, setMusicVolume, setVolume, sfx, suspendAudio, unlockAudio } from '../audio/sfx';
+import { audioState, Engine, setMusicVolume, setVolume, sfx, suspendAudio, unlockAudio } from '../audio/sfx';
 import * as local from '../core/local';
 import { APP_VERSION, newerVersion } from '../core/update';
 import { IS_TV, type Input } from '../input/input';
@@ -1524,8 +1524,10 @@ export class Game {
     music: async (reset = false) => {
       const { music } = await import('../audio/music');
       if (reset) music.resetHealth();
-      return { playing: music.playing, ...music.health() };
+      return { playing: music.playing, audio: audioState(), ...music.health() };
     },
+    /** Stops audio the way iOS does after a call or another app; the next gesture should bring it back. */
+    interruptAudio: () => suspendAudio(true),
   };
 
   onHidden(hidden: boolean): void {
