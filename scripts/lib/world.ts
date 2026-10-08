@@ -75,6 +75,12 @@ export async function openWorld(opts: {
   /** Walk through the area door (default) or stop in the room. */
   enter?: boolean;
   quality?: 'low' | 'medium' | 'high';
+  /**
+   * Render on this Mac's GPU instead of SwiftShader, whose software rendering
+   * keeps the page's main thread busy far longer than a phone's GPU would.
+   * Timing tests want this; elsewhere SwiftShader is the steadier default.
+   */
+  gpu?: boolean;
 }): Promise<World> {
   const base = process.env.TOYBOXES_BASE ?? 'http://localhost:5207/';
   requireLocalPlaytest(base);
@@ -102,7 +108,8 @@ export async function openWorld(opts: {
     { action: 'saveContent', roomId, content: { rev: 0, areas: [{ id: opts.areaId, name: opts.name, theme: { wall: 0, floor: 0, trim: 4 }, props: [], published: true, experience: { kind: opts.kind, ...(opts.experience ?? {}) }, pages: [] }], exhibits: [] } },
     { ...H, cookie },
   );
-  const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required'] });
+  const gl = opts.gpu && process.platform === 'darwin' ? ['--use-angle=metal', '--enable-gpu'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
+  const browser = await chromium.launch({ args: [...gl, '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required'] });
   const ctx = await browser.newContext(device === 'phone' ? { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } : { viewport: { width: 1280, height: 800 } });
   // tsx names functions inside page.evaluate callbacks with a __name helper the page lacks.
   await ctx.addInitScript('window.__name = (f) => f;');
