@@ -49,11 +49,13 @@ async function leave(name: string): Promise<void> {
       await page.waitForTimeout(400);
       return;
     }
+    // A card that opens over the menu blocks the click; Escape closes it and
+    // the next pass tries again.
     if (await back.isVisible().catch(() => false)) {
-      await back.click();
+      await back.click({ timeout: 5000 }).catch(() => page.keyboard.press('Escape'));
       await page.waitForTimeout(2800);
     } else if (await confirm.first().isVisible().catch(() => false)) {
-      await confirm.first().click();
+      await confirm.first().click({ timeout: 5000 }).catch(() => page.keyboard.press('Escape'));
       await page.waitForTimeout(2800);
     } else {
       await page.keyboard.press('Escape');
