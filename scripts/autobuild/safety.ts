@@ -3,6 +3,37 @@ export async function confirmVersion(target: string, read: () => Promise<string>
   return (await read()) === target;
 }
 
+/** Runs git with these arguments and returns trimmed stdout; throws on a non-zero exit. */
+export type Git = (...args: string[]) => string;
+
+/**
+ * The commit a release can roll back to: the version production serves now,
+ * if the release descends from it. Null when production is unreadable or
+ * serves something this checkout cannot build on.
+ */
+export function rollbackBase(live: string, head: string, git: Git): string | null {
+  if (!/^[0-9a-f]{40}$/.test(live)) return null;
+  try {
+    git('merge-base', '--is-ancestor', live, head);
+    return live;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Restores the tree production served before the release as one new commit
+ * and returns its sha. Covers any number of shipped commits, merges
+ * included, where a revert of the last commit alone would not.
+ */
+export function rollBackTo(before: string, git: Git): string {
+  const shipped = git('log', '--format=%h %s', `${before}..HEAD`);
+  git('read-tree', '--reset', '-u', before);
+  const why = `Production smoke failed after releasing the commits below, so this puts back the files production served at ${before.slice(0, 7)}.`;
+  git('commit', '--allow-empty', '-q', '-m', `Roll back to ${before.slice(0, 7)}`, '-m', `${why}\n\nRolled back:\n${shipped}`);
+  return git('rev-parse', 'HEAD');
+}
+
 export function requireLocalPlaytest(base: string): void {
   const url = new URL(base);
   if (!['localhost', '127.0.0.1', '[::1]'].includes(url.hostname) || !['http:', 'https:'].includes(url.protocol)) {

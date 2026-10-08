@@ -33,13 +33,18 @@ const info = await page.evaluate(async () => {
   // Take over the area's hooks for the duration of the test.
   sv.render = (r: any, cam: any) => post.render(r, cam);
   const origUpdate = sv.update.bind(sv);
+  // Real elapsed time, so the countdown keeps pace when software rendering
+  // drops to a few frames a second.
+  let last = -1;
   sv.update = (n: number, t: number, p: number, f: any) => {
     origUpdate(n, t, p, f);
-    sparks.update(1 / 60);
-    confetti.update(1 / 60);
-    rings.update(1 / 60);
-    ribbon.update(1 / 60, g.camera);
-    hud.update(1 / 60);
+    const dt = last < 0 ? 1 / 60 : Math.min(0.25, Math.max(0, t - last));
+    last = t;
+    sparks.update(dt);
+    confetti.update(dt);
+    rings.update(dt);
+    ribbon.update(dt, g.camera);
+    hud.update(dt);
   };
   kit.music.play({
     name: 'kit-test',
